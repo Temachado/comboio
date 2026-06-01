@@ -245,7 +245,7 @@ input,select,textarea,button{font-family:inherit}
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
     <button class="btn btn-secondary" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
-    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v5 — admin / 1234</div>
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v6</div>
   </div>
 </div>
 
@@ -424,8 +424,9 @@ input,select,textarea,button{font-family:inherit}
 </div>
 
 <script>
-const DB_KEY='fuelterra_v5';
-let db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
+const DB_KEY='fuelterra_v6';
+const DEFAULTS={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
+let db=JSON.parse(JSON.stringify(DEFAULTS));
 let adminLogado=false;
 let fs={step:1,equip:null,hod:null,litros:null,foto:false,analisando:false};
 
@@ -434,7 +435,18 @@ const ICONS={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Moto
   'Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery','Outro':'ti-tractor'};
 const iconFor=t=>ICONS[t]||'ti-tractor';
 
-function loadDB(){try{const s=localStorage.getItem(DB_KEY);if(s)db=Object.assign(db,JSON.parse(s));}catch(e){}}
+function loadDB(){
+  try{
+    const raw=localStorage.getItem(DB_KEY);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      db=Object.assign(JSON.parse(JSON.stringify(DEFAULTS)),parsed);
+      if(!db.admin||typeof db.admin!=='object')db.admin={usuario:'admin',senha:'1234'};
+      if(!db.admin.usuario)db.admin.usuario='admin';
+      if(!db.admin.senha)db.admin.senha='1234';
+    }
+  }catch(e){db=JSON.parse(JSON.stringify(DEFAULTS));}
+}
 function saveDB(){try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar.');}}
 const today=()=>new Date().toISOString().slice(0,10);
 const fmtDate=d=>{if(!d)return'—';const[y,m,dia]=d.split('-');return`${dia}/${m}/${y}`;};
@@ -465,7 +477,9 @@ function doLogin(){
   const u=document.getElementById('login-user').value.trim();
   const p=document.getElementById('login-pass').value;
   const err=document.getElementById('login-err');
-  if(u===db.admin.usuario&&p===db.admin.senha){
+  const adminUser=(db.admin&&db.admin.usuario)?db.admin.usuario:'admin';
+  const adminSenha=(db.admin&&db.admin.senha)?db.admin.senha:'1234';
+  if(u===adminUser&&p===adminSenha){
     adminLogado=true;err.style.display='none';
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
