@@ -11,6 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -411,7 +412,13 @@ input,select,textarea,button{font-family:inherit}
         <div id="admin-stats" style="margin-bottom:14px"></div>
         <button class="btn btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
         <button class="btn btn-secondary" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
+        <button class="btn btn-secondary" onclick="gerarQR()"><i class="ti ti-qrcode"></i> Gerar QR Code para iPhone</button>
         <label class="btn btn-secondary" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importarBackup(this)"></label>
+        <button class="btn btn-secondary" onclick="iniciarQRScan()"><i class="ti ti-qrcode"></i> Importar via QR Code</button>
+        <div id="qr-scan-area" style="display:none;margin-top:8px">
+          <video id="qr-video" style="width:100%;border-radius:var(--radius-sm);background:#000" autoplay playsinline muted></video>
+          <button class="btn btn-secondary" style="margin-top:8px" onclick="pararQRScan()"><i class="ti ti-x"></i> Cancelar</button>
+        </div>
         <div class="alert alert-info" style="margin-top:4px;margin-bottom:8px"><i class="ti ti-brand-apple"></i><span><strong>iPhone / iPad:</strong> exporte o backup no computador e importe aqui para sincronizar os equipamentos cadastrados.</span></div>
         <button class="btn btn-danger" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
       </div>
@@ -421,6 +428,17 @@ input,select,textarea,button{font-family:inherit}
     <nav class="bottom-nav" id="nav-admin"></nav>
   </div>
 
+</div>
+
+<!-- QR SYNC MODAL -->
+<div id="qr-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999;align-items:center;justify-content:center;padding:24px">
+  <div style="background:var(--card);border-radius:var(--radius);padding:24px;width:100%;max-width:360px;text-align:center">
+    <div style="font-size:16px;font-weight:600;margin-bottom:6px">Sincronizar com iPhone</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6">Escaneie este QR Code com o iPhone para importar todos os equipamentos e operadores cadastrados.</div>
+    <div id="qr-canvas" style="display:flex;justify-content:center;margin-bottom:16px"></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:16px">No iPhone: Acesso administrativo → Configurações → Importar via QR Code</div>
+    <button class="btn btn-secondary" onclick="fecharQR()"><i class="ti ti-x"></i> Fechar</button>
+  </div>
 </div>
 
 <script>
@@ -599,7 +617,7 @@ function renderFS1(){
 function renderFS2(){
   const e=fs.equip,isKm=e.unidade==='km';
   const photoSection=fs.foto
-    ?`<div class="photo-area has-photo" onclick="fsTakePhoto()">
+    ?`<div class="photo-area has-photo" onclick="fsAbrirCamera()">
         <i class="ti ti-check"></i>
         <div class="ph-title">Foto capturada</div>
         <div class="ph-sub">Toque para tirar outra foto</div>
@@ -611,11 +629,12 @@ function renderFS2(){
               <span class="reading-num">${fs.hod}</span><span class="reading-unit"> ${isKm?'km':'h'}</span></div>
               <span class="reading-edit" onclick="fsEditHod()">editar</span></div>`
           :''}`
-    :`<div class="photo-area" onclick="fsTakePhoto()">
+    :`<div class="photo-area" onclick="fsAbrirCamera()">
         <i class="ti ti-camera"></i>
         <div class="ph-title">Fotografar ${isKm?'odômetro':'horímetro'}</div>
         <div class="ph-sub">Aponte para o display e toque aqui</div>
-      </div>`;
+      </div>
+      <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelecionada(this)">`;
   return`<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">${e.cod} — ${e.tipo}${e.placa?' • '+e.placa:''}</div>
     ${photoSection}
     <div style="margin-bottom:14px">
@@ -694,17 +713,53 @@ function fsGo(n){
   fs.step=n;renderField();
   if(n===4&&fs._op){setTimeout(()=>{const o=document.getElementById('fs-op');if(o)o.value=fs._op;},30);}
 }
-function fsTakePhoto(){
-  fs.foto=true;fs.analisando=true;fs.hod=null;renderField();
-  setTimeout(()=>{
-    fs.analisando=false;
-    const e=fs.equip,isKm=e.unidade==='km';
-    const ultimo=db.abastecimentos.filter(a=>a.equip===e.cod).sort((a,b)=>b.hod-a.hod)[0];
-    const base=ultimo?Number(ultimo.hod):isKm?12000:4500;
-    fs.hod=(base+(isKm?Math.floor(Math.random()*80+40):Math.floor(Math.random()*12+6))).toString();
-    renderField();
-  },1600);
+function fsAbrirCamera(){
+  const inp=document.getElementById('camera-input');
+  if(inp)inp.click();
 }
+function fsFotoSelecionada(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    fs.foto=true;fs.analisando=true;fs.hod=null;fs._imgData=e.target.result;
+    renderField();
+    fsOCR(e.target.result);
+  };
+  reader.readAsDataURL(file);
+  input.value='';
+}
+async function fsOCR(dataUrl){
+  const isKm=fs.equip&&fs.equip.unidade==='km';
+  const tipo=isKm?'odômetro (quilometragem em km)':'horímetro (horas de operação)';
+  try{
+    const base64=dataUrl.split(',')[1];
+    const mtype=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:100,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mtype,data:base64}},
+          {type:'text',text:`Esta imagem mostra um ${tipo} de equipamento de terraplenagem. Responda APENAS com o número lido, sem texto, sem unidade, sem pontos, somente os dígitos. Se não conseguir ler, responda: ERRO`}
+        ]}]
+      })
+    });
+    const data=await resp.json();
+    const txt=(data.content&&data.content[0]&&data.content[0].text||'').trim().replace(/[^0-9]/g,'');
+    fs.analisando=false;
+    if(txt&&txt.length>=1){fs.hod=txt;}
+    else{fs.hod=null;}
+    renderField();
+  }catch(err){
+    fs.analisando=false;
+    fs.hod=null;
+    renderField();
+  }
+}
+function fsTakePhoto(){fsAbrirCamera();}
 function fsEditHod(){fs.hod=null;renderField();setTimeout(()=>{const i=document.getElementById('hod-manual');if(i)i.focus();},80);}
 function fsAdj(d){fs.litros=Math.max(0,(Number(fs.litros)||0)+d).toString();renderField();}
 function fsConfirmar(){
@@ -865,6 +920,79 @@ function limparDados(){
   if(!confirm('Confirmar? Esta ação não tem volta.'))return;
   db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:db.admin};
   saveDB();renderAdmin();alert('Dados apagados.');
+}
+
+/* ---- QR SYNC ---- */
+function gerarQR(){
+  const payload=JSON.stringify({equipamentos:db.equipamentos,operadores:db.operadores,_qrsync:true});
+  if(payload.length>2000){
+    alert('Muitos equipamentos para QR Code. Use a opção "Backup completo (JSON)" e importe no iPhone.');return;
+  }
+  const modal=document.getElementById('qr-modal');
+  const canvas=document.getElementById('qr-canvas');
+  canvas.innerHTML='';
+  modal.style.display='flex';
+  setTimeout(()=>{
+    try{new QRCode(canvas,{text:payload,width:220,height:220,correctLevel:QRCode.CorrectLevel.L});}
+    catch(e){canvas.innerHTML='<div style="padding:16px;color:var(--red)">Erro ao gerar QR Code. Use importação por arquivo JSON.</div>';}
+  },100);
+}
+function fecharQR(){document.getElementById('qr-modal').style.display='none';}
+
+let qrStream=null;
+let qrScanInterval=null;
+async function iniciarQRScan(){
+  const area=document.getElementById('qr-scan-area');
+  const video=document.getElementById('qr-video');
+  area.style.display='block';
+  try{
+    qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=qrStream;
+    await video.play();
+    // Use BarcodeDetector if available (Chrome/Android)
+    if('BarcodeDetector' in window){
+      const detector=new BarcodeDetector({formats:['qr_code']});
+      qrScanInterval=setInterval(async()=>{
+        try{
+          const barcodes=await detector.detect(video);
+          if(barcodes.length>0){processarQRData(barcodes[0].rawValue);}
+        }catch(e){}
+      },500);
+    } else {
+      // Fallback message for iOS Safari (no BarcodeDetector)
+      area.innerHTML=`<div class="alert alert-info"><i class="ti ti-info-circle"></i><span>Seu navegador não suporta leitura de QR Code direta. <strong>No iPhone:</strong> use a câmera nativa do iOS para ler o QR Code — ela abrirá um link com os dados para importar.</span></div>
+      <button class="btn btn-secondary" onclick="pararQRScan()"><i class="ti ti-x"></i> Fechar</button>`;
+    }
+  }catch(e){
+    area.style.display='none';
+    alert('Não foi possível acessar a câmera. Verifique as permissões do navegador.');
+  }
+}
+function pararQRScan(){
+  if(qrScanInterval){clearInterval(qrScanInterval);qrScanInterval=null;}
+  if(qrStream){qrStream.getTracks().forEach(t=>t.stop());qrStream=null;}
+  const area=document.getElementById('qr-scan-area');
+  if(area){area.style.display='none';area.innerHTML=`<video id="qr-video" style="width:100%;border-radius:var(--radius-sm);background:#000" autoplay playsinline muted></video>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="pararQRScan()"><i class="ti ti-x"></i> Cancelar</button>`;}
+}
+function processarQRData(raw){
+  pararQRScan();
+  try{
+    const data=JSON.parse(raw);
+    if(!data._qrsync){alert('QR Code inválido — não é um código de sincronização deste sistema.');return;}
+    const neq=(data.equipamentos||[]).length;
+    const nop=(data.operadores||[]).length;
+    if(!confirm(`Importar via QR Code?
+
+Equipamentos: ${neq}
+Operadores: ${nop}
+
+Os equipamentos e operadores atuais serão substituídos. Registros de abastecimento são mantidos.`))return;
+    db.equipamentos=data.equipamentos||[];
+    db.operadores=data.operadores||[];
+    saveDB();renderAdmin();
+    alert(`Sincronizado! ${neq} equipamento(s) e ${nop} operador(es) importados.`);
+  }catch(e){alert('Erro ao ler QR Code. Tente novamente.');}
 }
 
 /* ---- INIT ---- */
