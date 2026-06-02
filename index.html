@@ -238,7 +238,7 @@ input,select,textarea,button{font-family:inherit}
   <div class="splash-logo"><i class="ti ti-gas-station"></i></div>
   <div class="splash-title">Comboio</div>
   <div class="splash-sub">Controle de combustível<br>Selecione seu tipo de acesso</div>
-  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v12</div>
+  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v13</div>
   <button class="splash-btn-field" onclick="entrarCampo()">
     <i class="ti ti-tractor" style="font-size:22px"></i>
     Sou operador de campo
@@ -260,7 +260,7 @@ input,select,textarea,button{font-family:inherit}
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
     <button class="btn btn-secondary" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
-    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v12</div>
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v13</div>
   </div>
 </div>
 
@@ -469,7 +469,7 @@ input,select,textarea,button{font-family:inherit}
 </div>
 
 <script>
-const DB_KEY='fuelterra_v12';
+const DB_KEY='fuelterra_v13';
 const DEFAULTS={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
 let db=JSON.parse(JSON.stringify(DEFAULTS));
 let adminLogado=false;
@@ -1015,7 +1015,7 @@ function apagarFoto(id){
 function gerarQR(){
   const payload={equipamentos:db.equipamentos,operadores:db.operadores,_qrsync:true};
   const json=JSON.stringify(payload);
-  const b64=btoa(unescape(encodeURIComponent(json)));
+  const b64=btoa(encodeURIComponent(json));
   const url=window.location.href.split('?')[0]+'?sync='+b64;
 
   const modal=document.getElementById('qr-modal');
@@ -1109,30 +1109,26 @@ Os equipamentos e operadores atuais serão substituídos. Registros de abastecim
 /* ---- INIT ---- */
 loadDB();
 // Auto-import if opened via sync link
-(function(){
-  try{
-    const params=new URLSearchParams(window.location.search);
-    const syncB64=params.get('sync');
-    if(!syncB64)return;
-    // Remove param from URL without reload
-    const cleanUrl=window.location.href.split('?')[0];
-    window.history.replaceState({},'',cleanUrl);
-    const json=decodeURIComponent(escape(atob(syncB64)));
-    const data=JSON.parse(json);
-    if(!data._qrsync)return;
-    const neq=(data.equipamentos||[]).length;
-    const nop=(data.operadores||[]).length;
-    // Show splash first, then ask
-    setTimeout(()=>{
-      if(confirm('Sincronização recebida!\n\nEquipamentos: '+neq+'\nOperadores: '+nop+'\n\nImportar agora? (dados atuais serão substituídos)')){
-        db.equipamentos=data.equipamentos||[];
-        db.operadores=data.operadores||[];
-        saveDB();
-        alert('Sincronizado com sucesso! '+neq+' equipamento(s) importado(s).');
-      }
-    },600);
-  }catch(e){}
-})();
+try{
+  var _sp=new URLSearchParams(window.location.search);
+  var _sb=_sp.get('sync');
+  if(_sb){
+    window.history.replaceState({},'',window.location.href.split('?')[0]);
+    var _sd=JSON.parse(decodeURIComponent(atob(_sb)));
+    if(_sd&&_sd._qrsync){
+      var _neq=(_sd.equipamentos||[]).length;
+      var _nop=(_sd.operadores||[]).length;
+      setTimeout(function(){
+        if(confirm('Sincronizacao recebida!\nEquipamentos: '+_neq+'\nOperadores: '+_nop+'\n\nImportar agora?')){
+          db.equipamentos=_sd.equipamentos||[];
+          db.operadores=_sd.operadores||[];
+          saveDB();
+          alert('Sincronizado! '+_neq+' equipamento(s) importado(s).');
+        }
+      },800);
+    }
+  }
+}catch(_e){}
 // Init nav and splash
 document.querySelectorAll('.bottom-nav').forEach(n=>n.innerHTML=buildNav('resumo'));
 document.getElementById('e-data').value=today();
