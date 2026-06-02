@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -216,6 +217,15 @@ input,select,textarea,button{font-family:inherit}
 .sep{height:1px;background:var(--border);margin:16px 0}
 .tag-offline{display:inline-flex;align-items:center;gap:4px;background:var(--green-light);color:var(--green-dark);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
 .section-note{font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5}
+.foto-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+.foto-card img{width:100%;display:block;max-height:220px;object-fit:cover;background:#eee}
+.foto-card-body{padding:12px 14px}
+.foto-card-title{font-size:13px;font-weight:600;margin-bottom:4px}
+.foto-card-sub{font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6}
+.foto-card-actions{display:flex;gap:8px}
+.foto-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
+.foto-badge-ok{background:#e1f5ee;color:#085041}
+.foto-badge-pend{background:#faeeda;color:#633806}
 </style>
 </head>
 <body>
@@ -246,7 +256,7 @@ input,select,textarea,button{font-family:inherit}
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
     <button class="btn btn-secondary" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
-    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v6</div>
+    <div style="text-align:center;margin-top:14px;font-size:11px;color:var(--text3)">v10</div>
   </div>
 </div>
 
@@ -406,6 +416,18 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn btn-secondary" onclick="alterarCredenciais()"><i class="ti ti-key"></i> Alterar credenciais</button>
       </div>
 
+      <!-- API KEY -->
+      <div class="card">
+        <div class="card-title">Chave de API — Leitura OCR</div>
+        <div class="field">
+          <label>Chave Anthropic (sk-ant-...)</label>
+          <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." autocomplete="off">
+        </div>
+        <div class="alert alert-info" style="margin-bottom:12px"><i class="ti ti-info-circle"></i><span>Necessária para leitura automática do horímetro por foto. Obtenha em <strong>console.anthropic.com → API Keys</strong>. A chave fica salva somente neste dispositivo.</span></div>
+        <button class="btn btn-primary" onclick="salvarApiKey()"><i class="ti ti-device-floppy"></i> Salvar chave</button>
+        <div id="api-key-status" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+      </div>
+
       <!-- DADOS -->
       <div class="card">
         <div class="card-title">Dados e backup</div>
@@ -428,6 +450,18 @@ input,select,textarea,button{font-family:inherit}
     <nav class="bottom-nav" id="nav-admin"></nav>
   </div>
 
+  <!-- FOTOS (admin only) -->
+  <div id="screen-fotos" class="screen">
+    <div class="topbar">
+      <div class="topbar-inner">
+        <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#e1f5ee">Fotos — Conferência</div><div style="font-size:11px;color:#fac775">Área administrativa</div></div>
+        <span class="pill pill-admin">admin</span>
+      </div>
+    </div>
+    <div class="scroll-body" id="fotos-body"></div>
+    <nav class="bottom-nav" id="nav-fotos"></nav>
+  </div>
+
 </div>
 
 <!-- QR SYNC MODAL -->
@@ -442,7 +476,7 @@ input,select,textarea,button{font-family:inherit}
 </div>
 
 <script>
-const DB_KEY='fuelterra_v6';
+const DB_KEY='fuelterra_v9';
 const DEFAULTS={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
 let db=JSON.parse(JSON.stringify(DEFAULTS));
 let adminLogado=false;
@@ -512,13 +546,14 @@ function logoutAdmin(){
 
 /* ---- NAV ---- */
 function buildNav(active){
-  const items=[
+  const base=[
     {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
     {id:'field',icon:'ti-gas-station',label:'Abastecer'},
     {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
     {id:'comboio',icon:'ti-flame',label:'Comboio'},
     {id:'admin',icon:'ti-settings',label:'Config'},
   ];
+  const items=adminLogado?[...base,{id:'fotos',icon:'ti-camera',label:'Fotos'}]:base;
   return items.map(it=>`<button class="nav-btn${it.id===active?' active':''}" onclick="navigate('${it.id}')"><i class="ti ${it.icon}"></i>${it.label}</button>`).join('');
 }
 function navigate(id){
@@ -530,6 +565,7 @@ function navigate(id){
   if(id==='entrada'){document.getElementById('e-data').value=today();renderHistEntradas();}
   if(id==='comboio'){document.getElementById('c-data').value=today();renderHistComboio();}
   if(id==='admin')renderAdmin();
+  if(id==='fotos')renderFotos();
 }
 
 /* ---- RESUMO ---- */
@@ -640,12 +676,22 @@ function renderFS2(){
     <div style="margin-bottom:14px">
       <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou digitar manualmente</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <input type="number" id="hod-manual" style="flex:1;font-size:18px;font-family:'IBM Plex Mono',monospace" placeholder="${isKm?'Ex: 12540':'Ex: 4820'}" value="${fs.hod||''}" oninput="fs.hod=this.value.trim()||null">
+        <input type="number" id="hod-manual" style="flex:1;font-size:18px;font-family:'IBM Plex Mono',monospace" placeholder="${isKm?'Ex: 12540':'Ex: 4820'}" value="${fs.hod||''}" oninput="fsHodInput(this.value)">
         <span style="font-size:13px;color:var(--text2);font-weight:600">${isKm?'km':'horas'}</span>
       </div>
     </div>
-    <button class="btn btn-primary" ${fs.hod?'':'disabled'} onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>
+    <button class="btn btn-primary" id="btn-proximo-hod" ${fs.hod?'':'disabled'} onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>
     <button class="btn btn-secondary" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>`;
+}
+function fsHodInput(val){
+  fs.hod=val.trim()||null;
+  const btn=document.getElementById('btn-proximo-hod');
+  if(btn){btn.disabled=!fs.hod;}
+}
+function fsLitrosInput(val){
+  fs.litros=val||null;
+  const btn=document.getElementById('btn-proximo-litros');
+  if(btn){btn.disabled=!(fs.litros&&Number(fs.litros)>0);}
 }
 function renderFS3(){
   const sc=getSaldoCom(),l=Number(fs.litros)||0,over=l>sc&&sc>0;
@@ -654,13 +700,13 @@ function renderFS3(){
     <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Quantos litros abasteceu?</div>
     <div class="litros-row">
       <button class="litros-btn" onclick="fsAdj(-50)">−</button>
-      <input class="litros-inp" type="number" id="litros-inp" value="${fs.litros||''}" placeholder="0" min="1" step="1" oninput="fs.litros=this.value||null">
+      <input class="litros-inp" type="number" id="litros-inp" value="${fs.litros||''}" placeholder="0" min="1" step="1" oninput="fsLitrosInput(this.value)">
       <button class="litros-btn" onclick="fsAdj(50)">+</button>
     </div>
     <div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:14px">Toque − / + para ajustar de 50 em 50 L</div>
     ${over?`<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo do comboio (${sc.toFixed(0)} L).</span></div>`:''}
     ${l>cap*1.05&&cap<9999?`<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que a capacidade do tanque (${cap} L). Confira o valor.</span></div>`:''}
-    <button class="btn btn-primary" ${fs.litros&&Number(fs.litros)>0?'':'disabled'} onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button>
+    <button class="btn btn-primary" id="btn-proximo-litros" ${fs.litros&&Number(fs.litros)>0?'':'disabled'} onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button>
     <button class="btn btn-secondary" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>`;
 }
 function renderFS4(){
@@ -722,7 +768,7 @@ function fsFotoSelecionada(input){
   if(!file)return;
   const reader=new FileReader();
   reader.onload=e=>{
-    fs.foto=true;fs.analisando=true;fs.hod=null;fs._imgData=e.target.result;
+    fs.foto=true;fs.analisando=true;fs.hod=null;fs._imgData=e.target.result;fs._imgId=uid();
     renderField();
     fsOCR(e.target.result);
   };
@@ -730,33 +776,22 @@ function fsFotoSelecionada(input){
   input.value='';
 }
 async function fsOCR(dataUrl){
-  const isKm=fs.equip&&fs.equip.unidade==='km';
-  const tipo=isKm?'odômetro (quilometragem em km)':'horímetro (horas de operação)';
   try{
-    const base64=dataUrl.split(',')[1];
-    const mtype=dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:100,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mtype,data:base64}},
-          {type:'text',text:`Esta imagem mostra um ${tipo} de equipamento de terraplenagem. Responda APENAS com o número lido, sem texto, sem unidade, sem pontos, somente os dígitos. Se não conseguir ler, responda: ERRO`}
-        ]}]
-      })
+    const result=await Tesseract.recognize(dataUrl,'eng',{
+      logger:()=>{}
     });
-    const data=await resp.json();
-    const txt=(data.content&&data.content[0]&&data.content[0].text||'').trim().replace(/[^0-9]/g,'');
+    const num=(result.data.text||'').replace(/[^0-9]/g,'').trim();
     fs.analisando=false;
-    if(txt&&txt.length>=1){fs.hod=txt;}
-    else{fs.hod=null;}
+    fs.hod=(num&&num.length>=1)?num:null;
     renderField();
+    if(!fs.hod){
+      setTimeout(()=>alert('Não foi possível identificar o número.\nDigite manualmente no campo abaixo.'),150);
+    }
   }catch(err){
     fs.analisando=false;
     fs.hod=null;
     renderField();
+    setTimeout(()=>alert('Erro na leitura. Digite o número manualmente.'),150);
   }
 }
 function fsTakePhoto(){fsAbrirCamera();}
@@ -765,7 +800,12 @@ function fsAdj(d){fs.litros=Math.max(0,(Number(fs.litros)||0)+d).toString();rend
 function fsConfirmar(){
   const opEl=document.getElementById('fs-op');
   const operador=opEl?opEl.value:(fs._op||'');
-  db.abastecimentos.push({id:uid(),data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador,local:'',obs:'',ocr:fs.foto});
+  const recId=uid();
+  db.abastecimentos.push({id:recId,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador,local:'',obs:'',ocr:fs.foto,fotoId:fs._imgId||null});
+  // save photo separately
+  if(fs._imgData&&fs._imgId){
+    try{localStorage.setItem('foto_'+fs._imgId,JSON.stringify({id:fs._imgId,abastId:recId,data:today(),equip:fs.equip.cod,operador,hod:Number(fs.hod),vol:Number(fs.litros),img:fs._imgData,conferido:false}));}catch(e){}
+  }
   saveDB();fs.step=5;renderField();
 }
 function fsNovo(){
@@ -920,6 +960,62 @@ function limparDados(){
   if(!confirm('Confirmar? Esta ação não tem volta.'))return;
   db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:db.admin};
   saveDB();renderAdmin();alert('Dados apagados.');
+}
+
+/* ---- FOTOS ---- */
+function getFotos(){
+  const fotos=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('foto_')){
+      try{const f=JSON.parse(localStorage.getItem(k));if(f)fotos.push(f);}catch(e){}
+    }
+  }
+  return fotos.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+}
+function renderFotos(){
+  const fotos=getFotos();
+  const pendentes=fotos.filter(f=>!f.conferido).length;
+  const body=document.getElementById('fotos-body');
+  if(!fotos.length){
+    body.innerHTML=`<div class="empty"><i class="ti ti-camera-off"></i>Nenhuma foto registrada ainda.<br><br>As fotos tiradas durante o abastecimento aparecem aqui para conferência.</div>`;
+    return;
+  }
+  const badge=pendentes>0?`<span class="foto-badge foto-badge-pend"><i class="ti ti-clock"></i> ${pendentes} pendente${pendentes>1?'s':''}</span>`
+    :`<span class="foto-badge foto-badge-ok"><i class="ti ti-check"></i> Todas conferidas</span>`;
+  body.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:13px;font-weight:600">${fotos.length} foto${fotos.length>1?'s':''} registrada${fotos.length>1?'s':''}</div>
+    ${badge}
+  </div>`+fotos.map(f=>`
+  <div class="foto-card" id="fcard_${f.id}">
+    <img src="${f.img}" alt="Foto horímetro ${f.equip}" loading="lazy">
+    <div class="foto-card-body">
+      <div class="foto-card-title">${f.equip} — ${f.hod} ${db.equipamentos.find(e=>e.cod===f.equip)&&db.equipamentos.find(e=>e.cod===f.equip).unidade==='km'?'km':'h'} • ${Number(f.vol).toFixed(0)} L</div>
+      <div class="foto-card-sub">
+        ${fmtDate(f.data)}${f.operador?' • '+f.operador:''}<br>
+        ${f.conferido?'<span class="foto-badge foto-badge-ok"><i class="ti ti-check"></i> Conferida</span>':'<span class="foto-badge foto-badge-pend"><i class="ti ti-clock"></i> Pendente</span>'}
+      </div>
+      <div class="foto-card-actions">
+        ${!f.conferido?`<button class="btn btn-primary btn-sm" onclick="conferirFoto('${f.id}')"><i class="ti ti-check"></i> Conferir</button>`:''}
+        <button class="btn btn-danger btn-sm" onclick="apagarFoto('${f.id}')"><i class="ti ti-trash"></i> Apagar</button>
+      </div>
+    </div>
+  </div>`).join('');
+}
+function conferirFoto(id){
+  try{
+    const raw=localStorage.getItem('foto_'+id);
+    if(!raw)return;
+    const f=JSON.parse(raw);
+    f.conferido=true;
+    localStorage.setItem('foto_'+id,JSON.stringify(f));
+    renderFotos();
+  }catch(e){}
+}
+function apagarFoto(id){
+  if(!confirm('Apagar esta foto? O registro de abastecimento é mantido.'))return;
+  localStorage.removeItem('foto_'+id);
+  renderFotos();
 }
 
 /* ---- QR SYNC ---- */
