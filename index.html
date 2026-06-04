@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{--green:#0f6e56;--green-light:#e1f5ee;--green-mid:#1d9e75;--green-dark:#085041;--amber:#854f0b;--amber-light:#faeeda;--red:#a32d2d;--red-light:#fcebeb;--blue:#185fa5;--blue-light:#e6f1fb;--text:#1a1a1a;--text2:#666;--text3:#999;--bg:#f7f7f5;--card:#fff;--border:#e5e5e0;--radius:12px;--radius-sm:8px;font-family:'IBM Plex Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -189,7 +191,7 @@ input,select,textarea,button{font-family:inherit}
   <div class="login-sub">Acesso restrito ao responsável</div>
   <div class="login-card">
     <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
-    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocomplete="username" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocapitalize="none" autocomplete="username" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn btn-primary" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
     <button class="btn btn-secondary" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
@@ -216,8 +218,8 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="card-title">Registrar recebimento</div>
         <div class="field"><label>Data</label><input type="date" id="e-data"></div>
-        <div class="row2"><div class="field"><label>Volume (L)</label><input type="number" id="e-vol" min="1" step="0.1" placeholder="Ex: 5000"></div><div class="field"><label>Nota fiscal</label><input type="text" id="e-nf" placeholder="NF-001"></div></div>
-        <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" placeholder="Nome da distribuidora"></div>
+        <div class="row2"><div class="field"><label>Volume (L)</label><input type="number" id="e-vol" min="1" step="0.1" placeholder="Ex: 5000"></div><div class="field"><label>Nota fiscal</label><input type="text" id="e-nf" autocapitalize="characters" style="text-transform:uppercase" placeholder="NF-001"></div></div>
+        <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
         <button class="btn btn-primary" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
       </div>
       <div class="card"><div class="card-title">Histórico</div><div id="hist-entradas"></div></div>
@@ -231,7 +233,7 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="card-title">Registrar carregamento</div>
         <div class="row2"><div class="field"><label>Data</label><input type="date" id="c-data"></div><div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000"></div></div>
-        <div class="row2"><div class="field"><label>Operador</label><input type="text" id="c-op" placeholder="Nome"></div><div class="field"><label>Km/Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura"></div></div>
+        <div class="row2"><div class="field"><label>Operador</label><input type="text" id="c-op" autocapitalize="words" placeholder="Nome"></div><div class="field"><label>Km/Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura"></div></div>
         <button class="btn btn-primary" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
       </div>
       <div class="card"><div class="card-title">Histórico</div><div id="hist-comboio"></div></div>
@@ -252,10 +254,10 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Equipamentos</div><button class="btn btn-primary btn-sm" onclick="toggleFormEquip()"><i class="ti ti-plus"></i> Adicionar</button></div>
         <div id="form-equip" style="display:none;padding-top:12px;border-top:1px solid var(--border)">
-          <div class="row2"><div class="field"><label>Código</label><input type="text" id="eq-cod" placeholder="Ex: PC200-01"></div><div class="field"><label>Tipo</label><select id="eq-tipo"><option>Escavadeira</option><option>Trator de esteira</option><option>Motoniveladora</option><option>Caminhão basculante</option><option>Pá carregadeira</option><option>Rolo compactador</option><option>Retroescavadeira</option><option>Caminhão pipa</option></select></div></div>
-          <div class="row2"><div class="field"><label>Marca/Modelo</label><input type="text" id="eq-modelo"></div><div class="field"><label>Placa</label><input type="text" id="eq-placa"></div></div>
+          <div class="row2"><div class="field"><label>Código</label><input type="text" id="eq-cod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: PC200-01"></div><div class="field"><label>Tipo</label><select id="eq-tipo"><option>Escavadeira</option><option>Trator de esteira</option><option>Motoniveladora</option><option>Caminhão basculante</option><option>Pá carregadeira</option><option>Rolo compactador</option><option>Retroescavadeira</option><option>Caminhão pipa</option><option>Outro</option></select></div></div>
+          <div class="row2"><div class="field"><label>Marca/Modelo</label><input type="text" id="eq-modelo" autocapitalize="words"></div><div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase"></div></div>
           <div class="row2"><div class="field"><label>Tanque (L)</label><input type="number" id="eq-tank" min="0"></div><div class="field"><label>Unidade</label><select id="eq-unidade"><option value="h">Horímetro</option><option value="km">Odômetro</option></select></div></div>
-          <div class="row2"><div class="field"><label>Consumo (L/h ou L/100km)</label><input type="number" id="eq-consumo" min="0" step="0.1"></div><div class="field"><label>Frente</label><input type="text" id="eq-frente"></div></div>
+          <div class="row2"><div class="field"><label>Consumo (L/h ou L/100km)</label><input type="number" id="eq-consumo" min="0" step="0.1"></div><div class="field"><label>Frente</label><input type="text" id="eq-frente" autocapitalize="words"></div></div>
           <div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="salvarEquip()"><i class="ti ti-device-floppy"></i> Salvar</button><button class="btn btn-secondary" style="width:auto;padding:10px 16px" onclick="toggleFormEquip()">Cancelar</button></div>
         </div>
         <div id="lista-equip"></div>
@@ -265,21 +267,27 @@ input,select,textarea,button{font-family:inherit}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Operadores de campo</div><button class="btn btn-primary btn-sm" onclick="toggleFormUser()"><i class="ti ti-plus"></i> Adicionar</button></div>
         <p class="section-note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
         <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--border)">
-          <div class="row2"><div class="field"><label>Nome</label><input type="text" id="u-nome" placeholder="Ex: João Silva"></div><div class="field"><label>Matrícula</label><input type="text" id="u-mat" placeholder="OP-01"></div></div>
+          <div class="row2"><div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="words" placeholder="Ex: João Silva"></div><div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div></div>
           <div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button><button class="btn btn-secondary" style="width:auto;padding:10px 16px" onclick="toggleFormUser()">Cancelar</button></div>
         </div>
         <div id="lista-users"></div>
       </div>
 
       <div class="card">
-        <div class="card-title">Sincronizar com iPhone</div>
-        <p class="section-note" style="margin-bottom:14px">Gere um link para transferir os equipamentos para o iPhone.</p>
-        <button class="btn btn-primary" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link de sincronização</button>
+        <div class="card-title">Sincronização em tempo real</div>
+        <div id="sync-status" style="margin-bottom:12px"></div>
+        <p class="section-note" style="margin-bottom:12px">Cole a URL do seu Firebase para sincronizar Mac e iPhone automaticamente.</p>
+        <div class="field">
+          <label>URL do Firebase (ex: https://seu-projeto-default-rtdb.firebaseio.com)</label>
+          <input type="url" id="firebase-url" placeholder="https://..." autocapitalize="none">
+        </div>
+        <button class="btn btn-primary" onclick="salvarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
+        <button class="btn btn-secondary" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
       </div>
 
       <div class="card">
         <div class="card-title">Credenciais do administrador</div>
-        <div class="row2"><div class="field"><label>Usuário</label><input type="text" id="adm-user" placeholder="admin"></div><div class="field"><label>Nova senha</label><input type="password" id="adm-pass" placeholder="Min. 4 caracteres"></div></div>
+        <div class="row2"><div class="field"><label>Usuário</label><input type="text" id="adm-user" autocapitalize="none" placeholder="admin"></div><div class="field"><label>Nova senha</label><input type="password" id="adm-pass" placeholder="Min. 4 caracteres"></div></div>
         <button class="btn btn-secondary" onclick="alterarCredenciais()"><i class="ti ti-key"></i> Alterar credenciais</button>
       </div>
 
@@ -302,7 +310,7 @@ input,select,textarea,button{font-family:inherit}
 var DB_KEY='fuelterra_v5';
 var db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
 var adminLogado=false;
-var fs={step:1,equip:null,hod:null,litros:null,foto:false,analisando:false,imgData:null,imgId:null};
+var fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,analisando:false,imgData:null,imgId:null,bombaImg:null};
 var ICONS={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Motoniveladora':'ti-tractor','Caminhão basculante':'ti-truck','Pá carregadeira':'ti-forklift','Rolo compactador':'ti-cylinder','Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery'};
 function iconFor(t){return ICONS[t]||'ti-tractor';}
 function loadDB(){try{var s=localStorage.getItem(DB_KEY);if(s)db=Object.assign(db,JSON.parse(s));}catch(e){}}
@@ -333,27 +341,54 @@ function renderField(){var d=new Date();document.getElementById('field-sub').tex
 
 function renderFS1(){if(!db.equipamentos.length)return'<div class="alert alert-info"><i class="ti ti-info-circle"></i><span>Nenhum equipamento cadastrado.</span></div>';var cards=db.equipamentos.map(function(e){var sel=fs.equip&&fs.equip.cod===e.cod?' selected':'';return'<div class="equip-card'+sel+'" onclick="fsSelEquip(\''+e.cod.replace(/'/g,"\\'")+'\')" ><i class="ti '+iconFor(e.tipo)+'"></i><div class="eq-name">'+e.cod+'</div><div class="eq-tipo">'+e.tipo+'</div></div>';}).join('');return'<div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Selecione o equipamento</div><div class="equip-grid">'+cards+'</div><button class="btn btn-primary" '+(fs.equip?'':'disabled')+' onclick="fsGo(2)"><i class="ti ti-arrow-right"></i> Próximo</button>';}
 
-function renderFS2(){var e=fs.equip,isKm=e.unidade==='km';var photoHtml;if(fs.foto){var hodBox='';if(fs.analisando){hodBox='<div class="analyzing"><div class="spinner"></div> Lendo horímetro...</div>';}else if(fs.hod){hodBox='<div class="reading-box"><div style="flex:1"><div style="font-size:11px;color:var(--green-dark);font-weight:600;margin-bottom:2px">Leitura detectada</div><span class="reading-num">'+fs.hod+'</span><span class="reading-unit"> '+(isKm?'km':'h')+'</span></div><span class="reading-edit" onclick="fsEditHod()">editar</span></div>';}photoHtml='<div class="photo-area has-photo" onclick="fsAbrirCamera()"><i class="ti ti-check"></i><div class="ph-title">Foto capturada</div><div class="ph-sub">Toque para outra</div></div>'+hodBox;}else{photoHtml='<div class="photo-area" onclick="fsAbrirCamera()"><i class="ti ti-camera"></i><div class="ph-title">Fotografar horímetro</div><div class="ph-sub">Aponte e toque aqui</div></div><input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSel(this)">';}return'<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+photoHtml+'<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou digitar</div><div style="display:flex;gap:8px"><input type="number" id="hod-manual" style="flex:1;font-size:18px;font-family:\'IBM Plex Mono\',monospace" placeholder="'+(isKm?'Ex: 12540':'Ex: 4820')+'" value="'+(fs.hod||'')+'" oninput="fs.hod=this.value.trim()||null"><span style="font-size:13px;color:var(--text2);font-weight:600">'+(isKm?'km':'horas')+'</span></div></div><button class="btn btn-primary" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button><button class="btn btn-secondary" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
+function renderFS2(){var e=fs.equip,isKm=e.unidade==='km';var photoHtml,bombaHtml='';
+if(fs.fotoHod){var hodBox='';var hodBox='';
+  if(fs.analisando){hodBox='<div class="analyzing"><div class="spinner"></div> Lendo horímetro...</div>';}
+  else if(fs.hod){hodBox='<div class="reading-box"><div style="flex:1"><div style="font-size:11px;color:var(--green-dark);font-weight:600;margin-bottom:2px">Horímetro detectado</div><span class="reading-num">'+fs.hod+'</span><span class="reading-unit"> '+(isKm?'km':'h')+'</span></div><span class="reading-edit" onclick="fsEditHod()">editar</span></div>';}
+  photoHtml='<div><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Horímetro</div><div class="photo-area'+(fs.fotoHod?' has-photo':'')+' onclick="fsAbrirCameraHod()"><i class="ti '+(fs.fotoHod?'ti-check':'ti-camera')+'"></i><div class="ph-title">'+(fs.fotoHod?'Foto capturada':'Fotografar horímetro')+'</div><div class="ph-sub">'+(fs.fotoHod?'Toque para outra':'Aponte e toque aqui')+'</div></div>'+hodBox+'<input type="file" id="camera-hod" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelHod(this)"></div>';
+  bombaHtml='<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Bomba <span style="font-weight:400;font-size:10px">(opcional)</span></div><div class="photo-area'+(fs.fotoBomba?' has-photo':'')+' onclick="fsAbrirCameraBomba()" style="padding:20px 16px"><i class="ti '+(fs.fotoBomba?'ti-check':'ti-camera')+'"></i><div class="ph-title" style="font-size:12px">'+(fs.fotoBomba?'Foto capturada':'Fotografar bomba')+'</div><div class="ph-sub" style="font-size:11px">'+(fs.fotoBomba?'Toque para outra':'Visor de abastecimento')+'</div></div><input type="file" id="camera-bomba" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelBomba(this)"></div>';
+}else{photoHtml='<div><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Horímetro</div><div class="photo-area" onclick="fsAbrirCameraHod()"><i class="ti ti-camera"></i><div class="ph-title">Fotografar horímetro</div><div class="ph-sub">Aponte e toque aqui</div></div><input type="file" id="camera-hod" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelHod(this)"></div>'}return'<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+photoHtml+'<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou digitar</div><div style="display:flex;gap:8px"><input type="number" id="hod-manual" style="flex:1;font-size:18px;font-family:\'IBM Plex Mono\',monospace" placeholder="'+(isKm?'Ex: 12540':'Ex: 4820')+'" value="'+(fs.hod||'')+'" oninput="fs.hod=this.value.trim()||null;renderField()"><span style="font-size:13px;color:var(--text2);font-weight:600">'+(isKm?'km':'horas')+'</span></div></div><button class="btn btn-primary" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button><button class="btn btn-secondary" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
 
-function renderFS3(){var sc=getSaldoCom(),l=Number(fs.litros)||0,cap=fs.equip.tank?Number(fs.equip.tank):9999;var warns='';if(l>sc&&sc>0)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo ('+sc.toFixed(0)+' L).</span></div>';if(l>cap*1.05&&cap<9999)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que capacidade ('+cap+' L).</span></div>';return'<div class="saldo-bar"><span class="saldo-label"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="saldo-val">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div><div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Quantos litros abasteceu?</div><div class="litros-row"><button class="litros-btn" onclick="fsAdj(-50)">−</button><input class="litros-inp" type="number" id="litros-inp" value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1" oninput="fs.litros=this.value||null"><button class="litros-btn" onclick="fsAdj(50)">+</button></div><div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:14px">Toque − / + para ajustar de 50 em 50 L</div>'+warns+'<button class="btn btn-primary" '+(fs.litros&&Number(fs.litros)>0?'':'disabled')+' onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button><button class="btn btn-secondary" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
+function renderFS3(){var sc=getSaldoCom(),l=Number(fs.litros)||0,cap=fs.equip.tank?Number(fs.equip.tank):9999;var warns='';if(l>sc&&sc>0)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo ('+sc.toFixed(0)+' L).</span></div>';if(l>cap*1.05&&cap<9999)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que capacidade ('+cap+' L).</span></div>';return'<div class="saldo-bar"><span class="saldo-label"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="saldo-val">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div><div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Quantos litros abasteceu?</div><div class="litros-row"><button class="litros-btn" onclick="fsAdj(-50)">−</button><input class="litros-inp" type="number" id="litros-inp" value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1" oninput="fs.litros=this.value||null;renderField()"><button class="litros-btn" onclick="fsAdj(50)">+</button></div><div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:14px">Toque − / + para ajustar de 50 em 50 L</div>'+warns+'<button class="btn btn-primary" '+(fs.litros&&Number(fs.litros)>0?'':'disabled')+' onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button><button class="btn btn-secondary" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
 
 function renderFS4(){var e=fs.equip,isKm=e.unidade==='km';var rows='<div class="confirm-row"><span class="confirm-label">Equipamento</span><span class="confirm-val">'+e.cod+'</span></div><div class="confirm-row"><span class="confirm-label">Tipo</span><span class="confirm-val">'+e.tipo+'</span></div>'+(e.placa?'<div class="confirm-row"><span class="confirm-label">Placa</span><span class="confirm-val">'+e.placa+'</span></div>':'')+'<div class="confirm-row"><span class="confirm-label">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="confirm-val" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div><div class="confirm-row"><span class="confirm-label">Volume</span><span class="confirm-val" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div><div class="confirm-row"><span class="confirm-label">Data</span><span class="confirm-val">'+fmtDate(today())+'</span></div>';return'<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:14px">Confirmar e salvar</div><div class="card" style="margin-bottom:14px">'+rows+'</div><button class="btn btn-primary" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button><button class="btn btn-secondary" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
 
 function renderFSok(){return'<div class="success"><div class="success-icon"><i class="ti ti-circle-check"></i></div><div class="success-title">Registrado!</div><div class="success-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br><span class="tag-offline"><i class="ti ti-device-floppy" style="font-size:12px"></i> Salvo offline</span></div><button class="btn btn-primary" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button></div>';}
 
-function fsSelEquip(cod){fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;fs.hod=null;fs.foto=false;fs.litros=null;fs.imgData=null;renderField();}
-function fsGo(n){fs.step=n;renderField();}
+function fsSelEquip(cod){fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;fs.hod=null;fs.fotoHod=false;fs.fotoBomba=false;fs.litros=null;fs.bombaImg=null;fs.imgData=null;renderField();}
+function fsGo(n){fs.step=n;renderField();history.pushState({type:'field',step:n},'',window.location.href);}
 function fsEditHod(){fs.hod=null;renderField();setTimeout(function(){var i=document.getElementById('hod-manual');if(i)i.focus();},80);}
 function fsAdj(d){fs.litros=String(Math.max(0,(Number(fs.litros)||0)+d));renderField();}
 function fsAbrirCamera(){var inp=document.getElementById('camera-input');if(inp)inp.click();}
 
 function fsFotoSel(input){var file=input.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(e){fs.foto=true;fs.analisando=true;fs.hod=null;fs.imgData=e.target.result;fs.imgId=uid();renderField();fsOCR(e.target.result);};reader.readAsDataURL(file);input.value='';}
 
-function fsOCR(dataUrl){try{Tesseract.recognize(dataUrl,'eng',{logger:function(){}}).then(function(result){var num=(result.data.text||'').replace(/[^0-9]/g,'').trim();fs.analisando=false;fs.hod=(num&&num.length>=1)?num:null;renderField();if(!fs.hod)setTimeout(function(){alert('Não foi possível identificar o número.\nDigite manualmente.');},150);}).catch(function(){fs.analisando=false;fs.hod=null;renderField();setTimeout(function(){alert('Erro na leitura. Digite manualmente.');},150);});}catch(e){fs.analisando=false;fs.hod=null;renderField();setTimeout(function(){alert('Erro na leitura. Digite manualmente.');},150);}}
+function fsOCR(dataUrl){
+  try{
+    Tesseract.recognize(dataUrl,'eng',{logger:function(){}}).then(function(result){
+      var text=(result.data.text||'').trim();
+      var num=text.replace(/[^0-9]/g,'').trim();
+      fs.analisando=false;
+      fs.hod=(num&&num.length>=1)?num:null;
+      renderField();
+      if(!fs.hod){setTimeout(function(){alert('Foto não legível. Digite manualmente.');},200);}
+    }).catch(function(e){
+      fs.analisando=false;
+      fs.hod=null;
+      renderField();
+      setTimeout(function(){alert('Erro OCR. Digite: '+e.message);},200);
+    });
+  }catch(e){
+    fs.analisando=false;
+    fs.hod=null;
+    renderField();
+    setTimeout(function(){alert('Erro ao processar. Digite manualmente.');},200);
+  }
+}
 
-function fsConfirmar(){var recId=uid();db.abastecimentos.push({id:recId,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador:'',fotoId:fs.imgId||null});if(fs.imgData&&fs.imgId){try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:fs.equip.cod,hod:Number(fs.hod),vol:Number(fs.litros),img:fs.imgData,conferido:false}));}catch(e){}}saveDB();fs.step=5;renderField();}
+function fsConfirmar(){var recId=uid();db.abastecimentos.push({id:recId,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador:'',fotoId:fs.imgId||null});if(fs.imgData&&fs.imgId){try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:fs.equip.cod,hod:Number(fs.hod),vol:Number(fs.litros),img:fs.imgData,conferido:false}));}catch(e){}}saveDB();fbPush();fs.step=5;renderField();}
 
-function fsNovo(){fs={step:1,equip:null,hod:null,litros:null,foto:false,analisando:false,imgData:null,imgId:null};renderField();}
+function fsNovo(){fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,analisando:false,imgData:null,imgId:null,bombaImg:null};renderField();}
 
 // ENTRADA
 function salvarEntrada(){var vol=parseFloat(document.getElementById('e-vol').value);if(!vol||vol<=0){alert('Informe o volume.');return;}db.entradas.push({id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:document.getElementById('e-nf').value,forn:document.getElementById('e-forn').value});saveDB();['e-vol','e-nf','e-forn'].forEach(function(id){document.getElementById(id).value='';});renderHistEntradas();alert('Entrada registrada!');}
@@ -388,7 +423,78 @@ function removerUser(id){if(!confirm('Remover operador?'))return;db.operadores=d
 
 function alterarCredenciais(){var u=document.getElementById('adm-user').value.trim();var p=document.getElementById('adm-pass').value;if(!u){alert('Informe o usuário.');return;}if(p&&p.length<4){alert('Senha mínima de 4 caracteres.');return;}db.admin.usuario=u;if(p)db.admin.senha=p;saveDB();alert('Credenciais atualizadas!');document.getElementById('adm-user').value='';document.getElementById('adm-pass').value='';}
 
-function renderAdmin(){var le=document.getElementById('lista-equip');le.innerHTML=!db.equipamentos.length?'<div class="empty"><i class="ti ti-tractor"></i>Nenhum equipamento</div>':db.equipamentos.map(function(e){return'<div class="equip-list-item"><div class="equip-avatar"><i class="ti '+iconFor(e.tipo)+'"></i></div><div class="equip-list-body"><div class="equip-list-name">'+e.cod+'</div><div class="equip-list-sub">'+e.tipo+(e.modelo?' • '+e.modelo:'')+''+(e.placa?' • '+e.placa:'')+'</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+( e.tank?'<span class="badge badge-blue">'+e.tank+' L</span>':'')+( e.consumo?'<span class="badge badge-green">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+( e.frente?'<span class="badge badge-amber">'+e.frente+'</span>':'')+'</div></div><button class="equip-del" onclick="removerEquip(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var lu=document.getElementById('lista-users');lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador cadastrado</div>':db.operadores.map(function(u){return'<div class="user-item"><div class="user-avatar">'+u.nome.charAt(0).toUpperCase()+'</div><div class="user-body"><div class="user-name">'+u.nome+'</div><div class="user-role">'+(u.mat?u.mat+' • ':'')+'Operador de campo</div></div><button class="user-del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);document.getElementById('admin-stats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="metric"><div class="metric-label">Equipamentos</div><div class="metric-val">'+db.equipamentos.length+'</div></div><div class="metric"><div class="metric-label">Operadores</div><div class="metric-val">'+db.operadores.length+'</div></div><div class="metric"><div class="metric-label">Entradas (L)</div><div class="metric-val">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div><div class="metric"><div class="metric-label">Distribuído (L)</div><div class="metric-val">'+ta.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div></div>';document.getElementById('adm-user').placeholder=db.admin.usuario;}
+function renderAdmin(){var le=document.getElementById('lista-equip');le.innerHTML=!db.equipamentos.length?'<div class="empty"><i class="ti ti-tractor"></i>Nenhum equipamento</div>':db.equipamentos.map(function(e){return'<div class="equip-list-item"><div class="equip-avatar"><i class="ti '+iconFor(e.tipo)+'"></i></div><div class="equip-list-body"><div class="equip-list-name">'+e.cod+'</div><div class="equip-list-sub">'+e.tipo+(e.modelo?' • '+e.modelo:'')+''+(e.placa?' • '+e.placa:'')+'</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+( e.tank?'<span class="badge badge-blue">'+e.tank+' L</span>':'')+( e.consumo?'<span class="badge badge-green">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+( e.frente?'<span class="badge badge-amber">'+e.frente+'</span>':'')+'</div></div><button class="equip-del" onclick="removerEquip(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var lu=document.getElementById('lista-users');lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador cadastrado</div>':db.operadores.map(function(u){return'<div class="user-item"><div class="user-avatar">'+u.nome.charAt(0).toUpperCase()+'</div><div class="user-body"><div class="user-name">'+u.nome+'</div><div class="user-role">'+(u.mat?u.mat+' • ':'')+'Operador de campo</div></div><button class="user-del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);document.getElementById('admin-stats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="metric"><div class="metric-label">Equipamentos</div><div class="metric-val">'+db.equipamentos.length+'</div></div><div class="metric"><div class="metric-label">Operadores</div><div class="metric-val">'+db.operadores.length+'</div></div><div class="metric"><div class="metric-label">Entradas (L)</div><div class="metric-val">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div><div class="metric"><div class="metric-label">Distribuído (L)</div><div class="metric-val">'+ta.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div></div>';document.getElementById('adm-user').placeholder=db.admin.usuario;
+  setTimeout(renderSyncStatus,50);
+  var furl=getFirebaseUrl();if(furl){var fi=document.getElementById('firebase-url');if(fi&&!fi.value)fi.value=furl;}}
+
+// FIREBASE SYNC
+var fbApp=null, fbRef=null, fbConnected=false;
+var FIREBASE_KEY='combustivel_firebase_url';
+
+function getFirebaseUrl(){try{return localStorage.getItem(FIREBASE_KEY)||'';}catch(e){return '';}}
+
+function salvarFirebase(){
+  var url=document.getElementById('firebase-url').value.trim();
+  if(!url){alert('Informe a URL do Firebase.');return;}
+  if(!url.startsWith('https://')){alert('URL deve começar com https://');return;}
+  try{localStorage.setItem(FIREBASE_KEY,url);}catch(e){}
+  iniciarFirebase(url);
+}
+
+function iniciarFirebase(url){
+  try{
+    if(fbApp){try{fbApp.delete();}catch(e){}}
+    var config={databaseURL:url};
+    fbApp=firebase.initializeApp(config,'comboio');
+    fbRef=fbApp.database().ref('comboio');
+    fbConnected=true;
+    // Listen for remote changes
+    fbRef.on('value',function(snap){
+      var remote=snap.val();
+      if(!remote)return;
+      // Merge remote into local — remote wins for equipamentos/operadores/entradas/comboios
+      // abastecimentos: merge (add remote ones not in local)
+      var changed=false;
+      if(remote.equipamentos&&JSON.stringify(remote.equipamentos)!==JSON.stringify(db.equipamentos)){db.equipamentos=remote.equipamentos;changed=true;}
+      if(remote.operadores&&JSON.stringify(remote.operadores)!==JSON.stringify(db.operadores)){db.operadores=remote.operadores;changed=true;}
+      if(remote.entradas&&JSON.stringify(remote.entradas)!==JSON.stringify(db.entradas)){db.entradas=remote.entradas;changed=true;}
+      if(remote.comboios&&JSON.stringify(remote.comboios)!==JSON.stringify(db.comboios)){db.comboios=remote.comboios;changed=true;}
+      if(remote.abastecimentos){
+        var localIds=db.abastecimentos.map(function(a){return a.id;});
+        var novos=remote.abastecimentos.filter(function(a){return localIds.indexOf(a.id)===-1;});
+        if(novos.length){db.abastecimentos=db.abastecimentos.concat(novos);changed=true;}
+      }
+      if(changed){saveDB();renderSyncStatus();var active=document.querySelector('.screen.active');if(active){var id=active.id.replace('screen-','');navigate(id);}}
+    });
+    renderSyncStatus();
+    fbPush(); // push local data on connect
+    alert('Sincronização ativada! Dados serão atualizados automaticamente em todos os dispositivos.');
+  }catch(e){fbConnected=false;alert('Erro ao conectar com Firebase: '+e.message);}
+}
+
+function fbPush(){
+  if(!fbRef||!fbConnected)return;
+  try{
+    fbRef.set({equipamentos:db.equipamentos,operadores:db.operadores,entradas:db.entradas,comboios:db.comboios,abastecimentos:db.abastecimentos});
+  }catch(e){}
+}
+
+function renderSyncStatus(){
+  var el=document.getElementById('sync-status');if(!el)return;
+  var url=getFirebaseUrl();
+  if(fbConnected&&url){
+    el.innerHTML='<div class="alert alert-ok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — dados atualizados em tempo real.</span></div>';
+  } else if(url){
+    el.innerHTML='<div class="alert alert-warn"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado. Verifique a URL e a internet.</span></div>';
+    document.getElementById('firebase-url').value=url;
+  } else {
+    el.innerHTML='<div class="alert alert-info"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
+  }
+}
+
+// Override saveDB to also push to Firebase
+var _origSaveDB=saveDB;
+saveDB=function(){_origSaveDB();fbPush();};
 
 // SYNC LINK
 function gerarLink(){
@@ -425,8 +531,17 @@ function limparDados(){if(!confirm('Apagar TODOS os dados?'))return;if(!confirm(
 // AUTO-SYNC FROM LINK
 try{var _s=window.location.search;if(_s&&_s.indexOf('sync=')>-1){var _p=new URLSearchParams(_s);var _b=_p.get('sync');if(_b){window.history.replaceState({},'',window.location.href.split('?')[0]);var _d=JSON.parse(decodeURIComponent(atob(_b)));if(_d&&_d._sync){var _neq=(_d.equipamentos||[]).length;var _nop=(_d.operadores||[]).length;if(_neq>0||_nop>0){setTimeout(function(){if(confirm('Sincronizacao recebida! Equipamentos: '+_neq+'. Importar?')){db.equipamentos=_d.equipamentos||[];db.operadores=_d.operadores||[];saveDB();alert('Sincronizado! '+_neq+' equipamento(s).');}},500);}}}}}catch(_ex){}
 
+window.addEventListener('popstate',function(e){
+  if(e.state&&e.state.type==='field'){
+    fs.step=e.state.step;
+    renderField();
+  }
+});
+
 // INIT
 loadDB();
+// Auto-start Firebase if URL saved
+(function(){var url=getFirebaseUrl();if(url){try{iniciarFirebase(url);}catch(e){}}})();
 document.querySelectorAll('.bottom-nav').forEach(function(n){n.innerHTML=buildNav('resumo');});
 document.getElementById('e-data').value=today();
 document.getElementById('c-data').value=today();
