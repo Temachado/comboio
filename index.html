@@ -391,7 +391,27 @@ function alterarCredenciais(){var u=document.getElementById('adm-user').value.tr
 function renderAdmin(){var le=document.getElementById('lista-equip');le.innerHTML=!db.equipamentos.length?'<div class="empty"><i class="ti ti-tractor"></i>Nenhum equipamento</div>':db.equipamentos.map(function(e){return'<div class="equip-list-item"><div class="equip-avatar"><i class="ti '+iconFor(e.tipo)+'"></i></div><div class="equip-list-body"><div class="equip-list-name">'+e.cod+'</div><div class="equip-list-sub">'+e.tipo+(e.modelo?' • '+e.modelo:'')+''+(e.placa?' • '+e.placa:'')+'</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+( e.tank?'<span class="badge badge-blue">'+e.tank+' L</span>':'')+( e.consumo?'<span class="badge badge-green">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+( e.frente?'<span class="badge badge-amber">'+e.frente+'</span>':'')+'</div></div><button class="equip-del" onclick="removerEquip(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var lu=document.getElementById('lista-users');lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador cadastrado</div>':db.operadores.map(function(u){return'<div class="user-item"><div class="user-avatar">'+u.nome.charAt(0).toUpperCase()+'</div><div class="user-body"><div class="user-name">'+u.nome+'</div><div class="user-role">'+(u.mat?u.mat+' • ':'')+'Operador de campo</div></div><button class="user-del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);document.getElementById('admin-stats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="metric"><div class="metric-label">Equipamentos</div><div class="metric-val">'+db.equipamentos.length+'</div></div><div class="metric"><div class="metric-label">Operadores</div><div class="metric-val">'+db.operadores.length+'</div></div><div class="metric"><div class="metric-label">Entradas (L)</div><div class="metric-val">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div><div class="metric"><div class="metric-label">Distribuído (L)</div><div class="metric-val">'+ta.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div></div>';document.getElementById('adm-user').placeholder=db.admin.usuario;}
 
 // SYNC LINK
-function gerarLink(){var payload={equipamentos:db.equipamentos,operadores:db.operadores,_sync:true};var json=JSON.stringify(payload);var b64=btoa(json);var url=window.location.href.split('?')[0]+'?sync='+encodeURIComponent(b64);var link=prompt('Link de sincronização (copie e envie para o iPhone por WhatsApp ou e-mail):\n\n',url);if(link)document.execCommand('copy');}
+function gerarLink(){
+  try{
+    var payload={equipamentos:db.equipamentos,operadores:db.operadores,_sync:true};
+    var json=JSON.stringify(payload);
+    var b64=btoa(encodeURIComponent(json));
+    var url=window.location.href.split('?')[0]+'?sync='+b64;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(function(){alert('Link copiado!\n\nAgora envie por WhatsApp ou e-mail para o iPhone.\nAo abrir o link, os equipamentos serão importados automaticamente.');}).catch(function(){promptLink(url);});
+    } else {
+      promptLink(url);
+    }
+  }catch(e){alert('Erro ao gerar link: '+e.message);}
+}
+function promptLink(url){
+  var ta=document.createElement('textarea');
+  ta.value=url;ta.style.position='fixed';ta.style.top='0';ta.style.left='0';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.focus();ta.select();
+  try{document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);
+  alert('Link gerado e copiado!\n\nEnvie por WhatsApp ou e-mail para o iPhone.\nAo abrir, os equipamentos são importados automaticamente.');
+}
 
 // IMPORT/EXPORT
 function importarBackup(input){var file=input.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(e){try{var data=JSON.parse(e.target.result);if(!data.equipamentos&&!data.entradas){alert('Arquivo inválido.');return;}if(!confirm('Importar backup?\nEquipamentos: '+(data.equipamentos||[]).length+'\nAbastecimentos: '+(data.abastecimentos||[]).length+'\n\nDados atuais serão substituídos.'))return;db=Object.assign(db,data);saveDB();renderAdmin();alert('Backup importado!');}catch(err){alert('Erro ao ler o arquivo.');}};reader.readAsText(file);input.value='';}
