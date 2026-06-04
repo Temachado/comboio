@@ -403,7 +403,7 @@ function exportBackup(){var a=document.createElement('a');a.href=URL.createObjec
 function limparDados(){if(!confirm('Apagar TODOS os dados?'))return;if(!confirm('Confirma? Não tem volta.'))return;db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};saveDB();renderAdmin();alert('Dados apagados.');}
 
 // AUTO-SYNC FROM LINK
-(function(){try{var search=window.location.search;if(search.indexOf('sync=')>-1){var params=new URLSearchParams(search);var sb=params.get('sync');if(sb){window.history.replaceState({},'',window.location.href.split('?')[0]);var data=JSON.parse(decodeURIComponent(atob(sb)));if(data&&data._sync){var neq=(data.equipamentos||[]).length;var nop=(data.operadores||[]).length;if(neq>0||nop>0){setTimeout(function(){if(confirm('Sincronizacao recebida!\nEquipamentos: '+neq+'\nOperadores: '+nop+'\n\nImportar?')){db.equipamentos=data.equipamentos||[];db.operadores=data.operadores||[];saveDB();alert('Sincronizado!'+neq+' equipamento(s) importado(s).');}},500);}}}}catch(ex){}}})();
+try{var _s=window.location.search;if(_s&&_s.indexOf('sync=')>-1){var _p=new URLSearchParams(_s);var _b=_p.get('sync');if(_b){window.history.replaceState({},'',window.location.href.split('?')[0]);var _d=JSON.parse(decodeURIComponent(atob(_b)));if(_d&&_d._sync){var _neq=(_d.equipamentos||[]).length;var _nop=(_d.operadores||[]).length;if(_neq>0||_nop>0){setTimeout(function(){if(confirm('Sincronizacao recebida! Equipamentos: '+_neq+'. Importar?')){db.equipamentos=_d.equipamentos||[];db.operadores=_d.operadores||[];saveDB();alert('Sincronizado! '+_neq+' equipamento(s).');}},500);}}}}}catch(_ex){}
 
 // INIT
 loadDB();
