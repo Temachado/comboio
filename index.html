@@ -295,10 +295,29 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Sincronização em tempo real</div>
         <div id="sync-status" style="margin-bottom:12px"></div>
-        <p class="note" style="margin-bottom:12px">Cole a URL do seu Firebase Realtime Database para sincronizar Mac e iPhone automaticamente.</p>
+
+        <div style="background:var(--bll);border-radius:var(--rs);padding:12px 14px;font-size:11px;color:#0c447c;line-height:1.8;margin-bottom:14px">
+          <strong>Como configurar o Firebase (gratuito):</strong><br>
+          ① Acesse <strong>console.firebase.google.com</strong> e faça login com sua conta Google.<br>
+          ② Clique em <strong>"Criar projeto"</strong> → nome sugerido: <strong>comboio</strong> → continuar.<br>
+          ③ No menu esquerdo: <strong>Realtime Database</strong> → "Criar banco de dados".<br>
+          ④ Selecione <strong>"Iniciar no modo de teste"</strong> → próximo → ativar.<br>
+          ⑤ Copie a URL exibida — ela terá o formato:<br>
+          <span style="font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:2px 6px;border-radius:4px;font-size:10px">https://comboio-default-rtdb.firebaseio.com</span><br>
+          ⑥ Cole no campo abaixo e toque em <strong>"Ativar"</strong>.<br>
+          ⑦ Repita os passos ⑥ no iPhone para conectar os dois dispositivos.
+        </div>
+
+        <div style="background:var(--gl);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--gd);margin-bottom:14px;line-height:1.7">
+          <strong>Seu site:</strong> temachado.github.io/comboio<br>
+          <strong>URL Firebase esperada:</strong><br>
+          <span style="font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:2px 6px;border-radius:4px;font-size:10px">https://comboio-default-rtdb.firebaseio.com</span><br>
+          <span style="color:var(--t2)">(O nome pode variar — copie exatamente do console Firebase)</span>
+        </div>
+
         <div class="field">
-          <label>URL do Firebase</label>
-          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
+          <label>URL do Firebase Realtime Database</label>
+          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://comboio-default-rtdb.firebaseio.com">
         </div>
         <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
         <button class="btn bs" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link de cadastro (sem internet)</button>
@@ -318,9 +337,34 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Dados e backup</div>
         <div id="adm-stats" style="margin-bottom:14px"></div>
-        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
-        <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
-        <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
+
+        <div style="margin-bottom:16px">
+          <button class="btn bs" onclick="exportCSV()" style="margin-bottom:6px"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
+          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
+            <strong>O que é:</strong> Tabela com todos os abastecimentos (data, equipamento, litros, horímetro).<br>
+            <strong>Para que serve:</strong> Abrir no Excel ou Google Planilhas para análise, relatórios e conferência.<br>
+            <strong>Como usar:</strong> Toque em "Exportar" → arquivo <em>.csv</em> é baixado → abra no Excel (Arquivo → Abrir) ou arraste para o Google Drive.
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <button class="btn bs" onclick="exportBackup()" style="margin-bottom:6px"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
+          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
+            <strong>O que é:</strong> Cópia completa de todos os dados — equipamentos, operadores, entradas, comboios e abastecimentos.<br>
+            <strong>Para que serve:</strong> Guardar backup de segurança ou transferir para outro dispositivo.<br>
+            <strong>Como usar:</strong> Toque em "Backup" → arquivo <em>.json</em> é baixado → guarde em local seguro (iCloud, Google Drive, e-mail). Para restaurar, use "Importar" abaixo.
+          </div>
+        </div>
+
+        <div style="margin-bottom:16px">
+          <label class="btn bs" style="cursor:pointer;margin-bottom:6px"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
+          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
+            <strong>O que é:</strong> Restaura um backup salvo anteriormente.<br>
+            <strong>Atenção:</strong> Substitui todos os dados atuais pelo conteúdo do arquivo.<br>
+            <strong>Como usar no iPhone:</strong> ① No Mac, toque em "Backup completo" → salve o arquivo. ② Envie por AirDrop, iCloud Drive, WhatsApp ou e-mail para o iPhone. ③ No iPhone, toque em "Importar" → selecione o arquivo recebido → confirme.
+          </div>
+        </div>
+
         <button class="btn bd" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
       </div>
 
@@ -815,7 +859,7 @@ function fsConfirmar(){
 function salvarEntrada(){
   var vol=parseFloat(document.getElementById('e-vol').value);
   if(!vol||vol<=0){alert('Informe o volume.');return;}
-  db.entradas.push({id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:document.getElementById('e-nf').value,forn:document.getElementById('e-forn').value});
+  db.entradas.push({id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:(document.getElementById('e-nf').value||'').toUpperCase(),forn:document.getElementById('e-forn').value});
   saveDB();
   ['e-vol','e-nf','e-forn'].forEach(function(id){document.getElementById(id).value='';});
   renderHistEnt();
@@ -897,10 +941,13 @@ function togFormEq(){var f=document.getElementById('form-eq');f.style.display=f.
 function togFormUser(){var f=document.getElementById('form-user');f.style.display=f.style.display==='none'?'block':'none';}
 
 function salvarEq(){
-  var cod=document.getElementById('eq-cod').value.trim();
+  var cod=document.getElementById('eq-cod').value.trim().toUpperCase();
   if(!cod){alert('Informe o código.');return;}
   if(db.equipamentos.filter(function(e){return e.cod===cod;}).length){alert('Código já existe.');return;}
-  db.equipamentos.push({cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:document.getElementById('eq-mod').value,placa:document.getElementById('eq-placa').value,tank:parseFloat(document.getElementById('eq-tank').value)||0,unidade:document.getElementById('eq-unid').value,consumo:parseFloat(document.getElementById('eq-cons').value)||0,frente:document.getElementById('eq-frente').value});
+  var _modelo=document.getElementById('eq-mod').value.trim();
+  var _placa=document.getElementById('eq-placa').value.trim().toUpperCase();
+  var _frente=document.getElementById('eq-frente').value.trim();
+  db.equipamentos.push({cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:_modelo,placa:_placa,tank:parseFloat(document.getElementById('eq-tank').value)||0,unidade:document.getElementById('eq-unid').value,consumo:parseFloat(document.getElementById('eq-cons').value)||0,frente:_frente});
   saveDB();
   ['eq-cod','eq-mod','eq-placa','eq-tank','eq-cons','eq-frente'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('form-eq').style.display='none';
