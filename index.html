@@ -318,34 +318,9 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Dados e backup</div>
         <div id="adm-stats" style="margin-bottom:14px"></div>
-
-        <div style="margin-bottom:16px">
-          <button class="btn bs" onclick="exportCSV()" style="margin-bottom:6px"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
-          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
-            <strong>O que é:</strong> Tabela com todos os abastecimentos (data, equipamento, litros, horímetro).<br>
-            <strong>Para que serve:</strong> Abrir no Excel ou Google Planilhas para análise, relatórios e conferência.<br>
-            <strong>Como usar:</strong> Toque em "Exportar" → arquivo <em>.csv</em> é baixado → abra no Excel (Arquivo → Abrir) ou arraste para o Google Drive.
-          </div>
-        </div>
-
-        <div style="margin-bottom:16px">
-          <button class="btn bs" onclick="exportBackup()" style="margin-bottom:6px"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
-          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
-            <strong>O que é:</strong> Cópia completa de todos os dados — equipamentos, operadores, entradas, comboios e abastecimentos.<br>
-            <strong>Para que serve:</strong> Guardar backup de segurança ou transferir para outro dispositivo.<br>
-            <strong>Como usar:</strong> Toque em "Backup" → arquivo <em>.json</em> é baixado → guarde em local seguro (iCloud, Google Drive, e-mail). Para restaurar, use "Importar" abaixo.
-          </div>
-        </div>
-
-        <div style="margin-bottom:16px">
-          <label class="btn bs" style="cursor:pointer;margin-bottom:6px"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
-          <div style="background:var(--bg);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--t2);line-height:1.7">
-            <strong>O que é:</strong> Restaura um backup salvo anteriormente.<br>
-            <strong>Atenção:</strong> Substitui todos os dados atuais pelo conteúdo do arquivo.<br>
-            <strong>Como usar no iPhone:</strong> ① No Mac, toque em "Backup completo" → salve o arquivo. ② Envie por AirDrop, iCloud Drive, WhatsApp ou e-mail para o iPhone. ③ No iPhone, toque em "Importar" → selecione o arquivo recebido → confirme.
-          </div>
-        </div>
-
+        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
+        <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
+        <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
         <button class="btn bd" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
       </div>
 
