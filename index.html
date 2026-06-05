@@ -16,536 +16,1070 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
-:root{--green:#0f6e56;--green-light:#e1f5ee;--green-mid:#1d9e75;--green-dark:#085041;--amber:#854f0b;--amber-light:#faeeda;--red:#a32d2d;--red-light:#fcebeb;--blue:#185fa5;--blue-light:#e6f1fb;--text:#1a1a1a;--text2:#666;--text3:#999;--bg:#f7f7f5;--card:#fff;--border:#e5e5e0;--radius:12px;--radius-sm:8px;font-family:'IBM Plex Sans',sans-serif}
+:root{--green:#0f6e56;--gl:#e1f5ee;--gm:#1d9e75;--gd:#085041;--am:#854f0b;--al:#faeeda;--red:#a32d2d;--rl:#fcebeb;--bl:#185fa5;--bll:#e6f1fb;--tx:#1a1a1a;--t2:#666;--t3:#999;--bg:#f7f7f5;--cd:#fff;--br:#e5e5e0;--r:12px;--rs:8px;font-family:'IBM Plex Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden}
 input,select,textarea,button{font-family:inherit}
 .app{max-width:480px;margin:0 auto;min-height:100vh}
 .screen{display:none;flex-direction:column;min-height:100vh}
 .screen.active{display:flex}
 .topbar{background:var(--green);padding:env(safe-area-inset-top,0) 0 0;flex-shrink:0}
-.topbar-inner{display:flex;align-items:center;gap:10px;padding:14px 16px}
-.topbar h1{font-size:16px;font-weight:600;color:#e1f5ee;flex:1}
-.topbar-sub{font-size:11px;color:#5dcaa5;margin-top:1px}
+.tb{display:flex;align-items:center;gap:10px;padding:14px 16px}
+.tb h1{font-size:16px;font-weight:600;color:#e1f5ee;flex:1;margin:0}
+.tb-sub{font-size:11px;color:#5dcaa5;margin-top:1px}
 .pill{font-size:10px;font-weight:600;padding:3px 10px;border-radius:20px;letter-spacing:.03em}
-.pill-offline{background:#085041;color:#9fe1cb}
-.pill-online{background:#1d9e75;color:#e1f5ee}
-.pill-admin{background:#633806;color:#fac775}
-.bottom-nav{display:flex;background:var(--card);border-top:1px solid var(--border);padding:0 0 env(safe-area-inset-bottom);flex-shrink:0}
-.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:10px;font-weight:500;transition:color .15s}
-.nav-btn.active{color:var(--green)}
-.nav-btn i{font-size:22px}
-.scroll-body{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
-.card-title{font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.p-off{background:#085041;color:#9fe1cb}.p-on{background:#1d9e75;color:#e1f5ee}.p-adm{background:#633806;color:#fac775}
+.bnav{display:flex;background:var(--cd);border-top:1px solid var(--br);padding:0 0 env(safe-area-inset-bottom);flex-shrink:0}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;border:none;background:none;cursor:pointer;color:var(--t3);font-size:10px;font-weight:500}
+.nb.active{color:var(--green)}.nb i{font-size:22px}
+.sb{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px}
+.card{background:var(--cd);border:1px solid var(--br);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.ct{font-size:13px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.metric{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
-.metric-label{font-size:11px;color:var(--text3);margin-bottom:4px}
-.metric-val{font-size:22px;font-weight:600;color:var(--text);font-family:'IBM Plex Mono',monospace;line-height:1}
-.metric-sub{font-size:10px;color:var(--text3);margin-top:3px}
-.metric.ok .metric-val{color:var(--green)}
-.metric.warn .metric-val{color:var(--amber)}
-.metric.danger .metric-val{color:var(--red)}
+.met{background:var(--cd);border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px}
+.ml{font-size:11px;color:var(--t3);margin-bottom:4px}
+.mv{font-size:22px;font-weight:600;color:var(--tx);font-family:'IBM Plex Mono',monospace;line-height:1}
+.ms{font-size:10px;color:var(--t3);margin-top:3px}
+.met.ok .mv{color:var(--green)}.met.warn .mv{color:var(--am)}.met.danger .mv{color:var(--red)}
 .field{margin-bottom:14px}
-.field label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px}
-.field input,.field select,.field textarea{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:15px;color:var(--text);background:var(--card);outline:none;transition:border-color .15s}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--t2);margin-bottom:5px}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--br);border-radius:var(--rs);padding:10px 12px;font-size:15px;color:var(--tx);background:var(--cd);outline:none;transition:border-color .15s}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--green)}
 .field textarea{height:60px;resize:none}
-.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.btn{display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:var(--radius-sm);padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px;transition:opacity .15s}
-.btn:active{transform:scale(.98)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn-primary{background:var(--green);color:#e1f5ee}
-.btn-primary:hover:not(:disabled){background:var(--green-dark)}
-.btn-secondary{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
-.btn-danger{background:var(--red-light);color:var(--red);border:1px solid #f09595}
-.btn-sm{padding:7px 14px;font-size:12px;width:auto;margin-bottom:0}
-.equip-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.equip-card{border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 10px;cursor:pointer;text-align:center;transition:all .15s;background:var(--card)}
-.equip-card:hover,.equip-card:active{border-color:var(--green);background:var(--green-light)}
-.equip-card.selected{border-color:var(--green);background:var(--green-light)}
-.equip-card i{font-size:28px;color:var(--text3);display:block;margin-bottom:8px}
-.equip-card.selected i{color:var(--green)}
-.equip-card .eq-name{font-size:11px;font-weight:600;color:var(--text);line-height:1.3}
-.equip-card .eq-tipo{font-size:10px;color:var(--text3);margin-top:2px}
-.steps{display:flex;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:var(--rs);padding:13px 20px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px}
+.btn:active{transform:scale(.98)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.bp{background:var(--green);color:#e1f5ee}.bs{background:var(--bg);border:1px solid var(--br);color:var(--t2)}.bd{background:var(--rl);color:var(--red);border:1px solid #f09595}
+.bsm{padding:7px 14px;font-size:12px;width:auto;margin-bottom:0}
+.eq-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.eq-card{border:1.5px solid var(--br);border-radius:var(--r);padding:14px 10px;cursor:pointer;text-align:center;background:var(--cd);transition:all .15s}
+.eq-card.sel{border-color:var(--green);background:var(--gl)}
+.eq-card i{font-size:28px;color:var(--t3);display:block;margin-bottom:8px}
+.eq-card.sel i{color:var(--green)}
+.eq-card .en{font-size:11px;font-weight:600;color:var(--tx);line-height:1.3}
+.eq-card .et{font-size:10px;color:var(--t3);margin-top:2px}
+.steps{display:flex;align-items:center;padding:12px 16px;background:var(--cd);border-bottom:1px solid var(--br)}
 .step{display:flex;flex-direction:column;align-items:center;flex:1}
-.step-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid var(--border);color:var(--text3);background:var(--card);z-index:1}
-.step-dot.done{background:var(--green);border-color:var(--green);color:#fff}
-.step-dot.active{background:var(--green-dark);border-color:var(--green-dark);color:#fff}
-.step-label{font-size:9px;color:var(--text3);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
-.step-line{height:2px;flex:1;background:var(--border);margin-top:-14px}
-.step-line.done{background:var(--green)}
-.photo-area{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;margin-bottom:14px;transition:all .15s}
-.photo-area:hover,.photo-area:active{border-color:var(--green);background:var(--green-light)}
-.photo-area.has-photo{border-style:solid;border-color:var(--green);background:var(--green-light)}
-.photo-area i{font-size:36px;color:var(--text3);display:block;margin-bottom:8px}
-.photo-area.has-photo i{color:var(--green)}
-.photo-area .ph-title{font-size:14px;font-weight:600;color:var(--text)}
-.photo-area .ph-sub{font-size:12px;color:var(--text3);margin-top:3px}
-.reading-box{display:flex;align-items:center;background:var(--green-light);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;gap:12px}
-.reading-num{font-size:28px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace;flex:1}
-.reading-unit{font-size:12px;color:var(--green-dark)}
-.reading-edit{font-size:12px;color:var(--blue);cursor:pointer;text-decoration:underline}
-.litros-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.litros-btn{width:48px;height:48px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:22px;cursor:pointer;background:var(--card);color:var(--text);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.litros-btn:hover{background:var(--bg)}
-.litros-inp{flex:1;font-size:28px;font-weight:600;text-align:center;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;color:var(--text);background:var(--card);font-family:'IBM Plex Mono',monospace}
-.confirm-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
-.confirm-row:last-child{border-bottom:none}
-.confirm-label{color:var(--text2)}
-.confirm-val{font-weight:600;color:var(--text);text-align:right;max-width:60%}
-.success{text-align:center;padding:48px 24px}
-.success-icon{font-size:64px;color:var(--green-mid);margin-bottom:20px}
-.success-title{font-size:20px;font-weight:600;margin-bottom:8px}
-.success-sub{font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:28px}
-.alert{padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.sd{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:2px solid var(--br);color:var(--t3);background:var(--cd);z-index:1}
+.sd.done{background:var(--green);border-color:var(--green);color:#fff}
+.sd.active{background:var(--gd);border-color:var(--gd);color:#fff}
+.sl{font-size:9px;color:var(--t3);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.sline{height:2px;flex:1;background:var(--br);margin-top:-14px}
+.sline.done{background:var(--green)}
+.pha{border:2px dashed var(--br);border-radius:var(--r);padding:24px 16px;text-align:center;cursor:pointer;margin-bottom:12px}
+.pha.has{border-style:solid;border-color:var(--green);background:var(--gl)}
+.pha i{font-size:32px;color:var(--t3);display:block;margin-bottom:8px}
+.pha.has i{color:var(--green)}
+.pha .pt{font-size:13px;font-weight:600;color:var(--tx)}
+.pha .ps{font-size:11px;color:var(--t3);margin-top:3px}
+.rbox{display:flex;align-items:center;background:var(--gl);border-radius:var(--rs);padding:12px 14px;margin-bottom:12px;gap:12px}
+.rnum{font-size:28px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace;flex:1}
+.redit{font-size:12px;color:var(--bl);cursor:pointer;text-decoration:underline}
+.lrow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.ladj{width:52px;height:52px;border:1px solid var(--br);border-radius:var(--rs);font-size:24px;cursor:pointer;background:var(--cd);color:var(--tx);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:300}
+.ladj:hover{background:var(--bg)}
+.linp{flex:1;font-size:30px;font-weight:600;text-align:center;border:2px solid var(--br);border-radius:var(--rs);padding:10px;color:var(--tx);background:var(--cd);font-family:'IBM Plex Mono',monospace;-webkit-appearance:none;appearance:none}
+.linp:focus{border-color:var(--green);outline:none}
+.crow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br);font-size:13px}
+.crow:last-child{border-bottom:none}
+.cl{color:var(--t2)}.cv{font-weight:600;text-align:right;max-width:60%}
+.ok-screen{text-align:center;padding:48px 24px}
+.ok-icon{font-size:64px;color:var(--gm);margin-bottom:20px}
+.ok-title{font-size:20px;font-weight:600;margin-bottom:8px}
+.ok-sub{font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:28px}
+.alert{padding:10px 14px;border-radius:var(--rs);font-size:12px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
 .alert i{font-size:16px;flex-shrink:0;margin-top:1px}
-.alert-warn{background:var(--amber-light);color:#633806}
-.alert-ok{background:var(--green-light);color:var(--green-dark)}
-.alert-info{background:var(--blue-light);color:#0c447c}
-.hist-item{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
-.hist-item:last-child{border-bottom:none}
-.hist-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
-.hist-icon.entry{background:var(--blue-light);color:var(--blue)}
-.hist-icon.transfer{background:var(--amber-light);color:var(--amber)}
-.hist-icon.fuel{background:var(--green-light);color:var(--green)}
-.hist-body{flex:1;min-width:0}
-.hist-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hist-sub{font-size:11px;color:var(--text3)}
-.hist-vol{font-size:14px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
-.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--green-dark);text-align:center}
-.splash-logo{font-size:56px;color:#9fe1cb;margin-bottom:16px}
-.splash-title{font-size:24px;font-weight:600;color:#e1f5ee;margin-bottom:8px}
-.splash-sub{font-size:14px;color:#5dcaa5;margin-bottom:40px;line-height:1.6}
-.splash-btn-field{background:#e1f5ee;color:var(--green-dark);border:none;border-radius:var(--radius);padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px}
-.splash-btn-field:hover{background:#fff}
-.splash-btn-admin{background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:var(--radius);padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px}
-.splash-btn-admin:hover{background:#085041}
-.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--green-dark)}
-.login-logo{font-size:52px;color:#9fe1cb;margin-bottom:12px}
-.login-title{font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center}
-.login-sub{font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center;line-height:1.6}
-.login-card{background:var(--card);border-radius:var(--radius);padding:24px;width:100%;max-width:360px}
-.login-err{background:var(--red-light);color:var(--red);border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
-.equip-list-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.equip-list-item:last-child{border-bottom:none}
-.equip-avatar{width:40px;height:40px;border-radius:var(--radius-sm);background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--green);flex-shrink:0}
-.equip-list-body{flex:1;min-width:0}
-.equip-list-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.equip-list-sub{font-size:11px;color:var(--text3)}
-.equip-del{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px}
-.equip-del:hover{color:var(--red)}
-.saldo-bar{display:flex;justify-content:space-between;background:var(--green-light);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px}
-.saldo-label{font-size:12px;color:var(--green-dark);display:flex;align-items:center;gap:6px}
-.saldo-val{font-size:14px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace}
-.analyzing{display:flex;align-items:center;gap:10px;background:var(--blue-light);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--blue)}
-.spinner{width:18px;height:18px;border:2.5px solid #b5d4f4;border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+.aw{background:var(--al);color:#633806}.ai{background:var(--bll);color:#0c447c}.aok{background:var(--gl);color:var(--gd)}
+.hi{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--br)}
+.hi:last-child{border-bottom:none}
+.hic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.hic.entry{background:var(--bll);color:var(--bl)}.hic.transfer{background:var(--al);color:var(--am)}.hic.fuel{background:var(--gl);color:var(--green)}
+.hb{flex:1;min-width:0}.hn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hs{font-size:11px;color:var(--t3)}.hv{font-size:14px;font-weight:600;font-family:'IBM Plex Mono',monospace;white-space:nowrap}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd);text-align:center}
+.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd)}
+.login-card{background:var(--cd);border-radius:var(--r);padding:24px;width:100%;max-width:360px}
+.login-err{background:var(--rl);color:var(--red);border-radius:var(--rs);padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
+.eli{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--br)}
+.eli:last-child{border-bottom:none}
+.eav{width:40px;height:40px;border-radius:var(--rs);background:var(--gl);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--green);flex-shrink:0}
+.elb{flex:1;min-width:0}.eln{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.els{font-size:11px;color:var(--t3)}
+.del{background:none;border:none;color:var(--t3);font-size:18px;cursor:pointer;padding:4px}.del:hover{color:var(--red)}
+.sbar{display:flex;justify-content:space-between;background:var(--gl);border-radius:var(--rs);padding:10px 14px;margin-bottom:14px}
+.sbarlabel{font-size:12px;color:var(--gd);display:flex;align-items:center;gap:6px}
+.sbarval{font-size:14px;font-weight:600;color:var(--green);font-family:'IBM Plex Mono',monospace}
+.analyzing{display:flex;align-items:center;gap:10px;background:var(--bll);border-radius:var(--rs);padding:12px 14px;margin-bottom:12px;font-size:13px;color:var(--bl)}
+.spin{width:18px;height:18px;border:2.5px solid #b5d4f4;border-top-color:var(--bl);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 .badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600}
-.badge-green{background:var(--green-light);color:var(--green-dark)}
-.badge-amber{background:var(--amber-light);color:var(--amber)}
-.badge-blue{background:var(--blue-light);color:var(--blue)}
-.user-item{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
-.user-item:last-child{border-bottom:none}
-.user-avatar{width:38px;height:38px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--blue);flex-shrink:0}
-.user-body{flex:1}
-.user-name{font-size:13px;font-weight:600}
-.user-role{font-size:11px;color:var(--text3)}
-.user-del{background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px}
-.user-del:hover{color:var(--red)}
-.foto-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
-.foto-card img{width:100%;display:block;max-height:220px;object-fit:cover;background:#eee}
-.foto-card-body{padding:12px 14px}
-.foto-card-title{font-size:13px;font-weight:600;margin-bottom:4px}
-.foto-card-sub{font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.6}
-.foto-card-actions{display:flex;gap:8px}
-.foto-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
-.foto-badge-ok{background:#e1f5ee;color:#085041}
-.foto-badge-pend{background:#faeeda;color:#633806}
-.empty{text-align:center;padding:32px 16px;color:var(--text3);font-size:13px}
+.bg{background:var(--gl);color:var(--gd)}.ba{background:var(--al);color:var(--am)}.bb{background:var(--bll);color:var(--bl)}
+.uitem{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--br)}
+.uitem:last-child{border-bottom:none}
+.uav{width:38px;height:38px;border-radius:50%;background:var(--bll);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--bl);flex-shrink:0}
+.ub{flex:1}.un{font-size:13px;font-weight:600}.ur{font-size:11px;color:var(--t3)}
+.foto-card{background:var(--cd);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;margin-bottom:14px}
+.foto-card img{width:100%;display:block;max-height:220px;object-fit:cover}
+.fcb{padding:12px 14px}
+.fct{font-size:13px;font-weight:600;margin-bottom:4px}
+.fcs{font-size:11px;color:var(--t3);margin-bottom:10px;line-height:1.6}
+.fca{display:flex;gap:8px}
+.fbadge{display:inline-flex;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px}
+.fbok{background:#e1f5ee;color:#085041}.fbpend{background:#faeeda;color:#633806}
+.empty{text-align:center;padding:32px 16px;color:var(--t3);font-size:13px}
 .empty i{font-size:36px;display:block;margin-bottom:8px}
-.sep{height:1px;background:var(--border);margin:16px 0}
-.tag-offline{display:inline-flex;align-items:center;gap:4px;background:var(--green-light);color:var(--green-dark);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
-.section-note{font-size:12px;color:var(--text3);margin-top:6px;line-height:1.5}
+.tag-off{display:inline-flex;align-items:center;gap:4px;background:var(--gl);color:var(--gd);font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+.note{font-size:12px;color:var(--t3);line-height:1.5;margin-top:6px}
+.sync-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+.sb-on{background:var(--gl);color:var(--gd)}.sb-off{background:#fff3cd;color:#856404}
+.seg-label{font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
 </style>
 </head>
 <body>
 
+<!-- SPLASH -->
 <div id="splash" class="splash">
-  <div class="splash-logo"><i class="ti ti-gas-station"></i></div>
-  <div class="splash-title">Comboio</div>
-  <div class="splash-sub">Controle de combustível<br>Selecione seu tipo de acesso</div>
-  <button class="splash-btn-field" onclick="entrarCampo()">
+  <div style="font-size:56px;color:#9fe1cb;margin-bottom:16px"><i class="ti ti-gas-station"></i></div>
+  <div style="font-size:24px;font-weight:600;color:#e1f5ee;margin-bottom:8px">Comboio</div>
+  <div style="font-size:14px;color:#5dcaa5;margin-bottom:40px;line-height:1.6">Controle de combustível<br>Selecione seu tipo de acesso</div>
+  <button onclick="entrarCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
     <i class="ti ti-tractor" style="font-size:22px"></i> Sou operador de campo
   </button>
-  <button class="splash-btn-admin" onclick="mostrarLoginAdmin()">
+  <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
     <i class="ti ti-shield-lock" style="font-size:18px"></i> Acesso administrativo
   </button>
-  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v5</div>
+  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
 </div>
 
+<!-- LOGIN ADMIN -->
 <div id="login-admin" style="display:none" class="login-wrap">
-  <div class="login-logo"><i class="ti ti-shield-lock"></i></div>
-  <div class="login-title">Área administrativa</div>
-  <div class="login-sub">Acesso restrito ao responsável</div>
+  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
+  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
+  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
   <div class="login-card">
     <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
-    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocapitalize="none" autocomplete="username" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocomplete="username" autocapitalize="none" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <button class="btn btn-primary" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
-    <button class="btn btn-secondary" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
+    <button class="btn bp" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
+    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
   </div>
 </div>
 
+<!-- MAIN APP -->
 <div id="main-app" class="app" style="display:none">
+
+  <!-- RESUMO -->
   <div id="screen-resumo" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Controle de combustível</h1><div class="topbar-sub" id="resumo-date"></div><span class="pill" id="resumo-pill">offline</span></div></div>
-    <div class="scroll-body"><div class="metrics" id="metrics-resumo"></div><div id="alerta-resumo"></div><div class="card"><div class="card-title">Últimos lançamentos</div><div id="hist-recentes"></div></div></div>
-    <nav class="bottom-nav" id="nav-resumo"></nav>
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Controle de combustível</h1><div class="tb-sub" id="res-date"></div></div><span class="pill" id="res-pill">offline</span></div></div>
+    <div class="sb"><div class="metrics" id="res-metrics"></div><div id="res-alert"></div><div class="card"><div class="ct">Últimos lançamentos</div><div id="res-hist"></div></div></div>
+    <nav class="bnav" id="nav-resumo"></nav>
   </div>
 
+  <!-- ABASTECIMENTO -->
   <div id="screen-field" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Abastecimento</h1><div class="topbar-sub" id="field-sub"></div><span class="pill pill-offline" id="field-pill">offline</span></div></div>
-    <div id="field-steps" class="steps"></div>
-    <div class="scroll-body" id="field-body"></div>
-    <div id="field-nav-wrap"></div>
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Abastecimento</h1><div class="tb-sub" id="fld-sub"></div></div><span class="pill p-off" id="fld-pill">offline</span></div></div>
+    <div id="fld-steps" class="steps"></div>
+    <div class="sb" id="fld-body"></div>
+    <div id="fld-nav"></div>
   </div>
 
+  <!-- ENTRADA -->
   <div id="screen-entrada" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Entrada de diesel</h1><div class="topbar-sub">Distribuidora → Reservatório</div></div></div>
-    <div class="scroll-body">
+    <div class="topbar"><div class="tb"><h1>Entrada de diesel</h1><div class="tb-sub">Distribuidora → Reservatório</div></div></div>
+    <div class="sb">
       <div class="card">
-        <div class="card-title">Registrar recebimento</div>
+        <div class="ct">Registrar recebimento</div>
         <div class="field"><label>Data</label><input type="date" id="e-data"></div>
-        <div class="row2"><div class="field"><label>Volume (L)</label><input type="number" id="e-vol" min="1" step="0.1" placeholder="Ex: 5000"></div><div class="field"><label>Nota fiscal</label><input type="text" id="e-nf" autocapitalize="characters" style="text-transform:uppercase" placeholder="NF-001"></div></div>
-        <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
-        <button class="btn btn-primary" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
-      </div>
-      <div class="card"><div class="card-title">Histórico</div><div id="hist-entradas"></div></div>
-    </div>
-    <nav class="bottom-nav" id="nav-entrada"></nav>
-  </div>
-
-  <div id="screen-comboio" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Comboio</h1><div class="topbar-sub">Reservatório → Comboio</div></div></div>
-    <div class="scroll-body">
-      <div class="card">
-        <div class="card-title">Registrar carregamento</div>
-        <div class="row2"><div class="field"><label>Data</label><input type="date" id="c-data"></div><div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000"></div></div>
-        <div class="row2"><div class="field"><label>Operador</label><input type="text" id="c-op" autocapitalize="words" placeholder="Nome"></div><div class="field"><label>Km/Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura"></div></div>
-        <button class="btn btn-primary" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
-      </div>
-      <div class="card"><div class="card-title">Histórico</div><div id="hist-comboio"></div></div>
-    </div>
-    <nav class="bottom-nav" id="nav-comboio"></nav>
-  </div>
-
-  <div id="screen-fotos" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Fotos — Conferência</h1><span class="pill pill-admin">admin</span></div></div>
-    <div class="scroll-body" id="fotos-body"></div>
-    <nav class="bottom-nav" id="nav-fotos"></nav>
-  </div>
-
-  <div id="screen-admin" class="screen">
-    <div class="topbar"><div class="topbar-inner"><h1>Configurações</h1><span class="pill pill-admin">admin</span></div></div>
-    <div class="scroll-body">
-
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Equipamentos</div><button class="btn btn-primary btn-sm" onclick="toggleFormEquip()"><i class="ti ti-plus"></i> Adicionar</button></div>
-        <div id="form-equip" style="display:none;padding-top:12px;border-top:1px solid var(--border)">
-          <div class="row2"><div class="field"><label>Código</label><input type="text" id="eq-cod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: PC200-01"></div><div class="field"><label>Tipo</label><select id="eq-tipo"><option>Escavadeira</option><option>Trator de esteira</option><option>Motoniveladora</option><option>Caminhão basculante</option><option>Pá carregadeira</option><option>Rolo compactador</option><option>Retroescavadeira</option><option>Caminhão pipa</option><option>Outro</option></select></div></div>
-          <div class="row2"><div class="field"><label>Marca/Modelo</label><input type="text" id="eq-modelo" autocapitalize="words"></div><div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase"></div></div>
-          <div class="row2"><div class="field"><label>Tanque (L)</label><input type="number" id="eq-tank" min="0"></div><div class="field"><label>Unidade</label><select id="eq-unidade"><option value="h">Horímetro</option><option value="km">Odômetro</option></select></div></div>
-          <div class="row2"><div class="field"><label>Consumo (L/h ou L/100km)</label><input type="number" id="eq-consumo" min="0" step="0.1"></div><div class="field"><label>Frente</label><input type="text" id="eq-frente" autocapitalize="words"></div></div>
-          <div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="salvarEquip()"><i class="ti ti-device-floppy"></i> Salvar</button><button class="btn btn-secondary" style="width:auto;padding:10px 16px" onclick="toggleFormEquip()">Cancelar</button></div>
+        <div class="r2">
+          <div class="field"><label>Volume (L)</label><input type="number" id="e-vol" min="1" step="0.1" placeholder="Ex: 5000" inputmode="decimal"></div>
+          <div class="field"><label>Nota fiscal</label><input type="text" id="e-nf" autocapitalize="characters" style="text-transform:uppercase" placeholder="NF-001"></div>
         </div>
-        <div id="lista-equip"></div>
+        <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
+        <button class="btn bp" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
+      </div>
+      <div class="card"><div class="ct">Histórico</div><div id="hist-ent"></div></div>
+    </div>
+    <nav class="bnav" id="nav-entrada"></nav>
+  </div>
+
+  <!-- COMBOIO -->
+  <div id="screen-comboio" class="screen">
+    <div class="topbar"><div class="tb"><h1>Comboio</h1><div class="tb-sub">Reservatório → Comboio</div></div></div>
+    <div class="sb">
+      <div class="card">
+        <div class="ct">Registrar carregamento</div>
+        <div class="r2">
+          <div class="field"><label>Data</label><input type="date" id="c-data"></div>
+          <div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000" inputmode="decimal"></div>
+        </div>
+        <div class="r2">
+          <div class="field"><label>Operador</label><input type="text" id="c-op" autocapitalize="words" placeholder="Nome"></div>
+          <div class="field"><label>Km / Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura" inputmode="decimal"></div>
+        </div>
+        <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
+      </div>
+      <div class="card"><div class="ct">Histórico</div><div id="hist-com"></div></div>
+    </div>
+    <nav class="bnav" id="nav-comboio"></nav>
+  </div>
+
+  <!-- FOTOS -->
+  <div id="screen-fotos" class="screen">
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Fotos — Conferência</h1></div><span class="pill p-adm">admin</span></div></div>
+    <div class="sb" id="fotos-body"></div>
+    <nav class="bnav" id="nav-fotos"></nav>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="screen-admin" class="screen">
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Configurações</h1></div><span class="pill p-adm">admin</span></div></div>
+    <div class="sb">
+
+      <!-- Equipamentos -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="ct" style="margin-bottom:0">Equipamentos</div>
+          <button class="btn bp bsm" onclick="togFormEq()"><i class="ti ti-plus"></i> Adicionar</button>
+        </div>
+        <div id="form-eq" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
+          <div class="r2">
+            <div class="field"><label>Código</label><input type="text" id="eq-cod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: PC200-01"></div>
+            <div class="field"><label>Tipo</label>
+              <select id="eq-tipo">
+                <option>Escavadeira</option><option>Trator de esteira</option>
+                <option>Motoniveladora</option><option>Caminhão basculante</option>
+                <option>Pá carregadeira</option><option>Rolo compactador</option>
+                <option>Retroescavadeira</option><option>Caminhão pipa</option><option>Outro</option>
+              </select>
+            </div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="words" placeholder="Ex: Komatsu PC200"></div>
+            <div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase" placeholder="ABC-1234"></div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Tanque (L)</label><input type="number" id="eq-tank" min="0" inputmode="decimal"></div>
+            <div class="field"><label>Unidade</label><select id="eq-unid"><option value="h">Horímetro (h)</option><option value="km">Odômetro (km)</option></select></div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Consumo esperado</label><input type="number" id="eq-cons" min="0" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn bp" style="flex:1" onclick="salvarEq()"><i class="ti ti-device-floppy"></i> Salvar</button>
+            <button class="btn bs" style="width:auto;padding:10px 16px" onclick="togFormEq()">Cancelar</button>
+          </div>
+        </div>
+        <div id="lista-eq"></div>
       </div>
 
+      <!-- Operadores -->
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div class="card-title" style="margin-bottom:0">Operadores de campo</div><button class="btn btn-primary btn-sm" onclick="toggleFormUser()"><i class="ti ti-plus"></i> Adicionar</button></div>
-        <p class="section-note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
-        <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--border)">
-          <div class="row2"><div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="words" placeholder="Ex: João Silva"></div><div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div></div>
-          <div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button><button class="btn btn-secondary" style="width:auto;padding:10px 16px" onclick="toggleFormUser()">Cancelar</button></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="ct" style="margin-bottom:0">Operadores de campo</div>
+          <button class="btn bp bsm" onclick="togFormUser()"><i class="ti ti-plus"></i> Adicionar</button>
+        </div>
+        <p class="note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
+        <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
+          <div class="r2">
+            <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="words" placeholder="Ex: João Silva"></div>
+            <div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn bp" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button>
+            <button class="btn bs" style="width:auto;padding:10px 16px" onclick="togFormUser()">Cancelar</button>
+          </div>
         </div>
         <div id="lista-users"></div>
       </div>
 
+      <!-- Sincronização -->
       <div class="card">
-        <div class="card-title">Sincronização em tempo real</div>
+        <div class="ct">Sincronização em tempo real</div>
         <div id="sync-status" style="margin-bottom:12px"></div>
-        <p class="section-note" style="margin-bottom:12px">Cole a URL do seu Firebase para sincronizar Mac e iPhone automaticamente.</p>
+        <p class="note" style="margin-bottom:12px">Cole a URL do seu Firebase Realtime Database para sincronizar Mac e iPhone automaticamente.</p>
         <div class="field">
-          <label>URL do Firebase (ex: https://seu-projeto-default-rtdb.firebaseio.com)</label>
-          <input type="url" id="firebase-url" placeholder="https://..." autocapitalize="none">
+          <label>URL do Firebase</label>
+          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
         </div>
-        <button class="btn btn-primary" onclick="salvarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
-        <button class="btn btn-secondary" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
+        <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
+        <button class="btn bs" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link de cadastro (sem internet)</button>
       </div>
 
+      <!-- Credenciais -->
       <div class="card">
-        <div class="card-title">Credenciais do administrador</div>
-        <div class="row2"><div class="field"><label>Usuário</label><input type="text" id="adm-user" autocapitalize="none" placeholder="admin"></div><div class="field"><label>Nova senha</label><input type="password" id="adm-pass" placeholder="Min. 4 caracteres"></div></div>
-        <button class="btn btn-secondary" onclick="alterarCredenciais()"><i class="ti ti-key"></i> Alterar credenciais</button>
+        <div class="ct">Credenciais do administrador</div>
+        <div class="r2">
+          <div class="field"><label>Usuário</label><input type="text" id="adm-user" autocapitalize="none" placeholder="admin"></div>
+          <div class="field"><label>Nova senha</label><input type="password" id="adm-pass" placeholder="Min. 4 caracteres"></div>
+        </div>
+        <button class="btn bs" onclick="alterarCred()"><i class="ti ti-key"></i> Alterar credenciais</button>
       </div>
 
+      <!-- Dados -->
       <div class="card">
-        <div class="card-title">Dados e backup</div>
-        <div id="admin-stats" style="margin-bottom:14px"></div>
-        <button class="btn btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
-        <button class="btn btn-secondary" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
-        <label class="btn btn-secondary" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importarBackup(this)"></label>
-        <button class="btn btn-danger" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
+        <div class="ct">Dados e backup</div>
+        <div id="adm-stats" style="margin-bottom:14px"></div>
+        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
+        <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
+        <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
+        <button class="btn bd" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
       </div>
 
-      <button class="btn btn-secondary" onclick="logoutAdmin()"><i class="ti ti-logout"></i> Sair da área administrativa</button>
+      <button class="btn bs" onclick="logout()"><i class="ti ti-logout"></i> Sair da área administrativa</button>
     </div>
-    <nav class="bottom-nav" id="nav-admin"></nav>
+    <nav class="bnav" id="nav-admin"></nav>
   </div>
-</div>
+
+</div><!-- /main-app -->
 
 <script>
-var DB_KEY='fuelterra_v5';
-var db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
-var adminLogado=false;
-var fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,analisando:false,imgData:null,imgId:null,bombaImg:null};
-var ICONS={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Motoniveladora':'ti-tractor','Caminhão basculante':'ti-truck','Pá carregadeira':'ti-forklift','Rolo compactador':'ti-cylinder','Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery'};
-function iconFor(t){return ICONS[t]||'ti-tractor';}
-function loadDB(){try{var s=localStorage.getItem(DB_KEY);if(s)db=Object.assign(db,JSON.parse(s));}catch(e){}}
-function saveDB(){try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar.');}}
+// ─────────────────────────────────────────────
+//  CONSTANTS & STATE
+// ─────────────────────────────────────────────
+var DB_KEY = 'fuelterra_v6';
+var FB_KEY = 'fuelterra_fb_url';
+var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
+var adminLogado = false;
+var fbRef = null, fbApp = null, fbActive = false;
+
+// Field wizard state — never destroyed during input
+var fs = {step:1, equip:null, hod:null, litros:null,
+          fotoHod:false, fotoBomba:false,
+          imgHod:null, imgBomba:null, imgId:null,
+          analisando:false};
+
+// ─────────────────────────────────────────────
+//  DB
+// ─────────────────────────────────────────────
+function loadDB(){
+  try{
+    var s=localStorage.getItem(DB_KEY);
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+  }catch(e){}
+}
+function saveDB(){
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  fbPush();
+}
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function getSaldoRes(){return db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
 function getSaldoCom(){return db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
 
-// SPLASH/LOGIN
-function entrarCampo(){document.getElementById('splash').style.display='none';document.getElementById('main-app').style.display='';navigate('field');}
-function mostrarLoginAdmin(){document.getElementById('splash').style.display='none';document.getElementById('login-admin').style.display='flex';setTimeout(function(){document.getElementById('login-user').focus();},100);}
-function voltarSplash(){document.getElementById('login-admin').style.display='none';document.getElementById('main-app').style.display='none';document.getElementById('login-err').style.display='none';document.getElementById('login-user').value='';document.getElementById('login-pass').value='';document.getElementById('splash').style.display='flex';}
-function doLogin(){var u=document.getElementById('login-user').value.trim();var p=document.getElementById('login-pass').value;var err=document.getElementById('login-err');if(u===db.admin.usuario&&p===db.admin.senha){adminLogado=true;err.style.display='none';document.getElementById('login-admin').style.display='none';document.getElementById('main-app').style.display='';navigate('resumo');}else{err.style.display='block';}}
-function logoutAdmin(){adminLogado=false;document.getElementById('main-app').style.display='none';document.getElementById('splash').style.display='flex';}
+// ─────────────────────────────────────────────
+//  FIREBASE
+// ─────────────────────────────────────────────
+function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
+function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 
-// NAV
-function buildNav(active){var items=[{id:'resumo',icon:'ti-dashboard',label:'Resumo'},{id:'field',icon:'ti-gas-station',label:'Abastecer'},{id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},{id:'comboio',icon:'ti-flame',label:'Comboio'},{id:'admin',icon:'ti-settings',label:'Config'}];if(adminLogado)items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});return items.map(function(it){return'<button class="nav-btn'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';}).join('');}
-function navigate(id){document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});document.getElementById('screen-'+id).classList.add('active');document.querySelectorAll('.bottom-nav').forEach(function(n){n.innerHTML=buildNav(id);});if(id==='resumo')renderResumo();if(id==='field')renderField();if(id==='entrada'){document.getElementById('e-data').value=today();renderHistEntradas();}if(id==='comboio'){document.getElementById('c-data').value=today();renderHistComboio();}if(id==='admin')renderAdmin();if(id==='fotos')renderFotos();}
-
-// RESUMO
-function renderResumo(){var sr=getSaldoRes(),sc=getSaldoCom(),te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0),ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0),dif=te-ta-Math.max(0,sr)-Math.max(0,sc),d=new Date();document.getElementById('resumo-date').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});var pill=document.getElementById('resumo-pill');pill.textContent=navigator.onLine?'online':'offline';pill.className='pill '+(navigator.onLine?'pill-online':'pill-offline');document.getElementById('metrics-resumo').innerHTML='<div class="metric'+(sr<500?' warn':'')+'"><div class="metric-label">Reservatório</div><div class="metric-val">'+Math.max(0,sr).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="metric-sub">litros disponíveis</div></div><div class="metric'+(sc<100?' danger':sc<300?' warn':' ok')+'"><div class="metric-label">Comboio</div><div class="metric-val">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="metric-sub">litros no comboio</div></div><div class="metric"><div class="metric-label">Total recebido</div><div class="metric-val">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="metric-sub">litros histórico</div></div><div class="metric'+(Math.abs(dif)>200?' warn':'')+'"><div class="metric-label">Diferença</div><div class="metric-val">'+dif.toFixed(0)+'</div><div class="metric-sub">'+(Math.abs(dif)>200?'verificar':'dentro do esperado')+'</div></div>';var alertEl=document.getElementById('alerta-resumo');if(sc<100)alertEl.innerHTML='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Comboio com menos de 100 L. Faça o carregamento.</span></div>';else if(sr<500)alertEl.innerHTML='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Reservatório baixo ('+sr.toFixed(0)+' L). Solicite reabastecimento.</span></div>';else if(Math.abs(dif)>300)alertEl.innerHTML='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Diferença de '+dif.toFixed(0)+' L detectada.</span></div>';else alertEl.innerHTML='';var todos=[];db.entradas.slice(-4).forEach(function(e){todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});db.comboios.slice(-4).forEach(function(c){todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});db.abastecimentos.slice(-4).forEach(function(a){todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L'});});todos.sort(function(a,b){return b.data.localeCompare(a.data);});if(!todos.length){document.getElementById('hist-recentes').innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento ainda</div>';return;}document.getElementById('hist-recentes').innerHTML=todos.map(function(r){var icon=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';return'<div class="hist-item"><div class="hist-icon '+r.tipo+'"><i class="ti '+icon+'"></i></div><div class="hist-body"><div class="hist-name">'+r.nome+'</div><div class="hist-sub">'+fmtDate(r.data)+' • '+r.sub+'</div></div><div class="hist-vol">'+r.vol+'</div></div>';}).join('');}
-
-// FIELD
-function setFSteps(n){var labels=['Equipamento','Horímetro','Litros','Confirmar'];document.getElementById('field-steps').innerHTML=labels.map(function(l,i){var idx=i+1,cls=idx<n?'done':idx===n?'active':'',lbl=idx<n?'✓':idx;return'<div class="step"><div class="step-dot '+cls+'">'+lbl+'</div><div class="step-label">'+l+'</div></div>'+(idx<4?'<div class="step-line'+(idx<n?' done':'')+'"></div>':'');}).join('');}
-function renderField(){var d=new Date();document.getElementById('field-sub').textContent=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});var pill=document.getElementById('field-pill');pill.textContent=navigator.onLine?'online':'offline';pill.className='pill '+(navigator.onLine?'pill-online':'pill-offline');document.getElementById('field-steps').style.display=fs.step===5?'none':'';var body=document.getElementById('field-body');if(fs.step===1)body.innerHTML=renderFS1();else if(fs.step===2)body.innerHTML=renderFS2();else if(fs.step===3)body.innerHTML=renderFS3();else if(fs.step===4)body.innerHTML=renderFS4();else body.innerHTML=renderFSok();var nw=document.getElementById('field-nav-wrap');nw.innerHTML=adminLogado?'<nav class="bottom-nav">'+buildNav('field')+'</nav>':'';}
-
-function renderFS1(){if(!db.equipamentos.length)return'<div class="alert alert-info"><i class="ti ti-info-circle"></i><span>Nenhum equipamento cadastrado.</span></div>';var cards=db.equipamentos.map(function(e){var sel=fs.equip&&fs.equip.cod===e.cod?' selected':'';return'<div class="equip-card'+sel+'" onclick="fsSelEquip(\''+e.cod.replace(/'/g,"\\'")+'\')" ><i class="ti '+iconFor(e.tipo)+'"></i><div class="eq-name">'+e.cod+'</div><div class="eq-tipo">'+e.tipo+'</div></div>';}).join('');return'<div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Selecione o equipamento</div><div class="equip-grid">'+cards+'</div><button class="btn btn-primary" '+(fs.equip?'':'disabled')+' onclick="fsGo(2)"><i class="ti ti-arrow-right"></i> Próximo</button>';}
-
-function renderFS2(){var e=fs.equip,isKm=e.unidade==='km';var photoHtml,bombaHtml='';
-if(fs.fotoHod){var hodBox='';var hodBox='';
-  if(fs.analisando){hodBox='<div class="analyzing"><div class="spinner"></div> Lendo horímetro...</div>';}
-  else if(fs.hod){hodBox='<div class="reading-box"><div style="flex:1"><div style="font-size:11px;color:var(--green-dark);font-weight:600;margin-bottom:2px">Horímetro detectado</div><span class="reading-num">'+fs.hod+'</span><span class="reading-unit"> '+(isKm?'km':'h')+'</span></div><span class="reading-edit" onclick="fsEditHod()">editar</span></div>';}
-  photoHtml='<div><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Horímetro</div><div class="photo-area'+(fs.fotoHod?' has-photo':'')+' onclick="fsAbrirCameraHod()"><i class="ti '+(fs.fotoHod?'ti-check':'ti-camera')+'"></i><div class="ph-title">'+(fs.fotoHod?'Foto capturada':'Fotografar horímetro')+'</div><div class="ph-sub">'+(fs.fotoHod?'Toque para outra':'Aponte e toque aqui')+'</div></div>'+hodBox+'<input type="file" id="camera-hod" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelHod(this)"></div>';
-  bombaHtml='<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase">Bomba <span style="font-weight:400;font-size:10px">(opcional)</span></div><div class="photo-area'+(fs.fotoBomba?' has-photo':'')+' onclick="fsAbrirCameraBomba()" style="padding:20px 16px"><i class="ti '+(fs.fotoBomba?'ti-check':'ti-camera')+'"></i><div class="ph-title" style="font-size:12px">'+(fs.fotoBomba?'Foto capturada':'Fotografar bomba')+'</div><div class="ph-sub" style="font-size:11px">'+(fs.fotoBomba?'Toque para outra':'Visor de abastecimento')+'</div></div><input type="file" id="camera-bomba" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelBomba(this)"></div>';
-}else{photoHtml='<div><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:8px;text-transform:uppercase">Horímetro</div><div class="photo-area" onclick="fsAbrirCameraHod()"><i class="ti ti-camera"></i><div class="ph-title">Fotografar horímetro</div><div class="ph-sub">Aponte e toque aqui</div></div><input type="file" id="camera-hod" accept="image/*" capture="environment" style="display:none" onchange="fsFotoSelHod(this)"></div>'}return'<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+photoHtml+'<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Ou digitar</div><div style="display:flex;gap:8px"><input type="number" id="hod-manual" style="flex:1;font-size:18px;font-family:\'IBM Plex Mono\',monospace" placeholder="'+(isKm?'Ex: 12540':'Ex: 4820')+'" value="'+(fs.hod||'')+'" oninput="fs.hod=this.value.trim()||null;renderField()"><span style="font-size:13px;color:var(--text2);font-weight:600">'+(isKm?'km':'horas')+'</span></div></div><button class="btn btn-primary" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button><button class="btn btn-secondary" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
-
-function renderFS3(){var sc=getSaldoCom(),l=Number(fs.litros)||0,cap=fs.equip.tank?Number(fs.equip.tank):9999;var warns='';if(l>sc&&sc>0)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo ('+sc.toFixed(0)+' L).</span></div>';if(l>cap*1.05&&cap<9999)warns+='<div class="alert alert-warn"><i class="ti ti-alert-triangle"></i><span>Volume maior que capacidade ('+cap+' L).</span></div>';return'<div class="saldo-bar"><span class="saldo-label"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="saldo-val">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div><div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:12px">Quantos litros abasteceu?</div><div class="litros-row"><button class="litros-btn" onclick="fsAdj(-50)">−</button><input class="litros-inp" type="number" id="litros-inp" value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1" oninput="fs.litros=this.value||null;renderField()"><button class="litros-btn" onclick="fsAdj(50)">+</button></div><div style="font-size:11px;color:var(--text3);text-align:center;margin-bottom:14px">Toque − / + para ajustar de 50 em 50 L</div>'+warns+'<button class="btn btn-primary" '+(fs.litros&&Number(fs.litros)>0?'':'disabled')+' onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button><button class="btn btn-secondary" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
-
-function renderFS4(){var e=fs.equip,isKm=e.unidade==='km';var rows='<div class="confirm-row"><span class="confirm-label">Equipamento</span><span class="confirm-val">'+e.cod+'</span></div><div class="confirm-row"><span class="confirm-label">Tipo</span><span class="confirm-val">'+e.tipo+'</span></div>'+(e.placa?'<div class="confirm-row"><span class="confirm-label">Placa</span><span class="confirm-val">'+e.placa+'</span></div>':'')+'<div class="confirm-row"><span class="confirm-label">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="confirm-val" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div><div class="confirm-row"><span class="confirm-label">Volume</span><span class="confirm-val" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div><div class="confirm-row"><span class="confirm-label">Data</span><span class="confirm-val">'+fmtDate(today())+'</span></div>';return'<div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:14px">Confirmar e salvar</div><div class="card" style="margin-bottom:14px">'+rows+'</div><button class="btn btn-primary" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button><button class="btn btn-secondary" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';}
-
-function renderFSok(){return'<div class="success"><div class="success-icon"><i class="ti ti-circle-check"></i></div><div class="success-title">Registrado!</div><div class="success-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br><span class="tag-offline"><i class="ti ti-device-floppy" style="font-size:12px"></i> Salvo offline</span></div><button class="btn btn-primary" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button></div>';}
-
-function fsSelEquip(cod){fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;fs.hod=null;fs.fotoHod=false;fs.fotoBomba=false;fs.litros=null;fs.bombaImg=null;fs.imgData=null;renderField();}
-function fsGo(n){fs.step=n;renderField();history.pushState({type:'field',step:n},'',window.location.href);}
-function fsEditHod(){fs.hod=null;renderField();setTimeout(function(){var i=document.getElementById('hod-manual');if(i)i.focus();},80);}
-function fsAdj(d){fs.litros=String(Math.max(0,(Number(fs.litros)||0)+d));renderField();}
-function fsAbrirCamera(){var inp=document.getElementById('camera-input');if(inp)inp.click();}
-
-function fsFotoSel(input){var file=input.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(e){fs.foto=true;fs.analisando=true;fs.hod=null;fs.imgData=e.target.result;fs.imgId=uid();renderField();fsOCR(e.target.result);};reader.readAsDataURL(file);input.value='';}
-
-function fsOCR(dataUrl){
-  try{
-    Tesseract.recognize(dataUrl,'eng',{logger:function(){}}).then(function(result){
-      var text=(result.data.text||'').trim();
-      var num=text.replace(/[^0-9]/g,'').trim();
-      fs.analisando=false;
-      fs.hod=(num&&num.length>=1)?num:null;
-      renderField();
-      if(!fs.hod){setTimeout(function(){alert('Foto não legível. Digite manualmente.');},200);}
-    }).catch(function(e){
-      fs.analisando=false;
-      fs.hod=null;
-      renderField();
-      setTimeout(function(){alert('Erro OCR. Digite: '+e.message);},200);
-    });
-  }catch(e){
-    fs.analisando=false;
-    fs.hod=null;
-    renderField();
-    setTimeout(function(){alert('Erro ao processar. Digite manualmente.');},200);
-  }
-}
-
-function fsConfirmar(){var recId=uid();db.abastecimentos.push({id:recId,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador:'',fotoId:fs.imgId||null});if(fs.imgData&&fs.imgId){try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:fs.equip.cod,hod:Number(fs.hod),vol:Number(fs.litros),img:fs.imgData,conferido:false}));}catch(e){}}saveDB();fbPush();fs.step=5;renderField();}
-
-function fsNovo(){fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,analisando:false,imgData:null,imgId:null,bombaImg:null};renderField();}
-
-// ENTRADA
-function salvarEntrada(){var vol=parseFloat(document.getElementById('e-vol').value);if(!vol||vol<=0){alert('Informe o volume.');return;}db.entradas.push({id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:document.getElementById('e-nf').value,forn:document.getElementById('e-forn').value});saveDB();['e-vol','e-nf','e-forn'].forEach(function(id){document.getElementById(id).value='';});renderHistEntradas();alert('Entrada registrada!');}
-
-function renderHistEntradas(){var rows=db.entradas.slice().sort(function(a,b){return b.data.localeCompare(a.data);});if(!rows.length){document.getElementById('hist-entradas').innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhuma entrada ainda</div>';return;}document.getElementById('hist-entradas').innerHTML=rows.map(function(r){return'<div class="hist-item"><div class="hist-icon entry"><i class="ti ti-truck-delivery"></i></div><div class="hist-body"><div class="hist-name">'+(r.forn||'Distribuidora')+'</div><div class="hist-sub">'+fmtDate(r.data)+' • NF '+(r.nf||'—')+'</div></div><div class="hist-vol">+'+Number(r.vol).toFixed(0)+' L</div></div>';}).join('');}
-
-// COMBOIO
-function salvarComboio(){var vol=parseFloat(document.getElementById('c-vol').value);if(!vol||vol<=0){alert('Informe o volume.');return;}var sr=getSaldoRes();if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar '+vol.toFixed(0)+' L?'))return;}db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});saveDB();['c-vol','c-op','c-hod'].forEach(function(id){document.getElementById(id).value='';});renderHistComboio();alert('Carregamento registrado!');}
-
-function renderHistComboio(){var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});if(!rows.length){document.getElementById('hist-comboio').innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}document.getElementById('hist-comboio').innerHTML=rows.map(function(r){return'<div class="hist-item"><div class="hist-icon transfer"><i class="ti ti-flame"></i></div><div class="hist-body"><div class="hist-name">Op: '+(r.op||'—')+'</div><div class="hist-sub">'+fmtDate(r.data)+(r.hod?' • '+r.hod:'')+'</div></div><div class="hist-vol">'+Number(r.vol).toFixed(0)+' L</div></div>';}).join('');}
-
-// FOTOS
-function getFotos(){var fotos=[];for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('foto_')===0){try{var f=JSON.parse(localStorage.getItem(k));if(f)fotos.push(f);}catch(e){}}}fotos.sort(function(a,b){return(b.data||'').localeCompare(a.data||'');});return fotos;}
-
-function renderFotos(){var fotos=getFotos();var body=document.getElementById('fotos-body');if(!fotos.length){body.innerHTML='<div class="empty"><i class="ti ti-camera-off"></i>Nenhuma foto registrada ainda.</div>';return;}var pendentes=fotos.filter(function(f){return!f.conferido;}).length;var badge=pendentes>0?'<span class="foto-badge foto-badge-pend">'+pendentes+' pendente'+(pendentes>1?'s':'')+'</span>':'<span class="foto-badge foto-badge-ok">Todas conferidas</span>';body.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font-size:13px;font-weight:600">'+fotos.length+' foto'+(fotos.length>1?'s':'')+' registrada'+(fotos.length>1?'s':'')+'</div>'+badge+'</div>'+fotos.map(function(f){var eq=db.equipamentos.filter(function(e){return e.cod===f.equip;})[0];var unid=eq&&eq.unidade==='km'?'km':'h';var status=f.conferido?'<span class="foto-badge foto-badge-ok">Conferida</span>':'<span class="foto-badge foto-badge-pend">Pendente</span>';var btnConf=!f.conferido?'<button class="btn btn-primary btn-sm" onclick="conferirFoto(\''+f.id+'\')"><i class="ti ti-check"></i> Conferir</button>':'';return'<div class="foto-card"><img src="'+f.img+'" loading="lazy"><div class="foto-card-body"><div class="foto-card-title">'+f.equip+' — '+f.hod+' '+unid+' • '+Number(f.vol).toFixed(0)+' L</div><div class="foto-card-sub">'+fmtDate(f.data)+' '+status+'</div><div class="foto-card-actions">'+btnConf+'<button class="btn btn-danger btn-sm" onclick="apagarFoto(\''+f.id+'\')"><i class="ti ti-trash"></i> Apagar</button></div></div></div>';}).join('');}
-
-function conferirFoto(id){try{var raw=localStorage.getItem('foto_'+id);if(!raw)return;var f=JSON.parse(raw);f.conferido=true;localStorage.setItem('foto_'+id,JSON.stringify(f));renderFotos();}catch(e){}}
-
-function apagarFoto(id){if(!confirm('Apagar foto? Abastecimento é mantido.'))return;localStorage.removeItem('foto_'+id);renderFotos();}
-
-// ADMIN
-function toggleFormEquip(){var f=document.getElementById('form-equip');f.style.display=f.style.display==='none'?'block':'none';}
-function toggleFormUser(){var f=document.getElementById('form-user');f.style.display=f.style.display==='none'?'block':'none';}
-
-function salvarEquip(){var cod=document.getElementById('eq-cod').value.trim();if(!cod){alert('Informe o código.');return;}if(db.equipamentos.filter(function(e){return e.cod===cod;}).length){alert('Código já existe.');return;}db.equipamentos.push({cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:document.getElementById('eq-modelo').value,placa:document.getElementById('eq-placa').value,tank:parseFloat(document.getElementById('eq-tank').value)||0,unidade:document.getElementById('eq-unidade').value,consumo:parseFloat(document.getElementById('eq-consumo').value)||0,frente:document.getElementById('eq-frente').value});saveDB();['eq-cod','eq-modelo','eq-placa','eq-tank','eq-consumo','eq-frente'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('form-equip').style.display='none';renderAdmin();alert('Equipamento cadastrado!');}
-
-function removerEquip(cod){if(!confirm('Remover "'+cod+'"?'))return;db.equipamentos=db.equipamentos.filter(function(e){return e.cod!==cod;});saveDB();renderAdmin();}
-
-function salvarUser(){var nome=document.getElementById('u-nome').value.trim();if(!nome){alert('Informe o nome.');return;}db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});saveDB();['u-nome','u-mat'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('form-user').style.display='none';renderAdmin();alert('Operador cadastrado!');}
-
-function removerUser(id){if(!confirm('Remover operador?'))return;db.operadores=db.operadores.filter(function(u){return u.id!==id;});saveDB();renderAdmin();}
-
-function alterarCredenciais(){var u=document.getElementById('adm-user').value.trim();var p=document.getElementById('adm-pass').value;if(!u){alert('Informe o usuário.');return;}if(p&&p.length<4){alert('Senha mínima de 4 caracteres.');return;}db.admin.usuario=u;if(p)db.admin.senha=p;saveDB();alert('Credenciais atualizadas!');document.getElementById('adm-user').value='';document.getElementById('adm-pass').value='';}
-
-function renderAdmin(){var le=document.getElementById('lista-equip');le.innerHTML=!db.equipamentos.length?'<div class="empty"><i class="ti ti-tractor"></i>Nenhum equipamento</div>':db.equipamentos.map(function(e){return'<div class="equip-list-item"><div class="equip-avatar"><i class="ti '+iconFor(e.tipo)+'"></i></div><div class="equip-list-body"><div class="equip-list-name">'+e.cod+'</div><div class="equip-list-sub">'+e.tipo+(e.modelo?' • '+e.modelo:'')+''+(e.placa?' • '+e.placa:'')+'</div><div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+( e.tank?'<span class="badge badge-blue">'+e.tank+' L</span>':'')+( e.consumo?'<span class="badge badge-green">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+( e.frente?'<span class="badge badge-amber">'+e.frente+'</span>':'')+'</div></div><button class="equip-del" onclick="removerEquip(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var lu=document.getElementById('lista-users');lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador cadastrado</div>':db.operadores.map(function(u){return'<div class="user-item"><div class="user-avatar">'+u.nome.charAt(0).toUpperCase()+'</div><div class="user-body"><div class="user-name">'+u.nome+'</div><div class="user-role">'+(u.mat?u.mat+' • ':'')+'Operador de campo</div></div><button class="user-del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button></div>';}).join('');var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);document.getElementById('admin-stats').innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="metric"><div class="metric-label">Equipamentos</div><div class="metric-val">'+db.equipamentos.length+'</div></div><div class="metric"><div class="metric-label">Operadores</div><div class="metric-val">'+db.operadores.length+'</div></div><div class="metric"><div class="metric-label">Entradas (L)</div><div class="metric-val">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div><div class="metric"><div class="metric-label">Distribuído (L)</div><div class="metric-val">'+ta.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div></div>';document.getElementById('adm-user').placeholder=db.admin.usuario;
-  setTimeout(renderSyncStatus,50);
-  var furl=getFirebaseUrl();if(furl){var fi=document.getElementById('firebase-url');if(fi&&!fi.value)fi.value=furl;}}
-
-// FIREBASE SYNC
-var fbApp=null, fbRef=null, fbConnected=false;
-var FIREBASE_KEY='combustivel_firebase_url';
-
-function getFirebaseUrl(){try{return localStorage.getItem(FIREBASE_KEY)||'';}catch(e){return '';}}
-
-function salvarFirebase(){
-  var url=document.getElementById('firebase-url').value.trim();
+function ativarFirebase(){
+  var url=(document.getElementById('fb-url').value||'').trim();
   if(!url){alert('Informe a URL do Firebase.');return;}
-  if(!url.startsWith('https://')){alert('URL deve começar com https://');return;}
-  try{localStorage.setItem(FIREBASE_KEY,url);}catch(e){}
-  iniciarFirebase(url);
+  setFbUrl(url);
+  iniciarFirebase(url,true);
 }
 
-function iniciarFirebase(url){
+function iniciarFirebase(url, showAlert){
   try{
     if(fbApp){try{fbApp.delete();}catch(e){}}
-    var config={databaseURL:url};
-    fbApp=firebase.initializeApp(config,'comboio');
-    fbRef=fbApp.database().ref('comboio');
-    fbConnected=true;
-    // Listen for remote changes
-    fbRef.on('value',function(snap){
-      var remote=snap.val();
-      if(!remote)return;
-      // Merge remote into local — remote wins for equipamentos/operadores/entradas/comboios
-      // abastecimentos: merge (add remote ones not in local)
-      var changed=false;
-      if(remote.equipamentos&&JSON.stringify(remote.equipamentos)!==JSON.stringify(db.equipamentos)){db.equipamentos=remote.equipamentos;changed=true;}
-      if(remote.operadores&&JSON.stringify(remote.operadores)!==JSON.stringify(db.operadores)){db.operadores=remote.operadores;changed=true;}
-      if(remote.entradas&&JSON.stringify(remote.entradas)!==JSON.stringify(db.entradas)){db.entradas=remote.entradas;changed=true;}
-      if(remote.comboios&&JSON.stringify(remote.comboios)!==JSON.stringify(db.comboios)){db.comboios=remote.comboios;changed=true;}
-      if(remote.abastecimentos){
-        var localIds=db.abastecimentos.map(function(a){return a.id;});
-        var novos=remote.abastecimentos.filter(function(a){return localIds.indexOf(a.id)===-1;});
+    fbApp = firebase.initializeApp({databaseURL:url},'comboio_'+Date.now());
+    fbRef = fbApp.database().ref('comboio');
+    fbActive = true;
+    // Listen
+    fbRef.on('value', function(snap){
+      var r = snap.val();
+      if(!r) return;
+      var changed = false;
+      ['equipamentos','operadores','entradas','comboios'].forEach(function(k){
+        if(r[k] && JSON.stringify(r[k])!==JSON.stringify(db[k])){db[k]=r[k];changed=true;}
+      });
+      if(r.abastecimentos){
+        var ids = db.abastecimentos.map(function(a){return a.id;});
+        var novos = r.abastecimentos.filter(function(a){return ids.indexOf(a.id)===-1;});
         if(novos.length){db.abastecimentos=db.abastecimentos.concat(novos);changed=true;}
       }
-      if(changed){saveDB();renderSyncStatus();var active=document.querySelector('.screen.active');if(active){var id=active.id.replace('screen-','');navigate(id);}}
+      if(changed){
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        renderSyncStatus();
+        var activeEl=document.querySelector('.screen.active');
+        if(activeEl){var sid=activeEl.id.replace('screen-','');if(sid!=='field')navigate(sid);}
+      }
     });
     renderSyncStatus();
-    fbPush(); // push local data on connect
-    alert('Sincronização ativada! Dados serão atualizados automaticamente em todos os dispositivos.');
-  }catch(e){fbConnected=false;alert('Erro ao conectar com Firebase: '+e.message);}
+    fbPush();
+    if(showAlert) alert('Sincronização ativa! Dados atualizados em tempo real em todos os dispositivos.');
+  }catch(e){
+    fbActive=false;
+    if(showAlert) alert('Erro ao conectar: '+e.message+'\n\nVerifique a URL do Firebase.');
+  }
 }
 
 function fbPush(){
-  if(!fbRef||!fbConnected)return;
-  try{
-    fbRef.set({equipamentos:db.equipamentos,operadores:db.operadores,entradas:db.entradas,comboios:db.comboios,abastecimentos:db.abastecimentos});
-  }catch(e){}
+  if(!fbRef||!fbActive) return;
+  try{fbRef.set({equipamentos:db.equipamentos,operadores:db.operadores,entradas:db.entradas,comboios:db.comboios,abastecimentos:db.abastecimentos});}catch(e){}
 }
 
 function renderSyncStatus(){
-  var el=document.getElementById('sync-status');if(!el)return;
-  var url=getFirebaseUrl();
-  if(fbConnected&&url){
-    el.innerHTML='<div class="alert alert-ok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — dados atualizados em tempo real.</span></div>';
+  var el=document.getElementById('sync-status'); if(!el) return;
+  var url=getFbUrl();
+  if(fbActive&&url){
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — dados atualizados em tempo real.</span></div>';
   } else if(url){
-    el.innerHTML='<div class="alert alert-warn"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado. Verifique a URL e a internet.</span></div>';
-    document.getElementById('firebase-url').value=url;
+    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado.</span></div>';
+    var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
   } else {
-    el.innerHTML='<div class="alert alert-info"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
+    el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
   }
 }
 
-// Override saveDB to also push to Firebase
-var _origSaveDB=saveDB;
-saveDB=function(){_origSaveDB();fbPush();};
-
-// SYNC LINK
-function gerarLink(){
-  try{
-    var payload={equipamentos:db.equipamentos,operadores:db.operadores,_sync:true};
-    var json=JSON.stringify(payload);
-    var b64=btoa(encodeURIComponent(json));
-    var url=window.location.href.split('?')[0]+'?sync='+b64;
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(url).then(function(){alert('Link copiado!\n\nAgora envie por WhatsApp ou e-mail para o iPhone.\nAo abrir o link, os equipamentos serão importados automaticamente.');}).catch(function(){promptLink(url);});
-    } else {
-      promptLink(url);
-    }
-  }catch(e){alert('Erro ao gerar link: '+e.message);}
+// ─────────────────────────────────────────────
+//  SPLASH / LOGIN
+// ─────────────────────────────────────────────
+function entrarCampo(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('main-app').style.display='';
+  navigate('field');
 }
-function promptLink(url){
-  var ta=document.createElement('textarea');
-  ta.value=url;ta.style.position='fixed';ta.style.top='0';ta.style.left='0';ta.style.opacity='0';
-  document.body.appendChild(ta);ta.focus();ta.select();
-  try{document.execCommand('copy');}catch(e){}
-  document.body.removeChild(ta);
-  alert('Link gerado e copiado!\n\nEnvie por WhatsApp ou e-mail para o iPhone.\nAo abrir, os equipamentos são importados automaticamente.');
+function mostrarLoginAdmin(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-admin').style.display='flex';
+  setTimeout(function(){document.getElementById('login-user').focus();},100);
+}
+function voltarSplash(){
+  document.getElementById('login-admin').style.display='none';
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('login-err').style.display='none';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('splash').style.display='flex';
+}
+function doLogin(){
+  var u=document.getElementById('login-user').value.trim();
+  var p=document.getElementById('login-pass').value;
+  if(u===db.admin.usuario && p===db.admin.senha){
+    adminLogado=true;
+    document.getElementById('login-err').style.display='none';
+    document.getElementById('login-admin').style.display='none';
+    document.getElementById('main-app').style.display='';
+    navigate('resumo');
+  } else {
+    document.getElementById('login-err').style.display='block';
+  }
+}
+function logout(){
+  adminLogado=false;
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('splash').style.display='flex';
 }
 
-// IMPORT/EXPORT
-function importarBackup(input){var file=input.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(e){try{var data=JSON.parse(e.target.result);if(!data.equipamentos&&!data.entradas){alert('Arquivo inválido.');return;}if(!confirm('Importar backup?\nEquipamentos: '+(data.equipamentos||[]).length+'\nAbastecimentos: '+(data.abastecimentos||[]).length+'\n\nDados atuais serão substituídos.'))return;db=Object.assign(db,data);saveDB();renderAdmin();alert('Backup importado!');}catch(err){alert('Erro ao ler o arquivo.');}};reader.readAsText(file);input.value='';}
+// ─────────────────────────────────────────────
+//  NAVIGATION
+// ─────────────────────────────────────────────
+var ICONS_EQ={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Motoniveladora':'ti-tractor','Caminhão basculante':'ti-truck','Pá carregadeira':'ti-forklift','Rolo compactador':'ti-cylinder','Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery','Outro':'ti-settings'};
+function iconFor(t){return ICONS_EQ[t]||'ti-tractor';}
 
-function exportCSV(){var h='Data,Equipamento,Volume(L),Horímetro,\n';var b=db.abastecimentos.map(function(r){return fmtDate(r.data)+',"'+r.equip+'",'+r.vol+','+(r.hod||'');}).join('\n');var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+h+b],{type:'text/csv'}));a.download='abastecimentos_'+today()+'.csv';a.click();}
+function buildNav(active){
+  var items=[
+    {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
+    {id:'field',icon:'ti-gas-station',label:'Abastecer'},
+    {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
+    {id:'comboio',icon:'ti-flame',label:'Comboio'},
+    {id:'admin',icon:'ti-settings',label:'Config'}
+  ];
+  if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
+  return items.map(function(it){
+    return '<button class="nb'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';
+  }).join('');
+}
 
-function exportBackup(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));a.download='backup_'+today()+'.json';a.click();}
+function navigate(id){
+  history.pushState({nav:id},'','#'+id);
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('screen-'+id).classList.add('active');
+  document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(id);});
+  if(id==='resumo') renderResumo();
+  if(id==='field')  renderField();
+  if(id==='entrada'){document.getElementById('e-data').value=today();renderHistEnt();}
+  if(id==='comboio'){document.getElementById('c-data').value=today();renderHistCom();}
+  if(id==='admin')  renderAdmin();
+  if(id==='fotos')  renderFotos();
+}
 
-function limparDados(){if(!confirm('Apagar TODOS os dados?'))return;if(!confirm('Confirma? Não tem volta.'))return;db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};saveDB();renderAdmin();alert('Dados apagados.');}
-
-// AUTO-SYNC FROM LINK
-try{var _s=window.location.search;if(_s&&_s.indexOf('sync=')>-1){var _p=new URLSearchParams(_s);var _b=_p.get('sync');if(_b){window.history.replaceState({},'',window.location.href.split('?')[0]);var _d=JSON.parse(decodeURIComponent(atob(_b)));if(_d&&_d._sync){var _neq=(_d.equipamentos||[]).length;var _nop=(_d.operadores||[]).length;if(_neq>0||_nop>0){setTimeout(function(){if(confirm('Sincronizacao recebida! Equipamentos: '+_neq+'. Importar?')){db.equipamentos=_d.equipamentos||[];db.operadores=_d.operadores||[];saveDB();alert('Sincronizado! '+_neq+' equipamento(s).');}},500);}}}}}catch(_ex){}
-
+// Back button
 window.addEventListener('popstate',function(e){
-  if(e.state&&e.state.type==='field'){
+  if(e.state&&e.state.nav){
+    document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+    document.getElementById('screen-'+e.state.nav).classList.add('active');
+    document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(e.state.nav);});
+    if(e.state.nav==='resumo') renderResumo();
+    if(e.state.nav==='field')  renderField();
+    if(e.state.nav==='admin')  renderAdmin();
+    if(e.state.nav==='fotos')  renderFotos();
+  } else if(e.state&&e.state.step!==undefined){
     fs.step=e.state.step;
     renderField();
   }
 });
 
-// INIT
+// ─────────────────────────────────────────────
+//  RESUMO
+// ─────────────────────────────────────────────
+function renderResumo(){
+  var sr=getSaldoRes(),sc=getSaldoCom();
+  var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
+  var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
+  var dif=te-ta-Math.max(0,sr)-Math.max(0,sc);
+  var d=new Date();
+  document.getElementById('res-date').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+  var pill=document.getElementById('res-pill');
+  pill.textContent=navigator.onLine?'online':'offline';
+  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
+  document.getElementById('res-metrics').innerHTML=
+    '<div class="met'+(sr<500?' warn':'')+'"><div class="ml">Reservatório</div><div class="mv">'+Math.max(0,sr).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros disponíveis</div></div>'+
+    '<div class="met'+(sc<100?' danger':sc<300?' warn':' ok')+'"><div class="ml">Comboio</div><div class="mv">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros no comboio</div></div>'+
+    '<div class="met"><div class="ml">Total recebido</div><div class="mv">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros histórico</div></div>'+
+    '<div class="met'+(Math.abs(dif)>200?' warn':'')+'"><div class="ml">Diferença</div><div class="mv">'+dif.toFixed(0)+'</div><div class="ms">'+(Math.abs(dif)>200?'verificar':'dentro do esperado')+'</div></div>';
+  var al=document.getElementById('res-alert');
+  if(sc<100) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Comboio com menos de 100 L.</span></div>';
+  else if(sr<500) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Reservatório baixo ('+sr.toFixed(0)+' L).</span></div>';
+  else if(Math.abs(dif)>300) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Diferença de '+dif.toFixed(0)+' L detectada.</span></div>';
+  else al.innerHTML='';
+  var todos=[];
+  db.entradas.slice(-4).forEach(function(e){todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
+  db.comboios.slice(-4).forEach(function(c){todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
+  db.abastecimentos.slice(-4).forEach(function(a){todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L'});});
+  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('res-hist');
+  if(!todos.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento ainda</div>';return;}
+  el.innerHTML=todos.slice(0,8).map(function(r){
+    var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
+    return'<div class="hi"><div class="hic '+r.tipo+'"><i class="ti '+ic+'"></i></div><div class="hb"><div class="hn">'+r.nome+'</div><div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div><div class="hv">'+r.vol+'</div></div>';
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  FIELD WIZARD
+//  KEY PRINCIPLE: oninput NEVER calls renderField()
+//  Only dedicated update functions touch the DOM
+// ─────────────────────────────────────────────
+function fsGo(n){
+  history.pushState({step:n},'','#field-'+n);
+  fs.step=n;
+  renderField();
+}
+
+function renderField(){
+  var d=new Date();
+  document.getElementById('fld-sub').textContent=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  var pill=document.getElementById('fld-pill');
+  pill.textContent=navigator.onLine?'online':'offline';
+  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
+  document.getElementById('fld-steps').style.display=fs.step===5?'none':'';
+  renderSteps();
+  var body=document.getElementById('fld-body');
+  if(fs.step===1) body.innerHTML=renderFS1();
+  else if(fs.step===2) body.innerHTML=renderFS2();
+  else if(fs.step===3) body.innerHTML=renderFS3();
+  else if(fs.step===4) body.innerHTML=renderFS4();
+  else body.innerHTML=renderFS5();
+  var nw=document.getElementById('fld-nav');
+  nw.innerHTML=adminLogado?'<nav class="bnav">'+buildNav('field')+'</nav>':'';
+}
+
+function renderSteps(){
+  var labels=['Equipamento','Horímetro','Litros','Confirmar'];
+  document.getElementById('fld-steps').innerHTML=labels.map(function(l,i){
+    var n=i+1, cls=n<fs.step?'done':n===fs.step?'active':'', lbl=n<fs.step?'✓':n;
+    return'<div class="step"><div class="sd '+cls+'">'+lbl+'</div><div class="sl">'+l+'</div></div>'+(n<4?'<div class="sline'+(n<fs.step?' done':'')+'"></div>':'');
+  }).join('');
+}
+
+function renderFS1(){
+  if(!db.equipamentos.length) return '<div class="alert ai"><i class="ti ti-info-circle"></i><span>Nenhum equipamento cadastrado. Solicite ao administrador.</span></div>';
+  var cards=db.equipamentos.map(function(e){
+    var sel=fs.equip&&fs.equip.cod===e.cod?' sel':'';
+    return'<div class="eq-card'+sel+'" onclick="fsSelEq(\''+e.cod.replace(/'/g,"\\'")+'\')" ><i class="ti '+iconFor(e.tipo)+'"></i><div class="en">'+e.cod+'</div><div class="et">'+e.tipo+'</div></div>';
+  }).join('');
+  return'<div class="seg-label">Selecione o equipamento</div><div class="eq-grid">'+cards+'</div>'+
+    '<button class="btn bp" '+(fs.equip?'':'disabled')+' onclick="fsGo(2)"><i class="ti ti-arrow-right"></i> Próximo</button>';
+}
+
+function renderFS2(){
+  var e=fs.equip, isKm=(e.unidade==='km');
+  var unit=isKm?'km':'horas';
+  var placeholder=isKm?'Ex: 125400':'Ex: 4820';
+
+  // Photo area horímetro
+  var hodPhotoHtml='';
+  if(fs.analisando){
+    hodPhotoHtml='<div class="analyzing"><div class="spin"></div> Lendo '+unit+'...</div>';
+  } else if(fs.fotoHod&&fs.hod){
+    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Toque para tirar outra</div></div>'+
+      '<div class="rbox"><div style="flex:1"><div style="font-size:11px;color:var(--gd);font-weight:600;margin-bottom:2px">Leitura detectada</div><span class="rnum">'+fs.hod+'</span><span style="font-size:12px;color:var(--gd)"> '+unit+'</span></div><span class="redit" onclick="fsEditHod()">editar</span></div>';
+  } else if(fs.fotoHod&&!fs.hod){
+    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Não lida — digite abaixo</div></div>';
+  } else {
+    hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
+  }
+
+  // Photo area bomba
+  var bombaHtml='';
+  if(fs.fotoHod||fs.hod){
+    if(fs.fotoBomba){
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
+    } else {
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
+    }
+  }
+
+  return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
+    '<div style="margin-bottom:14px">'+
+    '<div class="seg-label">Horímetro</div>'+
+    hodPhotoHtml+
+    '</div>'+
+    // CRITICAL: input has NO oninput that calls renderField
+    // uses onHodChange which only updates button state
+    '<div class="field">'+
+    '<label>Digitar '+unit+' manualmente</label>'+
+    '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
+    ' oninput="onHodChange(this.value)"'+
+    ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
+    '</div>'+
+    bombaHtml+
+    '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
+    '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)">'+
+    '<button id="btn-hod" class="btn bp" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>'+
+    '<button class="btn bs" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS3(){
+  var sc=getSaldoCom();
+  var l=Number(fs.litros)||0;
+  var cap=fs.equip&&fs.equip.tank?Number(fs.equip.tank):9999;
+  var warns='';
+  if(l>0&&l>sc&&sc>0) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo do comboio ('+sc.toFixed(0)+' L).</span></div>';
+  if(l>0&&l>cap*1.05&&cap<9999) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que a capacidade ('+cap+' L).</span></div>';
+
+  // Photo area bomba (also available on this step)
+  var bombaStep='';
+  if(!fs.fotoBomba){
+    bombaStep='<div style="margin-bottom:14px"><div class="seg-label">Foto da bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+      '<div class="pha" onclick="abrirCamBomba()" style="padding:16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div>'+
+      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
+  } else {
+    bombaStep='<div style="margin-bottom:14px"><div class="pha has" onclick="abrirCamBomba()" style="padding:14px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto da bomba capturada</div></div>'+
+      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
+  }
+
+  return '<div class="sbar"><span class="sbarlabel"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="sbarval">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div>'+
+    bombaStep+
+    '<div class="seg-label">Quantidade abastecida</div>'+
+    // CRITICAL: input uses onLitrosChange — NOT renderField
+    '<div class="lrow">'+
+    '<button class="ladj" onclick="fsAdj(-50)">−</button>'+
+    '<input class="linp" type="number" id="lit-inp" inputmode="numeric"'+
+    ' value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1"'+
+    ' oninput="onLitrosChange(this.value)">'+
+    '<button class="ladj" onclick="fsAdj(50)">+</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--t3);text-align:center;margin-bottom:14px">Use − / + para ajustar de 50 em 50 L</div>'+
+    warns+
+    '<button id="btn-lit" class="btn bp" '+(fs.litros&&Number(fs.litros)>0?'':'disabled')+' onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button>'+
+    '<button class="btn bs" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS4(){
+  var e=fs.equip, isKm=(e.unidade==='km');
+  var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
+    '<div class="crow"><span class="cl">Tipo</span><span class="cv">'+e.tipo+'</span></div>'+
+    (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
+    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
+    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div>'+
+    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
+    '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
+  return '<div class="seg-label">Confirme os dados</div>'+
+    '<div class="card" style="margin-bottom:14px">'+rows+'</div>'+
+    '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>'+
+    '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS5(){
+  return '<div class="ok-screen"><div class="ok-icon"><i class="ti ti-circle-check"></i></div>'+
+    '<div class="ok-title">Registrado!</div>'+
+    '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br>'+
+    '<br><span class="tag-off"><i class="ti ti-device-floppy" style="font-size:12px"></i> Salvo</span></div>'+
+    '<button class="btn bp" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button></div>';
+}
+
+// ─── Input handlers — ONLY update button state, never rebuild DOM ───
+function onHodChange(val){
+  fs.hod = val.trim() || null;
+  var btn=document.getElementById('btn-hod');
+  if(btn) btn.disabled=!fs.hod;
+}
+
+function onLitrosChange(val){
+  fs.litros = val || null;
+  var btn=document.getElementById('btn-lit');
+  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+}
+
+// ±50 buttons — update input field directly, no DOM rebuild
+function fsAdj(d){
+  var cur=Number(fs.litros)||0;
+  fs.litros=String(Math.max(0,cur+d)||'');
+  var inp=document.getElementById('lit-inp');
+  if(inp) inp.value=fs.litros;
+  var btn=document.getElementById('btn-lit');
+  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+}
+
+function fsSelEq(cod){
+  fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
+  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
+  fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
+  renderField();
+}
+function fsEditHod(){
+  fs.hod=null;fs.fotoHod=false;fs.analisando=false;
+  renderField();
+  setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
+}
+function fsNovo(){
+  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
+  renderField();
+}
+
+// ─── Camera ───
+function abrirCamHod(){var i=document.getElementById('cam-hod');if(i)i.click();}
+function abrirCamBomba(){var i=document.getElementById('cam-bomba');if(i)i.click();}
+
+function onFotoHod(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    fs.fotoHod=true; fs.analisando=true; fs.hod=null;
+    fs.imgHod=e.target.result; fs.imgId=uid();
+    renderField();
+    runOCR(e.target.result);
+  };
+  r.readAsDataURL(file);
+  input.value='';
+}
+
+function onFotoBomba(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    fs.fotoBomba=true; fs.imgBomba=e.target.result;
+    renderField();
+  };
+  r.readAsDataURL(file);
+  input.value='';
+}
+
+function runOCR(dataUrl){
+  try{
+    Tesseract.recognize(dataUrl,'eng',{logger:function(){}})
+    .then(function(res){
+      var num=(res.data.text||'').replace(/[^0-9.]/g,'').replace(/\./g,'').trim();
+      fs.analisando=false;
+      fs.hod=(num&&num.length>=1)?num:null;
+      renderField();
+      if(!fs.hod) setTimeout(function(){alert('Foto não legível.\nDigite o número manualmente no campo abaixo.');},200);
+    })
+    .catch(function(){
+      fs.analisando=false; fs.hod=null; renderField();
+      setTimeout(function(){alert('Erro OCR. Digite manualmente.');},200);
+    });
+  }catch(e){
+    fs.analisando=false; fs.hod=null; renderField();
+  }
+}
+
+function fsConfirmar(){
+  var id=uid();
+  db.abastecimentos.push({id:id,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador:'',fotoId:fs.imgId||null});
+  if(fs.imgHod&&fs.imgId){
+    try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:fs.equip.cod,hod:Number(fs.hod),vol:Number(fs.litros),imgHod:fs.imgHod,imgBomba:fs.imgBomba||null,conferido:false}));}catch(e){}
+  }
+  saveDB();
+  fs.step=5; renderField();
+}
+
+// ─────────────────────────────────────────────
+//  ENTRADA
+// ─────────────────────────────────────────────
+function salvarEntrada(){
+  var vol=parseFloat(document.getElementById('e-vol').value);
+  if(!vol||vol<=0){alert('Informe o volume.');return;}
+  db.entradas.push({id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:document.getElementById('e-nf').value,forn:document.getElementById('e-forn').value});
+  saveDB();
+  ['e-vol','e-nf','e-forn'].forEach(function(id){document.getElementById(id).value='';});
+  renderHistEnt();
+  alert('Entrada registrada!');
+}
+function renderHistEnt(){
+  var rows=db.entradas.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('hist-ent');
+  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhuma entrada ainda</div>';return;}
+  el.innerHTML=rows.map(function(r){
+    return'<div class="hi"><div class="hic entry"><i class="ti ti-truck-delivery"></i></div><div class="hb"><div class="hn">'+(r.forn||'Distribuidora')+'</div><div class="hs">'+fmtDate(r.data)+' • NF '+(r.nf||'—')+'</div></div><div class="hv">+'+Number(r.vol).toFixed(0)+' L</div></div>';
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  COMBOIO
+// ─────────────────────────────────────────────
+function salvarComboio(){
+  var vol=parseFloat(document.getElementById('c-vol').value);
+  if(!vol||vol<=0){alert('Informe o volume.');return;}
+  var sr=getSaldoRes();
+  if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar?'))return;}
+  db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});
+  saveDB();
+  ['c-vol','c-op','c-hod'].forEach(function(id){document.getElementById(id).value='';});
+  renderHistCom();
+  alert('Carregamento registrado!');
+}
+function renderHistCom(){
+  var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('hist-com');
+  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
+  el.innerHTML=rows.map(function(r){
+    return'<div class="hi"><div class="hic transfer"><i class="ti ti-flame"></i></div><div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div><div class="hs">'+fmtDate(r.data)+(r.hod?' • '+r.hod:'')+'</div></div><div class="hv">'+Number(r.vol).toFixed(0)+' L</div></div>';
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  FOTOS
+// ─────────────────────────────────────────────
+function getFotos(){
+  var fotos=[];
+  for(var i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(k&&k.indexOf('foto_')===0){try{var f=JSON.parse(localStorage.getItem(k));if(f)fotos.push(f);}catch(e){}}
+  }
+  fotos.sort(function(a,b){return(b.data||'').localeCompare(a.data||'');});
+  return fotos;
+}
+function renderFotos(){
+  var fotos=getFotos();
+  var el=document.getElementById('fotos-body');
+  if(!fotos.length){el.innerHTML='<div class="empty"><i class="ti ti-camera-off"></i>Nenhuma foto registrada ainda.</div>';return;}
+  var pend=fotos.filter(function(f){return!f.conferido;}).length;
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+    '<div style="font-size:13px;font-weight:600">'+fotos.length+' foto'+(fotos.length>1?'s':'')+' registrada'+(fotos.length>1?'s':'')+'</div>'+
+    '<span class="fbadge '+(pend>0?'fbpend':'fbok')+'">'+(pend>0?pend+' pendente'+(pend>1?'s':''):'Todas conferidas')+'</span></div>'+
+  fotos.map(function(f){
+    var eq=db.equipamentos.filter(function(e){return e.cod===f.equip;})[0];
+    var unid=eq&&eq.unidade==='km'?'km':'h';
+    var st=f.conferido?'<span class="fbadge fbok">Conferida</span>':'<span class="fbadge fbpend">Pendente</span>';
+    var imgs='';
+    if(f.imgHod) imgs+='<img src="'+f.imgHod+'" loading="lazy" style="width:50%;display:inline-block;max-height:160px;object-fit:cover">';
+    if(f.imgBomba) imgs+='<img src="'+f.imgBomba+'" loading="lazy" style="width:50%;display:inline-block;max-height:160px;object-fit:cover">';
+    if(!f.imgHod&&f.img) imgs='<img src="'+f.img+'" loading="lazy">'; // backwards compat
+    return'<div class="foto-card">'+imgs+'<div class="fcb"><div class="fct">'+f.equip+' — '+f.hod+' '+unid+' • '+Number(f.vol).toFixed(0)+' L</div>'+
+      '<div class="fcs">'+fmtDate(f.data)+' '+st+'</div>'+
+      '<div class="fca">'+(!f.conferido?'<button class="btn bp bsm" onclick="conferirFoto(\''+f.id+'\')"><i class="ti ti-check"></i> Conferir</button>':'')+
+      '<button class="btn bd bsm" onclick="apagarFoto(\''+f.id+'\')"><i class="ti ti-trash"></i> Apagar</button></div></div></div>';
+  }).join('');
+}
+function conferirFoto(id){try{var raw=localStorage.getItem('foto_'+id);if(!raw)return;var f=JSON.parse(raw);f.conferido=true;localStorage.setItem('foto_'+id,JSON.stringify(f));renderFotos();}catch(e){}}
+function apagarFoto(id){if(!confirm('Apagar foto? Abastecimento é mantido.'))return;localStorage.removeItem('foto_'+id);renderFotos();}
+
+// ─────────────────────────────────────────────
+//  ADMIN
+// ─────────────────────────────────────────────
+function togFormEq(){var f=document.getElementById('form-eq');f.style.display=f.style.display==='none'?'block':'none';}
+function togFormUser(){var f=document.getElementById('form-user');f.style.display=f.style.display==='none'?'block':'none';}
+
+function salvarEq(){
+  var cod=document.getElementById('eq-cod').value.trim();
+  if(!cod){alert('Informe o código.');return;}
+  if(db.equipamentos.filter(function(e){return e.cod===cod;}).length){alert('Código já existe.');return;}
+  db.equipamentos.push({cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:document.getElementById('eq-mod').value,placa:document.getElementById('eq-placa').value,tank:parseFloat(document.getElementById('eq-tank').value)||0,unidade:document.getElementById('eq-unid').value,consumo:parseFloat(document.getElementById('eq-cons').value)||0,frente:document.getElementById('eq-frente').value});
+  saveDB();
+  ['eq-cod','eq-mod','eq-placa','eq-tank','eq-cons','eq-frente'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('form-eq').style.display='none';
+  renderAdmin();
+  alert('Equipamento cadastrado!');
+}
+function removerEq(cod){
+  if(!confirm('Remover "'+cod+'"?'))return;
+  db.equipamentos=db.equipamentos.filter(function(e){return e.cod!==cod;});
+  saveDB(); renderAdmin();
+}
+function salvarUser(){
+  var nome=document.getElementById('u-nome').value.trim();
+  if(!nome){alert('Informe o nome.');return;}
+  db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});
+  saveDB();
+  ['u-nome','u-mat'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('form-user').style.display='none';
+  renderAdmin();
+  alert('Operador cadastrado!');
+}
+function removerUser(id){
+  if(!confirm('Remover?'))return;
+  db.operadores=db.operadores.filter(function(u){return u.id!==id;});
+  saveDB(); renderAdmin();
+}
+function alterarCred(){
+  var u=document.getElementById('adm-user').value.trim();
+  var p=document.getElementById('adm-pass').value;
+  if(!u){alert('Informe o usuário.');return;}
+  if(p&&p.length<4){alert('Senha mínima de 4 caracteres.');return;}
+  db.admin.usuario=u; if(p) db.admin.senha=p;
+  saveDB(); alert('Credenciais atualizadas!');
+  document.getElementById('adm-user').value=''; document.getElementById('adm-pass').value='';
+}
+function renderAdmin(){
+  var le=document.getElementById('lista-eq');
+  le.innerHTML=!db.equipamentos.length?'<div class="empty"><i class="ti ti-tractor"></i>Nenhum equipamento</div>':
+    db.equipamentos.map(function(e){
+      return'<div class="eli"><div class="eav"><i class="ti '+iconFor(e.tipo)+'"></i></div>'+
+        '<div class="elb"><div class="eln">'+e.cod+'</div><div class="els">'+e.tipo+(e.modelo?' • '+e.modelo:'')+(e.placa?' • '+e.placa:'')+'</div>'+
+        '<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">'+
+        (e.tank?'<span class="badge bb">'+e.tank+' L</span>':'')+
+        (e.consumo?'<span class="badge bg">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+
+        (e.frente?'<span class="badge ba">'+e.frente+'</span>':'')+
+        '</div></div><button class="del" onclick="removerEq(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';
+    }).join('');
+  var lu=document.getElementById('lista-users');
+  lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador</div>':
+    db.operadores.map(function(u){
+      return'<div class="uitem"><div class="uav">'+u.nome.charAt(0).toUpperCase()+'</div>'+
+        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+'Operador</div></div>'+
+        '<button class="del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button></div>';
+    }).join('');
+  var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
+  var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
+  document.getElementById('adm-stats').innerHTML=
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+    '<div class="met"><div class="ml">Equipamentos</div><div class="mv">'+db.equipamentos.length+'</div></div>'+
+    '<div class="met"><div class="ml">Operadores</div><div class="mv">'+db.operadores.length+'</div></div>'+
+    '<div class="met"><div class="ml">Entradas (L)</div><div class="mv">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div>'+
+    '<div class="met"><div class="ml">Distribuído (L)</div><div class="mv">'+ta.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div></div></div>';
+  document.getElementById('adm-user').placeholder=db.admin.usuario;
+  var fbUrl=getFbUrl();
+  if(fbUrl){var fi=document.getElementById('fb-url');if(fi&&!fi.value)fi.value=fbUrl;}
+  setTimeout(renderSyncStatus,50);
+}
+
+// ─────────────────────────────────────────────
+//  SYNC LINK (offline fallback)
+// ─────────────────────────────────────────────
+function gerarLink(){
+  var payload={equipamentos:db.equipamentos,operadores:db.operadores,_sync:true};
+  var b64=btoa(encodeURIComponent(JSON.stringify(payload)));
+  var url=window.location.href.split('?')[0].split('#')[0]+'?sync='+b64;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){
+      alert('Link copiado!\n\nEnvie por WhatsApp/e-mail. Ao abrir no iPhone, os dados serão importados.');
+    }).catch(function(){_promptLink(url);});
+  } else {
+    _promptLink(url);
+  }
+}
+function _promptLink(url){
+  var ta=document.createElement('textarea');
+  ta.value=url; ta.style.cssText='position:fixed;top:0;left:0;opacity:0;width:1px;height:1px';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try{document.execCommand('copy');}catch(e){}
+  document.body.removeChild(ta);
+  alert('Link gerado!\n\nCopie o endereço da barra do navegador e envie para o iPhone.');
+}
+
+// ─────────────────────────────────────────────
+//  IMPORT / EXPORT
+// ─────────────────────────────────────────────
+function importBackup(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    try{
+      var d=JSON.parse(e.target.result);
+      if(!d.equipamentos&&!d.entradas){alert('Arquivo inválido.');return;}
+      if(!confirm('Importar?\nEquipamentos: '+(d.equipamentos||[]).length+'\nAbastecimentos: '+(d.abastecimentos||[]).length+'\n\nSubstitui dados atuais.'))return;
+      ['equipamentos','operadores','entradas','comboios','abastecimentos'].forEach(function(k){if(d[k])db[k]=d[k];});
+      saveDB(); renderAdmin(); alert('Backup importado!');
+    }catch(err){alert('Erro ao ler arquivo.');}
+  };
+  r.readAsText(file);
+  input.value='';
+}
+function exportCSV(){
+  var h='Data,Equipamento,Volume(L),Horímetro\n';
+  var b=db.abastecimentos.map(function(r){return fmtDate(r.data)+',"'+r.equip+'",'+r.vol+','+(r.hod||'');}).join('\n');
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+h+b],{type:'text/csv'}));
+  a.download='abastecimentos_'+today()+'.csv'; a.click();
+}
+function exportBackup(){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));
+  a.download='backup_'+today()+'.json'; a.click();
+}
+function limparDados(){
+  if(!confirm('Apagar TODOS os dados?'))return;
+  if(!confirm('Confirma? Não tem volta.'))return;
+  db={equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:db.admin.usuario,senha:db.admin.senha}};
+  saveDB(); renderAdmin(); alert('Dados apagados.');
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
 loadDB();
+
+// Auto-import from sync link
+(function(){
+  try{
+    var search=window.location.search;
+    if(search.indexOf('sync=')>-1){
+      var p=new URLSearchParams(search);
+      var b=p.get('sync');
+      if(b){
+        window.history.replaceState({},'',window.location.href.split('?')[0]);
+        var d=JSON.parse(decodeURIComponent(atob(b)));
+        if(d&&d._sync){
+          var neq=(d.equipamentos||[]).length;
+          setTimeout(function(){
+            if(confirm('Sincronização recebida!\nEquipamentos: '+neq+'\n\nImportar?')){
+              db.equipamentos=d.equipamentos||[];
+              db.operadores=d.operadores||[];
+              saveDB();
+              alert('Importado! '+neq+' equipamento(s).');
+            }
+          },600);
+        }
+      }
+    }
+  }catch(ex){}
+})();
+
 // Auto-start Firebase if URL saved
-(function(){var url=getFirebaseUrl();if(url){try{iniciarFirebase(url);}catch(e){}}})();
-document.querySelectorAll('.bottom-nav').forEach(function(n){n.innerHTML=buildNav('resumo');});
+(function(){
+  try{
+    var url=getFbUrl();
+    if(url) iniciarFirebase(url,false);
+  }catch(e){}
+})();
+
+// Init nav
+document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav('resumo');});
 document.getElementById('e-data').value=today();
 document.getElementById('c-data').value=today();
-if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+
+// Service Worker
+if('serviceWorker' in navigator){
+  window.addEventListener('load',function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
 </script>
 </body>
 </html>
