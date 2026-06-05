@@ -295,29 +295,10 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Sincronização em tempo real</div>
         <div id="sync-status" style="margin-bottom:12px"></div>
-
-        <div style="background:var(--bll);border-radius:var(--rs);padding:12px 14px;font-size:11px;color:#0c447c;line-height:1.8;margin-bottom:14px">
-          <strong>Como configurar o Firebase (gratuito):</strong><br>
-          ① Acesse <strong>console.firebase.google.com</strong> e faça login com sua conta Google.<br>
-          ② Clique em <strong>"Criar projeto"</strong> → nome sugerido: <strong>comboio</strong> → continuar.<br>
-          ③ No menu esquerdo: <strong>Realtime Database</strong> → "Criar banco de dados".<br>
-          ④ Selecione <strong>"Iniciar no modo de teste"</strong> → próximo → ativar.<br>
-          ⑤ Copie a URL exibida — ela terá o formato:<br>
-          <span style="font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:2px 6px;border-radius:4px;font-size:10px">https://comboio-default-rtdb.firebaseio.com</span><br>
-          ⑥ Cole no campo abaixo e toque em <strong>"Ativar"</strong>.<br>
-          ⑦ Repita os passos ⑥ no iPhone para conectar os dois dispositivos.
-        </div>
-
-        <div style="background:var(--gl);border-radius:var(--rs);padding:10px 12px;font-size:11px;color:var(--gd);margin-bottom:14px;line-height:1.7">
-          <strong>Seu site:</strong> temachado.github.io/comboio<br>
-          <strong>URL Firebase esperada:</strong><br>
-          <span style="font-family:'IBM Plex Mono',monospace;background:rgba(0,0,0,.07);padding:2px 6px;border-radius:4px;font-size:10px">https://comboio-default-rtdb.firebaseio.com</span><br>
-          <span style="color:var(--t2)">(O nome pode variar — copie exatamente do console Firebase)</span>
-        </div>
-
         <div class="field">
           <label>URL do Firebase Realtime Database</label>
-          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://comboio-default-rtdb.firebaseio.com">
+          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
+          <div style="font-size:11px;color:var(--t2);margin-top:5px">Obtenha a URL em: <strong>console.firebase.google.com</strong> → seu projeto → Realtime Database</div>
         </div>
         <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
         <button class="btn bs" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link de cadastro (sem internet)</button>
@@ -373,6 +354,14 @@ input,select,textarea,button{font-family:inherit}
     <nav class="bnav" id="nav-admin"></nav>
   </div>
 
+
+  <!-- NOTIFICAÇÕES -->
+  <div id="screen-notif" class="screen">
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Notificações</h1></div><span id="notif-badge-top" class="pill p-adm" style="display:none"></span></div></div>
+    <div class="sb" id="notif-body"></div>
+    <nav class="bnav" id="nav-notif"></nav>
+  </div>
+
 </div><!-- /main-app -->
 
 <script>
@@ -381,7 +370,7 @@ input,select,textarea,button{font-family:inherit}
 // ─────────────────────────────────────────────
 var DB_KEY = 'fuelterra_v6';
 var FB_KEY = 'fuelterra_fb_url';
-var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],admin:{usuario:'admin',senha:'1234'}};
+var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
 var fbRef = null, fbApp = null, fbActive = false;
 
@@ -397,7 +386,7 @@ var fs = {step:1, equip:null, hod:null, litros:null,
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
 }
 function saveDB(){
@@ -434,7 +423,7 @@ function iniciarFirebase(url, showAlert){
       var r = snap.val();
       if(!r) return;
       var changed = false;
-      ['equipamentos','operadores','entradas','comboios'].forEach(function(k){
+      ['equipamentos','operadores','entradas','comboios','notificacoes'].forEach(function(k){
         if(r[k] && JSON.stringify(r[k])!==JSON.stringify(db[k])){db[k]=r[k];changed=true;}
       });
       if(r.abastecimentos){
@@ -531,6 +520,7 @@ function buildNav(active){
     {id:'admin',icon:'ti-settings',label:'Config'}
   ];
   if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
+  if(adminLogado) items.push({id:'notif',icon:'ti-bell',label:'Avisos'});
   return items.map(function(it){
     return '<button class="nb'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';
   }).join('');
@@ -547,6 +537,8 @@ function navigate(id){
   if(id==='comboio'){document.getElementById('c-data').value=today();renderHistCom();}
   if(id==='admin')  renderAdmin();
   if(id==='fotos')  renderFotos();
+  if(id==='notif')  renderNotif();
+  if(adminLogado) setTimeout(updateNotifBadge,100);
 }
 
 // Back button
@@ -559,6 +551,7 @@ window.addEventListener('popstate',function(e){
     if(e.state.nav==='field')  renderField();
     if(e.state.nav==='admin')  renderAdmin();
     if(e.state.nav==='fotos')  renderFotos();
+    if(e.state.nav==='notif')  renderNotif();
   } else if(e.state&&e.state.step!==undefined){
     fs.step=e.state.step;
     renderField();
@@ -845,11 +838,52 @@ function runOCR(dataUrl){
 
 function fsConfirmar(){
   var id=uid();
-  db.abastecimentos.push({id:id,data:today(),equip:fs.equip.cod,vol:Number(fs.litros),hod:Number(fs.hod),operador:'',fotoId:fs.imgId||null});
+  var hodAtual=Number(fs.hod);
+  var equip=fs.equip;
+
+  // Check hod against last recorded value for this equipment
+  var historico=db.abastecimentos.filter(function(a){return a.equip===equip.cod;});
+  var ultimoHod=null;
+  if(historico.length){
+    var ultimo=historico.reduce(function(prev,cur){return Number(cur.hod)>Number(prev.hod)?cur:prev;});
+    ultimoHod=Number(ultimo.hod);
+  }
+
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
+  db.abastecimentos.push(abast);
+
   if(fs.imgHod&&fs.imgId){
-    try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:fs.equip.cod,hod:Number(fs.hod),vol:Number(fs.litros),imgHod:fs.imgHod,imgBomba:fs.imgBomba||null,conferido:false}));}catch(e){}
+    try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),imgHod:fs.imgHod,imgBomba:fs.imgBomba||null,conferido:false}));}catch(e){}
   }
   saveDB();
+
+  // Notificação: horímetro inferior ao último registro
+  if(ultimoHod!==null && hodAtual<ultimoHod){
+    abast.aprovado=false;
+    criarNotif(
+      'hod_inferior',
+      'Horímetro inferior ao registro anterior',
+      equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+' '+(equip.unidade==='km'?'km':'h')+', mas o último registro era '+ultimoHod.toLocaleString('pt-BR')+'. Verifique e aprove ou rejeite este lançamento.',
+      {abastId:id, equip:equip.cod, hodLancado:hodAtual, hodAnterior:ultimoHod}
+    );
+    saveDB();
+  }
+
+  // Notificação: reservatório abaixo de 500 L
+  var saldoRes=getSaldoRes();
+  if(saldoRes<500&&saldoRes>=0){
+    // Only notify if not already notified today for this
+    var jaNotif=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;
+    if(!jaNotif){
+      criarNotif(
+        'reservatorio_baixo',
+        'Reservatório abaixo de 500 litros',
+        'Saldo atual do reservatório principal: '+Math.max(0,saldoRes).toFixed(0)+' L. Solicite reabastecimento.',
+        {saldo:saldoRes}
+      );
+    }
+  }
+
   fs.step=5; renderField();
 }
 
@@ -863,6 +897,9 @@ function salvarEntrada(){
   saveDB();
   ['e-vol','e-nf','e-forn'].forEach(function(id){document.getElementById(id).value='';});
   renderHistEnt();
+  // Check reservatório after entry
+  var _sr=getSaldoRes();
+  if(_sr<500&&_sr>=0){var _jn=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr});}
   alert('Entrada registrada!');
 }
 function renderHistEnt(){
@@ -886,6 +923,8 @@ function salvarComboio(){
   saveDB();
   ['c-vol','c-op','c-hod'].forEach(function(id){document.getElementById(id).value='';});
   renderHistCom();
+  var _sr2=getSaldoRes();
+  if(_sr2<500&&_sr2>=0){var _jn2=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn2)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr2).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr2});}
   alert('Carregamento registrado!');
 }
 function renderHistCom(){
@@ -895,6 +934,136 @@ function renderHistCom(){
   el.innerHTML=rows.map(function(r){
     return'<div class="hi"><div class="hic transfer"><i class="ti ti-flame"></i></div><div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div><div class="hs">'+fmtDate(r.data)+(r.hod?' • '+r.hod:'')+'</div></div><div class="hv">'+Number(r.vol).toFixed(0)+' L</div></div>';
   }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  NOTIFICAÇÕES
+// ─────────────────────────────────────────────
+var NOTIF_KEY = 'fuelterra_notif';
+
+function criarNotif(tipo, titulo, descricao, dados){
+  var n = {id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{}, data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), lida:false, aprovada:null};
+  if(!db.notificacoes) db.notificacoes=[];
+  db.notificacoes.unshift(n);
+  saveDB();
+  updateNotifBadge();
+  return n.id;
+}
+
+function aprovarNotif(id){
+  var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
+  if(!n) return;
+  n.lida=true; n.aprovada=true;
+  // If it was a hod approval — release the abastecimento
+  if(n.tipo==='hod_inferior' && n.dados.abastId){
+    // abastecimento already saved, just mark approved
+    var ab=db.abastecimentos.filter(function(a){return a.id===n.dados.abastId;})[0];
+    if(ab) ab.aprovado=true;
+  }
+  saveDB(); updateNotifBadge(); renderNotif();
+}
+
+function rejeitarNotif(id){
+  var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
+  if(!n) return;
+  n.lida=true; n.aprovada=false;
+  // If hod approval — remove the abastecimento
+  if(n.tipo==='hod_inferior' && n.dados.abastId){
+    db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==n.dados.abastId;});
+  }
+  saveDB(); updateNotifBadge(); renderNotif();
+}
+
+function marcarLida(id){
+  var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
+  if(n){n.lida=true; saveDB(); updateNotifBadge(); renderNotif();}
+}
+
+function limparNotifs(){
+  if(!confirm('Limpar todas as notificações lidas?')) return;
+  db.notificacoes=db.notificacoes.filter(function(n){return !n.lida;});
+  saveDB(); renderNotif();
+}
+
+function updateNotifBadge(){
+  if(!db.notificacoes) return;
+  var nao_lidas=db.notificacoes.filter(function(n){return !n.lida;}).length;
+  // Update all nav badges
+  document.querySelectorAll('.bnav').forEach(function(nav){
+    var btns=nav.querySelectorAll('.nb');
+    btns.forEach(function(btn){
+      if(btn.textContent.indexOf('Avisos')>-1){
+        var existing=btn.querySelector('.notif-dot');
+        if(nao_lidas>0){
+          if(!existing){var dot=document.createElement('span');dot.className='notif-dot';dot.style.cssText='position:absolute;top:8px;right:calc(50% - 14px);width:8px;height:8px;background:#e53935;border-radius:50%;display:block';btn.style.position='relative';btn.appendChild(dot);}
+        } else {
+          if(existing) existing.remove();
+        }
+      }
+    });
+  });
+  // Top badge
+  var tb=document.getElementById('notif-badge-top');
+  if(tb){if(nao_lidas>0){tb.textContent=nao_lidas+' novo'+(nao_lidas>1?'s':'');tb.style.display='';}else{tb.style.display='none';}}
+}
+
+function renderNotif(){
+  var el=document.getElementById('notif-body'); if(!el) return;
+  if(!db.notificacoes) db.notificacoes=[];
+  var notifs=db.notificacoes;
+  if(!notifs.length){
+    el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhuma notificação</div>';
+    return;
+  }
+  var pendentes=notifs.filter(function(n){return !n.lida;});
+  var lidas=notifs.filter(function(n){return n.lida;});
+
+  var html='';
+  if(pendentes.length){
+    html+='<div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">'+pendentes.length+' pendente'+(pendentes.length>1?'s':'')+'</div>';
+    html+=pendentes.map(function(n){return renderNotifCard(n);}).join('');
+  }
+  if(lidas.length){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px;margin-bottom:10px">'+
+      '<div style="font-size:11px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:.06em">Histórico ('+lidas.length+')</div>'+
+      '<button class="btn bs bsm" onclick="limparNotifs()"><i class="ti ti-trash"></i> Limpar</button></div>';
+    html+=lidas.map(function(n){return renderNotifCard(n);}).join('');
+  }
+  el.innerHTML=html;
+  updateNotifBadge();
+}
+
+function renderNotifCard(n){
+  var cor, icone, bgCor;
+  if(n.tipo==='hod_inferior'){cor='var(--am)';icone='ti-alert-triangle';bgCor='var(--al)';}
+  else if(n.tipo==='reservatorio_baixo'){cor='var(--red)';icone='ti-droplet-off';bgCor='var(--rl)';}
+  else{cor='var(--bl)';icone='ti-info-circle';bgCor='var(--bll)';}
+
+  var statusHtml='';
+  if(!n.lida){
+    var nid=n.id;
+    if(n.tipo==='hod_inferior'){
+      statusHtml='<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="btn bp bsm" onclick="aprovarNotif(this.dataset.id)" data-id="'+nid+'"><i class="ti ti-check"></i> Aprovar</button>'+
+        '<button class="btn bd bsm" onclick="rejeitarNotif(this.dataset.id)" data-id="'+nid+'"><i class="ti ti-x"></i> Rejeitar</button>'+
+        '</div>';
+    } else {
+      statusHtml='<div style="margin-top:10px"><button class="btn bs bsm" onclick="marcarLida(this.dataset.id)" data-id="'+nid+'"><i class="ti ti-check"></i> Marcar como lida</button></div>';
+    }
+  } else {
+    var badge=n.aprovada===true?'<span class="badge bg">✓ Aprovado</span>':n.aprovada===false?'<span class="badge" style="background:var(--rl);color:var(--red)">✗ Rejeitado</span>':'<span class="badge" style="background:#f0f0f0;color:var(--t2)">Lido</span>';
+    statusHtml='<div style="margin-top:8px">'+badge+'</div>';
+  }
+
+  return'<div style="background:var(--cd);border:1.5px solid '+(n.lida?'var(--br)':cor)+';border-radius:var(--r);padding:14px 16px;margin-bottom:10px;opacity:'+(n.lida?'.7':'1')+'">'+
+    '<div style="display:flex;align-items:flex-start;gap:12px">'+
+    '<div style="width:36px;height:36px;border-radius:50%;background:'+bgCor+';display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ti '+icone+'" style="font-size:18px;color:'+cor+'"></i></div>'+
+    '<div style="flex:1;min-width:0">'+
+    '<div style="font-size:13px;font-weight:600;margin-bottom:3px">'+n.titulo+'</div>'+
+    '<div style="font-size:12px;color:var(--t2);line-height:1.6">'+n.descricao+'</div>'+
+    '<div style="font-size:10px;color:var(--t3);margin-top:4px">'+n.data+' às '+n.hora+'</div>'+
+    statusHtml+
+    '</div></div></div>';
 }
 
 // ─────────────────────────────────────────────
@@ -1118,6 +1287,7 @@ loadDB();
 
 // Init nav
 document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav('resumo');});
+if(adminLogado) setTimeout(updateNotifBadge,200);
 document.getElementById('e-data').value=today();
 document.getElementById('c-data').value=today();
 
