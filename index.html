@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -333,7 +334,7 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Dados e backup</div>
         <div id="adm-stats" style="margin-bottom:14px"></div>
-        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-download"></i> Exportar abastecimentos (CSV)</button>
+        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-file-spreadsheet"></i> Exportar abastecimentos (Excel)</button>
         <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
         <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
         <button class="btn bd" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
@@ -372,7 +373,7 @@ input,select,textarea,button{font-family:inherit}
         <input type="date" id="hist-ate" style="flex:1;border:1px solid var(--br);border-radius:var(--rs);padding:8px 10px;font-size:13px" onchange="renderHistorico()">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
+        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel (.xlsx)</button>
         <button class="btn bd bsm" onclick="deletarPeriodo()"><i class="ti ti-trash"></i> Apagar período</button>
       </div>
       <div id="hist-lista"></div>
@@ -388,7 +389,7 @@ input,select,textarea,button{font-family:inherit}
 // ─────────────────────────────────────────────
 var DB_KEY = 'fuelterra_v6';
 var FB_KEY = 'fuelterra_fb_url';
-var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],admin:{usuario:'admin',senha:'1234'}};
+var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],saldo:{res:0,com:0},admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
 var fbRef = null, fbApp = null, fbActive = false;
 
@@ -404,18 +405,27 @@ var fs = {step:1, equip:null, hod:null, litros:null,
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
 }
+function updateSaldo(){
+  db.saldo={
+    res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
+       - db.comboios.reduce(function(s,c){return s+Number(c.vol);},0),
+    com: db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
+       - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0)
+  };
+}
 function saveDB(){
+  updateSaldo();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
   fbPush();
 }
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function getSaldoRes(){return db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
-function getSaldoCom(){return db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
+function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
+function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
 
 // ─────────────────────────────────────────────
 //  FIREBASE
@@ -434,15 +444,14 @@ var _fbIgnoreNext = false;
 
 function iniciarFirebase(url, showAlert){
   try{
-    // Delete previous instance safely
-    if(fbApp){
-      try{fbRef&&fbRef.off();}catch(e){}
-      try{fbApp.delete();}catch(e){}
-      fbApp=null; fbRef=null; fbActive=false;
-    }
-    // Always use fixed app name to avoid duplicate app error
+    // Always off existing listener first
+    try{if(fbRef)fbRef.off();}catch(e){}
+    fbRef=null; fbActive=false;
+    // Reuse or create app with fixed name
     try{
       fbApp = firebase.app('comboio');
+      // Update DB URL if changed
+      fbApp = firebase.initializeApp({databaseURL:url},'comboio_'+Date.now());
     }catch(e){
       fbApp = firebase.initializeApp({databaseURL:url},'comboio');
     }
@@ -501,7 +510,8 @@ function fbPush(){
       entradas:db.entradas||[],
       comboios:db.comboios||[],
       abastecimentos:db.abastecimentos||[],
-      notificacoes:db.notificacoes||[]
+      notificacoes:db.notificacoes||[],
+      saldo:db.saldo||{res:0,com:0}
     }, function(err){
       if(err){_fbIgnoreNext=false; console.error('fbPush error:',err);}
     });
@@ -1410,7 +1420,11 @@ function renderAdmin(){
         (e.tank?'<span class="badge bb">'+e.tank+' L</span>':'')+
         (e.consumo?'<span class="badge bg">'+e.consumo+' '+(e.unidade==='km'?'L/100km':'L/h')+'</span>':'')+
         (e.frente?'<span class="badge ba">'+e.frente+'</span>':'')+
-        '</div></div><button class="del" onclick="removerEq(\''+e.cod.replace(/'/g,"\\'") +'\')"><i class="ti ti-trash"></i></button></div>';
+        '</div></div>'+
+        '<div style="display:flex;gap:6px">'+
+        '<button class="del" onclick="editarEq(\''+e.cod.replace(/'/g,"\\'")+'\')" title="Editar" style="color:var(--bl)"><i class="ti ti-pencil"></i></button>'+
+        '<button class="del" onclick="removerEq(\''+e.cod.replace(/'/g,"\\'")+'\')" title="Remover"><i class="ti ti-trash"></i></button>'+
+        '</div></div>';
     }).join('');
   var lu=document.getElementById('lista-users');
   lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador</div>':
@@ -1518,29 +1532,51 @@ function renderHistorico(){
 }
 
 function exportHistXLS(){
+  if(typeof XLSX === 'undefined'){alert('Carregando biblioteca Excel. Tente novamente em segundos.');return;}
   var de=document.getElementById('hist-de').value;
   var ate=document.getElementById('hist-ate').value;
   var filtEq=document.getElementById('hist-filtro-eq').value;
-  var linhas=['Data;Tipo;Descricao;Volume_L;Horimetro'];
+
+  var rows=[['Data','Tipo','Descrição','Equipamento/Fornecedor','Volume (L)','Horímetro/Km','Operador']];
+
   db.entradas.forEach(function(e){
-    if(de&&e.data<de)return;if(ate&&e.data>ate)return;
-    linhas.push(fmtDate(e.data)+';Entrada;'+(e.forn||'Distribuidora')+';'+e.vol+';'+(e.hod||''));
+    if(de&&e.data<de)return; if(ate&&e.data>ate)return;
+    rows.push([fmtDate(e.data),'Entrada Diesel',e.nf||'',e.forn||'Distribuidora',Number(e.vol),e.hod||'','']);
   });
-  db.comboios.forEach(function(c){
-    if(de&&c.data<de)return;if(ate&&c.data>ate)return;
-    linhas.push(fmtDate(c.data)+';Comboio;'+(c.op||'-')+';'+c.vol+';'+(c.hod||''));
+  db.comboios.forEach(function(cv){
+    if(de&&cv.data<de)return; if(ate&&cv.data>ate)return;
+    rows.push([fmtDate(cv.data),'Comboio','','',Number(cv.vol),cv.hod||'',cv.op||'']);
   });
   db.abastecimentos.forEach(function(a){
-    if(de&&a.data<de)return;if(ate&&a.data>ate)return;
+    if(de&&a.data<de)return; if(ate&&a.data>ate)return;
     if(filtEq&&a.equip!==filtEq)return;
-    linhas.push(fmtDate(a.data)+';Abastecimento;'+(a.equip||'-')+';'+a.vol+';'+(a.hod||''));
+    rows.push([fmtDate(a.data),'Abastecimento','',a.equip||'',Number(a.vol),a.hod||'',a.operador||'']);
   });
-  var crlf2=String.fromCharCode(10);var conteudo=linhas.join(crlf2);
-  var blob=new Blob(['﻿'+conteudo],{type:'text/csv;charset=utf-8'});
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='historico_'+today()+'.csv';
-  a.click();
+
+  rows.sort(function(a,b){
+    var da=a[0].split('/').reverse().join('-');
+    var db2=b[0].split('/').reverse().join('-');
+    return da.localeCompare(db2);
+  });
+
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Column widths
+  ws['!cols']=[{wch:12},{wch:16},{wch:12},{wch:24},{wch:12},{wch:14},{wch:16}];
+
+  // Style header row bold (SheetJS CE supports basic styles)
+  var range = XLSX.utils.decode_range(ws['!ref']);
+  for(var C=range.s.c; C<=range.e.c; C++){
+    var addr = XLSX.utils.encode_cell({r:0,c:C});
+    if(!ws[addr]) continue;
+    ws[addr].s = {font:{bold:true},fill:{fgColor:{rgb:"0F6E56"}},font:{bold:true,color:{rgb:"FFFFFF"}}};
+  }
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
+
+  var nome='historico_comboio_'+today()+'.xlsx';
+  XLSX.writeFile(wb, nome);
 }
 function deletarPeriodo(){
   var de=document.getElementById('hist-de').value;
@@ -1560,15 +1596,31 @@ function deletarPeriodo(){
     var matchEq=!filtEq||a.equip===filtEq;
     return !(inRange&&matchEq);
   });
-  saveDB(); renderHistorico(); alert('Lançamentos apagados.');
+  // Preserve current saldo — deletion from history does not affect stock levels
+  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
+  saveDB();
+  db.saldo=savedSaldo;
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  fbPush();
+  renderHistorico(); alert('Lançamentos removidos do histórico. Saldos mantidos.');
 }
 
 function exportCSV(){
-  var h='Data,Equipamento,Volume(L),Horímetro\n';
-  var b=db.abastecimentos.map(function(r){return fmtDate(r.data)+',"'+r.equip+'",'+r.vol+','+(r.hod||'');}).join('\n');
-  var a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\uFEFF'+h+b],{type:'text/csv'}));
-  a.download='abastecimentos_'+today()+'.csv'; a.click();
+  if(typeof XLSX === 'undefined'){alert('Carregando biblioteca Excel. Tente novamente.');return;}
+  var rows=[['Data','Equipamento','Volume (L)','Horímetro/Km','Operador']];
+  db.abastecimentos.forEach(function(a){
+    rows.push([fmtDate(a.data),a.equip||'',Number(a.vol),a.hod||'',a.operador||'']);
+  });
+  rows.sort(function(a,b){
+    var da=a[0].split('/').reverse().join('-');
+    var db2=b[0].split('/').reverse().join('-');
+    return da.localeCompare(db2);
+  });
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:12},{wch:20},{wch:12},{wch:14},{wch:16}];
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Abastecimentos');
+  XLSX.writeFile(wb,'abastecimentos_'+today()+'.xlsx');
 }
 function exportBackup(){
   var a=document.createElement('a');
