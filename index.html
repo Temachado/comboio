@@ -300,7 +300,7 @@ input,select,textarea,button{font-family:inherit}
         <p class="note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
         <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
           <div class="r2">
-            <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="words" placeholder="Ex: João Silva"></div>
+            <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: JOÃO SILVA" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div>
           </div>
           <div style="display:flex;gap:8px">
@@ -839,10 +839,10 @@ function renderResumo(){
   pill.textContent=navigator.onLine?'online':'offline';
   pill.className='pill '+(navigator.onLine?'p-on':'p-off');
   document.getElementById('res-metrics').innerHTML=
-    '<div class="met'+(sr<500?' warn':'')+'"><div class="ml">Reservatório</div><div class="mv">'+Math.max(0,sr).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros disponíveis</div></div>'+
-    '<div class="met'+(sc<100?' danger':sc<300?' warn':' ok')+'"><div class="ml">Comboio</div><div class="mv">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros no comboio</div></div>'+
+    '<div class="met"><div class="ml">Reservatório</div><div class="mv">'+Math.max(0,sr).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros disponíveis</div></div>'+
+    '<div class="met ok"><div class="ml">Comboio</div><div class="mv">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros no comboio</div></div>'+
     '<div class="met"><div class="ml">Total recebido</div><div class="mv">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros histórico</div></div>'+
-    '<div class="met'+(Math.abs(dif)>200?' warn':'')+'"><div class="ml">Diferença</div><div class="mv">'+dif.toFixed(0)+'</div><div class="ms">'+(Math.abs(dif)>200?'verificar':'dentro do esperado')+'</div></div>';
+    '<div class="met"><div class="ml">Diferença</div><div class="mv">'+dif.toFixed(0)+'</div><div class="ms">acumulado</div></div>';
   // Inject ciclo panel
   var cicloPanel=document.getElementById('res-ciclo');
   if(cicloPanel) cicloPanel.innerHTML=renderCicloAtivo();
@@ -1396,6 +1396,12 @@ function salvarComboio(){
 }
 var _editComId=null;
 function renderHistCom(){
+  // Always keep operador dropdown in sync
+  var _cop=document.getElementById('c-op');
+  if(_cop&&db.operadores.length&&_cop.options.length<=1){
+    _cop.innerHTML='<option value="">— selecione —</option>'+
+      db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+  }
   var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
   var el=document.getElementById('hist-com');
   if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
@@ -1417,12 +1423,13 @@ function editarComboio(id){
   document.getElementById('c-data').value=r.data||today();
   document.getElementById('c-vol').value=r.vol||'';
   document.getElementById('c-hod').value=r.hod||'';
-  // Set operador select
+  // Repopulate and select operator
   var sel=document.getElementById('c-op');
-  sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'"'+(o.nome===r.op?' selected':'')+'>'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
-  // Scroll to form
-  var form=document.querySelector('#tab-com .card');
-  if(form) form.scrollIntoView({behavior:'smooth'});
+  if(sel) sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'"'+(o.nome===r.op?' selected':'')+'>'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+  // Scroll to comboio form
+  var comCard=document.querySelector('.card:has(#c-vol)');
+  var comCardAlt=document.getElementById('c-vol');
+  if(comCardAlt) comCardAlt.closest('.card').scrollIntoView({behavior:'smooth'});
 }
 function excluirComboio(id){
   if(!confirm('Excluir este carregamento?'))return;
@@ -1707,7 +1714,7 @@ function editarEq(cod){
   document.getElementById('form-eq').scrollIntoView({behavior:'smooth'});
 }
 function salvarUser(){
-  var nome=document.getElementById('u-nome').value.trim();
+  var nome=document.getElementById('u-nome').value.trim().toUpperCase();
   if(!nome){alert('Informe o nome.');return;}
   db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});
   saveDB();
