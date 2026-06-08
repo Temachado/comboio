@@ -182,10 +182,21 @@ input,select,textarea,button{font-family:inherit}
     <div id="fld-nav"></div>
   </div>
 
-  <!-- ENTRADA -->
+  <!-- TANQUES (Entrada + Comboio unificados) -->
   <div id="screen-entrada" class="screen">
-    <div class="topbar"><div class="tb"><h1>Entrada de diesel</h1><div class="tb-sub">Distribuidora → Reservatório</div></div></div>
-    <div class="sb">
+    <div class="topbar"><div class="tb"><h1>Tanques</h1><div class="tb-sub" id="tank-sub">Entradas e carregamentos</div></div></div>
+    <!-- Internal tab switcher -->
+    <div style="display:flex;background:var(--cd);border-bottom:1px solid var(--br);flex-shrink:0">
+      <button id="tab-btn-ent" onclick="tankTab('ent')" style="flex:1;padding:11px 8px;border:none;background:none;font-size:13px;font-weight:600;color:var(--green);border-bottom:2px solid var(--green);cursor:pointer">
+        <i class="ti ti-truck-delivery" style="font-size:15px;margin-right:5px"></i>Entrada no Tanque
+      </button>
+      <button id="tab-btn-com" onclick="tankTab('com')" style="flex:1;padding:11px 8px;border:none;background:none;font-size:13px;font-weight:500;color:var(--t2);border-bottom:2px solid transparent;cursor:pointer">
+        <i class="ti ti-flame" style="font-size:15px;margin-right:5px"></i>Abast. Comboio
+      </button>
+    </div>
+
+    <!-- ENTRADA TAB -->
+    <div id="tab-ent" class="sb">
       <div class="card">
         <div class="ct">Registrar recebimento</div>
         <div class="field"><label>Data</label><input type="date" id="e-data"></div>
@@ -194,7 +205,7 @@ input,select,textarea,button{font-family:inherit}
           <div class="field"><label>Nota fiscal</label><input type="text" id="e-nf" autocapitalize="characters" style="text-transform:uppercase" placeholder="NF-001"></div>
         </div>
         <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
-        <div class="sep" style="height:1px;background:var(--br);margin:4px 0 14px"></div>
+        <div style="height:1px;background:var(--br);margin:4px 0 14px"></div>
         <div class="seg-label">Bomba do pátio</div>
         <div id="e-foto-area" class="pha" onclick="abrirCamEntrada()" style="padding:20px 16px;margin-bottom:12px">
           <i class="ti ti-camera" id="e-foto-icon" style="font-size:28px;color:var(--t3);display:block;margin-bottom:6px"></i>
@@ -211,15 +222,11 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <button class="btn bp" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
       </div>
-      <div class="card"><div class="ct">Histórico</div><div id="hist-ent"></div></div>
+      <div class="card"><div class="ct">Histórico de entradas</div><div id="hist-ent"></div></div>
     </div>
-    <nav class="bnav" id="nav-entrada"></nav>
-  </div>
 
-  <!-- COMBOIO -->
-  <div id="screen-comboio" class="screen">
-    <div class="topbar"><div class="tb"><h1>Comboio</h1><div class="tb-sub">Reservatório → Comboio</div></div></div>
-    <div class="sb">
+    <!-- COMBOIO TAB -->
+    <div id="tab-com" class="sb" style="display:none">
       <div class="card">
         <div class="ct">Registrar carregamento</div>
         <div class="r2">
@@ -232,9 +239,9 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
       </div>
-      <div class="card"><div class="ct">Histórico</div><div id="hist-com"></div></div>
+      <div class="card"><div class="ct">Histórico de carregamentos</div><div id="hist-com"></div></div>
     </div>
-    <nav class="bnav" id="nav-comboio"></nav>
+    <nav class="bnav" id="nav-entrada"></nav>
   </div>
 
   <!-- FOTOS -->
@@ -337,7 +344,35 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn bs" onclick="exportCSV()"><i class="ti ti-file-spreadsheet"></i> Exportar abastecimentos (Excel)</button>
         <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
         <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
-        <button class="btn bd" onclick="limparDados()"><i class="ti ti-trash"></i> Apagar todos os dados</button>
+        <button class="btn bd" onclick="toggleModalApagar()"><i class="ti ti-trash"></i> Apagar dados</button>
+
+<!-- Modal apagar individual -->
+<div id="modal-apagar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:flex-end;justify-content:center;padding:0">
+  <div style="background:var(--cd);border-radius:var(--r) var(--r) 0 0;padding:24px;width:100%;max-width:480px">
+    <div style="font-size:15px;font-weight:600;margin-bottom:4px">Apagar dados</div>
+    <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Selecione o que deseja apagar. Equipamentos e operadores nunca são removidos aqui.</div>
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--br);cursor:pointer">
+      <input type="checkbox" id="del-entradas" style="width:18px;height:18px;accent-color:var(--green)">
+      <div><div style="font-size:13px;font-weight:500">Entradas de diesel</div><div style="font-size:11px;color:var(--t3)" id="del-entradas-ct"></div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--br);cursor:pointer">
+      <input type="checkbox" id="del-comboios" style="width:18px;height:18px;accent-color:var(--green)">
+      <div><div style="font-size:13px;font-weight:500">Carregamentos do comboio</div><div style="font-size:11px;color:var(--t3)" id="del-comboios-ct"></div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--br);cursor:pointer">
+      <input type="checkbox" id="del-abast" style="width:18px;height:18px;accent-color:var(--green)">
+      <div><div style="font-size:13px;font-weight:500">Abastecimentos de campo</div><div style="font-size:11px;color:var(--t3)" id="del-abast-ct"></div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--br);cursor:pointer">
+      <input type="checkbox" id="del-notif" style="width:18px;height:18px;accent-color:var(--green)">
+      <div><div style="font-size:13px;font-weight:500">Notificações</div><div style="font-size:11px;color:var(--t3)" id="del-notif-ct"></div></div>
+    </label>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn bd" style="flex:1" onclick="confirmarApagar()"><i class="ti ti-trash"></i> Apagar selecionados</button>
+      <button class="btn bs" style="width:auto;padding:10px 20px" onclick="toggleModalApagar()">Cancelar</button>
+    </div>
+  </div>
+</div>
       </div>
 
       <button class="btn bs" onclick="logout()"><i class="ti ti-logout"></i> Sair da área administrativa</button>
@@ -373,8 +408,9 @@ input,select,textarea,button{font-family:inherit}
         <input type="date" id="hist-ate" style="flex:1;border:1px solid var(--br);border-radius:var(--rs);padding:8px 10px;font-size:13px" onchange="renderHistorico()">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel (.xlsx)</button>
-        <button class="btn bd bsm" onclick="deletarPeriodo()"><i class="ti ti-trash"></i> Apagar período</button>
+        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
+        <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" style="display:none"><i class="ti ti-trash"></i> Apagar selecionados</button>
+        <button class="btn bs bsm" onclick="toggleSelAll()" id="btn-sel-all"><i class="ti ti-checkbox"></i> Selecionar</button>
       </div>
       <div id="hist-lista"></div>
     </div>
@@ -582,7 +618,7 @@ function buildNav(active){
     {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
     {id:'field',icon:'ti-gas-station',label:'Abastecer'},
     {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
-    {id:'comboio',icon:'ti-flame',label:'Comboio'},
+    
     {id:'admin',icon:'ti-settings',label:'Config'}
   ];
   if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
@@ -601,12 +637,7 @@ function navigate(id){
   if(id==='resumo') renderResumo();
   if(id==='field')  renderField();
   if(id==='entrada'){document.getElementById('e-data').value=today();renderHistEnt();}
-  if(id==='comboio'){
-    document.getElementById('c-data').value=today();
-    var sel=document.getElementById('c-op');
-    sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
-    renderHistCom();
-  }
+
   if(id==='admin')  renderAdmin();
   if(id==='fotos')  renderFotos();
   if(id==='notif')  renderNotif();
@@ -1155,11 +1186,22 @@ function renderHistEnt(){
 function salvarComboio(){
   var vol=parseFloat(document.getElementById('c-vol').value);
   if(!vol||vol<=0){alert('Informe o volume.');return;}
-  var sr=getSaldoRes();
-  if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar?'))return;}
-  db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});
+  if(!_editComId){
+    var sr=getSaldoRes();
+    if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar?'))return;}
+  }
+  if(_editComId){
+    db.comboios=db.comboios.map(function(r){
+      return r.id===_editComId?{id:r.id,data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value}:r;
+    });
+    _editComId=null;
+    alert('Carregamento atualizado!');
+  } else {
+    db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});
+  }
   saveDB();
-  ['c-vol','c-op','c-hod'].forEach(function(id){document.getElementById(id).value='';});
+  ['c-vol','c-hod'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  var cop=document.getElementById('c-op');if(cop)cop.value='';
   renderHistCom();
   var _sr2=getSaldoRes();
   if(_sr2<500&&_sr2>=0){var _jn2=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn2)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr2).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr2});}
@@ -1167,13 +1209,40 @@ function salvarComboio(){
   if(_sc2<300&&_sc2>=0){var _jnc=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jnc)criarNotif('comboio_baixo','Comboio com menos de 300 litros','Saldo atual do comboio: '+Math.max(0,_sc2).toFixed(0)+' L. Faça o carregamento.',{saldo:_sc2});}
   alert('Carregamento registrado!');
 }
+var _editComId=null;
 function renderHistCom(){
   var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
   var el=document.getElementById('hist-com');
   if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
   el.innerHTML=rows.map(function(r){
-    return'<div class="hi"><div class="hic transfer"><i class="ti ti-flame"></i></div><div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div><div class="hs">'+fmtDate(r.data)+(r.hod?' • '+r.hod:'')+'</div></div><div class="hv">'+Number(r.vol).toFixed(0)+' L</div></div>';
+    var html='<div class="hi" id="com-'+r.id+'">';
+    html+='<div class="hic transfer"><i class="ti ti-flame"></i></div>';
+    html+='<div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div>';
+    html+='<div class="hs">'+fmtDate(r.data)+' • '+Number(r.vol).toFixed(0)+' L'+(r.hod?' • '+r.hod:'')+'</div></div>';
+    html+='<div style="display:flex;gap:6px">';
+    html+='<button class="del" data-id="'+r.id+'" onclick="editarComboio(this.dataset.id)" title="Editar" style="color:var(--bl)"><i class="ti ti-pencil"></i></button>';
+    html+='<button class="del" data-id="'+r.id+'" onclick="excluirComboio(this.dataset.id)" title="Excluir"><i class="ti ti-trash"></i></button>';
+    html+='</div></div>';
+    return html;
   }).join('');
+}
+function editarComboio(id){
+  var r=db.comboios.filter(function(x){return x.id===id;})[0]; if(!r)return;
+  _editComId=id;
+  document.getElementById('c-data').value=r.data||today();
+  document.getElementById('c-vol').value=r.vol||'';
+  document.getElementById('c-hod').value=r.hod||'';
+  // Set operador select
+  var sel=document.getElementById('c-op');
+  sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'"'+(o.nome===r.op?' selected':'')+'>'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+  // Scroll to form
+  var form=document.querySelector('#tab-com .card');
+  if(form) form.scrollIntoView({behavior:'smooth'});
+}
+function excluirComboio(id){
+  if(!confirm('Excluir este carregamento?'))return;
+  db.comboios=db.comboios.filter(function(x){return x.id!==id;});
+  saveDB(); renderHistCom();
 }
 
 // ─────────────────────────────────────────────
@@ -1492,6 +1561,119 @@ function importBackup(input){
   r.readAsText(file);
   input.value='';
 }
+// ─────────────────────────────────────────────
+//  MODAL APAGAR INDIVIDUAL (Item 1)
+// ─────────────────────────────────────────────
+function toggleModalApagar(){
+  var m=document.getElementById('modal-apagar');
+  if(!m)return;
+  var showing=m.style.display==='flex';
+  if(!showing){
+    // Update counts
+    var el=document.getElementById('del-entradas-ct'); if(el)el.textContent=db.entradas.length+' registro'+(db.entradas.length!==1?'s':'');
+    el=document.getElementById('del-comboios-ct'); if(el)el.textContent=db.comboios.length+' registro'+(db.comboios.length!==1?'s':'');
+    el=document.getElementById('del-abast-ct'); if(el)el.textContent=db.abastecimentos.length+' registro'+(db.abastecimentos.length!==1?'s':'');
+    el=document.getElementById('del-notif-ct'); if(el)el.textContent=(db.notificacoes||[]).length+' notificaç'+(db.notificacoes&&db.notificacoes.length!==1?'ões':'ão');
+    // Uncheck all
+    ['del-entradas','del-comboios','del-abast','del-notif'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=false;});
+  }
+  m.style.display=showing?'none':'flex';
+}
+function confirmarApagar(){
+  var delEnt=document.getElementById('del-entradas')&&document.getElementById('del-entradas').checked;
+  var delCom=document.getElementById('del-comboios')&&document.getElementById('del-comboios').checked;
+  var delAb=document.getElementById('del-abast')&&document.getElementById('del-abast').checked;
+  var delNot=document.getElementById('del-notif')&&document.getElementById('del-notif').checked;
+  if(!delEnt&&!delCom&&!delAb&&!delNot){alert('Selecione pelo menos um item.');return;}
+  var lista=[];
+  if(delEnt)lista.push('Entradas de diesel');
+  if(delCom)lista.push('Carregamentos do comboio');
+  if(delAb)lista.push('Abastecimentos de campo');
+  if(delNot)lista.push('Notificações');
+  if(!confirm('Apagar selecionados:\n\u2022 '+lista.join('\n\u2022 ')+'\n\nEsta a\u00e7\u00e3o n\u00e3o tem volta.'))return;
+
+
+
+
+  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
+  if(delEnt)db.entradas=[];
+  if(delCom)db.comboios=[];
+  if(delAb)db.abastecimentos=[];
+  if(delNot)db.notificacoes=[];
+  saveDB();
+  db.saldo=savedSaldo;
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  fbPush();
+  toggleModalApagar();
+  renderAdmin();
+  alert('Dados apagados com sucesso.');
+}
+
+// ─────────────────────────────────────────────
+//  TANQUES TAB SWITCH (Item 4)
+// ─────────────────────────────────────────────
+function tankTab(tab){
+  var tabEnt=document.getElementById('tab-ent');
+  var tabCom=document.getElementById('tab-com');
+  var btnEnt=document.getElementById('tab-btn-ent');
+  var btnCom=document.getElementById('tab-btn-com');
+  if(!tabEnt||!tabCom)return;
+  if(tab==='ent'){
+    tabEnt.style.display=''; tabCom.style.display='none';
+    btnEnt.style.color='var(--green)'; btnEnt.style.borderBottomColor='var(--green)'; btnEnt.style.fontWeight='600';
+    btnCom.style.color='var(--t2)'; btnCom.style.borderBottomColor='transparent'; btnCom.style.fontWeight='500';
+  } else {
+    tabEnt.style.display='none'; tabCom.style.display='';
+    btnCom.style.color='var(--green)'; btnCom.style.borderBottomColor='var(--green)'; btnCom.style.fontWeight='600';
+    btnEnt.style.color='var(--t2)'; btnEnt.style.borderBottomColor='transparent'; btnEnt.style.fontWeight='500';
+    // Populate operador dropdown
+    var sel=document.getElementById('c-op');
+    if(sel) sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+    renderHistCom();
+  }
+}
+
+// ─────────────────────────────────────────────
+//  HISTÓRICO COM CHECKBOX (Item 2)
+// ─────────────────────────────────────────────
+var _histSel={};
+function toggleSelAll(){
+  var items=document.querySelectorAll('.hist-cb');
+  var anyUnchecked=false;
+  items.forEach(function(cb){if(!cb.checked)anyUnchecked=true;});
+  items.forEach(function(cb){cb.checked=anyUnchecked;_histSel[cb.dataset.id]={tipo:cb.dataset.tipo,checked:anyUnchecked};});
+  updateDelSelBtn();
+}
+function onHistCbChange(cb){
+  _histSel[cb.dataset.id]={tipo:cb.dataset.tipo,checked:cb.checked};
+  updateDelSelBtn();
+}
+function updateDelSelBtn(){
+  var sel=Object.values(_histSel).filter(function(x){return x.checked;}).length;
+  var btn=document.getElementById('btn-del-sel');
+  if(btn) btn.style.display=sel>0?'':'none';
+  if(btn&&sel>0) btn.innerHTML='<i class="ti ti-trash"></i> Apagar ('+sel+')';
+}
+function apagarSelecionados(){
+  var selecionados=Object.entries(_histSel).filter(function(kv){return kv[1].checked;});
+  if(!selecionados.length){alert('Nenhum item selecionado.');return;}
+  if(!confirm('Apagar '+selecionados.length+' lançamento'+(selecionados.length>1?'s':'')+' selecionado'+(selecionados.length>1?'s':'')+'?'))return;
+  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
+  selecionados.forEach(function(kv){
+    var id=kv[0], tipo=kv[1].tipo;
+    if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
+    else if(tipo==='transfer') db.comboios=db.comboios.filter(function(c){return c.id!==id;});
+    else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
+  });
+  _histSel={};
+  saveDB();
+  db.saldo=savedSaldo;
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  fbPush();
+  renderHistorico();
+  updateDelSelBtn();
+}
+
 // ─────────────────────────────────────────────
 //  HISTÓRICO COMPLETO
 // ─────────────────────────────────────────────
