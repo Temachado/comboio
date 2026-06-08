@@ -172,9 +172,7 @@ input,select,textarea,button{font-family:inherit}
     <div class="topbar"><div class="tb"><div style="flex:1"><h1>Controle de combustível</h1><div class="tb-sub" id="res-date"></div></div><span class="pill" id="res-pill">offline</span></div></div>
     <div class="sb">
       <div class="metrics" id="res-metrics"></div>
-      <div id="res-alert"></div>
       <div id="res-ciclo"></div>
-      <div id="res-ciclos-hist" style="margin-bottom:12px"></div>
       <button id="btn-reiniciar" class="btn bs" onclick="reiniciarControle()" style="display:none;margin-bottom:14px"><i class="ti ti-refresh"></i> Reiniciar controle do resumo</button>
       <div class="card"><div class="ct">Últimos lançamentos (semana)</div><div id="res-hist"></div></div>
     </div>
@@ -411,6 +409,7 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" style="display:none"><i class="ti ti-trash"></i> Apagar selecionados</button>
         <button class="btn bs bsm" onclick="toggleSelAll()" id="btn-sel-all"><i class="ti ti-checkbox"></i> Selecionar</button>
       </div>
+      <div id="hist-ciclos"></div>
       <div id="hist-lista"></div>
     </div>
     <nav class="bnav" id="nav-historico"></nav>
@@ -637,7 +636,19 @@ function navigate(id){
   document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(id);});
   if(id==='resumo') renderResumo();
   if(id==='field')  renderField();
-  if(id==='entrada'){document.getElementById('e-data').value=today();renderHistEnt();}
+  if(id==='entrada'){
+    document.getElementById('e-data').value=today();
+    document.getElementById('c-data').value=today();
+    var _sel=document.getElementById('c-op');
+    if(_sel){
+      _sel.innerHTML='<option value="">— selecione —</option>'+
+        db.operadores.map(function(o){
+          return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';
+        }).join('');
+    }
+    renderHistEnt();
+    renderHistCom();
+  }
 
   if(id==='admin')  renderAdmin();
   if(id==='fotos')  renderFotos();
@@ -770,21 +781,12 @@ function encerrarCiclo(resultado){
 }
 
 function reiniciarControle(){
-  if(!confirm('Reiniciar o controle do resumo?\n\nOs contadores voltam a zero. Os registros são mantidos no histórico.'))return;
-  // Close any active cycle
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado){
-    db.cicloAtivo.encerrado=true;
-    db.cicloAtivo.resultado='manual';
-    db.cicloAtivo.fim=today();
-    if(!db.ciclos)db.ciclos=[];
-    db.ciclos.unshift(JSON.parse(JSON.stringify(db.cicloAtivo)));
-    db.cicloAtivo=null;
-  }
-  // Reset running saldo
+  if(!confirm('Zerar o quadro resumo?\n\nOs contadores visuais voltam a zero.\nO ciclo de controle permanece ativo.\nOs registros são mantidos no histórico.'))return;
+  // Only reset display saldo — cycle keeps running
   db.saldo={res:0,com:0};
   saveDB();
   renderResumo();
-  alert('Controle reiniciado. Saldos zerados.');
+  alert('Resumo zerado. Ciclo de controle continua ativo.');
 }
 
 function renderCicloAtivo(){
@@ -844,32 +846,11 @@ function renderResumo(){
   // Inject ciclo panel
   var cicloPanel=document.getElementById('res-ciclo');
   if(cicloPanel) cicloPanel.innerHTML=renderCicloAtivo();
-  // Show last closed cycles
-  var chEl=document.getElementById('res-ciclos-hist');
-  if(chEl&&db.ciclos&&db.ciclos.length){
-    var ultimos=db.ciclos.filter(function(x){return x.encerrado;}).slice(0,3);
-    if(ultimos.length){
-      chEl.innerHTML='<div class="card"><div class="ct">Últimos ciclos</div>'+
-      ultimos.map(function(ci){
-        var ok=ci.resultado==='ok';
-        var dif=ci.volEquip-ci.volEntrada;
-        return'<div class="hi"><div class="hic '+(ok?'fuel':'transfer')+'">'+
-          '<i class="ti '+(ok?'ti-circle-check':'ti-alert-triangle')+'"></i></div>'+
-          '<div class="hb"><div class="hn">'+fmtDate(ci.inicio)+(ci.fim&&ci.fim!==ci.inicio?' → '+fmtDate(ci.fim):'')+'</div>'+
-          '<div class="hs">Entrada: '+Number(ci.volEntrada).toFixed(0)+' L | Equip: '+Number(ci.volEquip).toFixed(0)+' L | Dif: '+(dif>0?'+':'')+dif.toFixed(0)+' L</div></div>'+
-          '<span class="badge '+(ok?'bg':'ba')+'">'+(ok?'OK':'divergência')+'</span>'+
-          '</div>';
-      }).join('')+'</div>';
-    } else { chEl.innerHTML=''; }
-  }
+
   // Reiniciar button (admin only)
   var btnRei=document.getElementById('btn-reiniciar');
   if(btnRei) btnRei.style.display=adminLogado?'':'none';
-  var al=document.getElementById('res-alert');
-  if(sc<100) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Comboio com menos de 100 L.</span></div>';
-  else if(sr<500) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Reservatório baixo ('+sr.toFixed(0)+' L).</span></div>';
-  else if(Math.abs(dif)>300) al.innerHTML='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Diferença de '+dif.toFixed(0)+' L detectada.</span></div>';
-  else al.innerHTML='';
+  // Alerts moved to notificações tab
   // Show only current week (Mon-Sun)
   var now=new Date(), dow=now.getDay(), diff=dow===0?6:dow-1;
   var semIni=new Date(now); semIni.setDate(now.getDate()-diff); semIni.setHours(0,0,0,0);
@@ -1480,11 +1461,69 @@ function rejeitarNotif(id){
   var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
   if(!n) return;
   n.lida=true; n.aprovada=false;
-  // If hod approval — remove the abastecimento
   if(n.tipo==='hod_inferior' && n.dados.abastId){
-    db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==n.dados.abastId;});
+    // Show edit/delete modal instead of auto-delete
+    saveDB(); updateNotifBadge();
+    abrirModalEditarRejeicao(n.dados.abastId, n.id);
+    return;
   }
   saveDB(); updateNotifBadge(); renderNotif();
+}
+
+function abrirModalEditarRejeicao(abastId, notifId){
+  var ab=db.abastecimentos.filter(function(a){return a.id===abastId;})[0];
+  if(!ab){renderNotif();return;}
+  var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
+  var unid=eq&&eq.unidade==='km'?'km':'h';
+  var m=document.getElementById('modal-rejeicao');
+  if(!m){
+    m=document.createElement('div');
+    m.id='modal-rejeicao';
+    m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+    document.body.appendChild(m);
+  }
+  m.innerHTML='<div style="background:var(--cd);border-radius:var(--r) var(--r) 0 0;padding:24px;width:100%;max-width:480px">'+
+    '<div style="font-size:15px;font-weight:600;margin-bottom:4px">Lançamento rejeitado</div>'+
+    '<div style="font-size:12px;color:var(--t2);margin-bottom:16px">Edite o horímetro/volume ou exclua o abastecimento.</div>'+
+    '<div style="background:var(--al);border-radius:var(--rs);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--am)">'+
+      '<strong>'+ab.equip+'</strong> — Horímetro: '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+' | Volume: '+Number(ab.vol).toFixed(0)+' L | '+fmtDate(ab.data)+
+    '</div>'+
+    '<div class="field"><label>Corrigir horímetro ('+unid+')</label>'+
+      '<input type="number" id="rej-hod" value="'+ab.hod+'" inputmode="numeric" style="font-size:18px;font-family:monospace">'+
+    '</div>'+
+    '<div class="field"><label>Corrigir volume (L)</label>'+
+      '<input type="number" id="rej-vol" value="'+ab.vol+'" inputmode="decimal" style="font-size:18px;font-family:monospace">'+
+    '</div>'+
+    '<div style="display:flex;gap:10px;margin-top:8px">'+
+      '<button class="btn bp" style="flex:1" data-id="'+abastId+'" onclick="salvarEdicaoRejeicao(this.dataset.id)"><i class="ti ti-device-floppy"></i> Salvar correção</button>'+
+      '<button class="btn bd" style="flex:1" data-id="'+abastId+'" onclick="excluirRejeicao(this.dataset.id)"><i class="ti ti-trash"></i> Excluir</button>'+
+    '</div>'+
+    '<button class="btn bs" onclick="fecharModalRejeicao()" style="margin-top:8px"><i class="ti ti-x"></i> Cancelar</button>'+
+  '</div>';
+  m.style.display='flex';
+  renderNotif();
+}
+
+function salvarEdicaoRejeicao(abastId){
+  var ab=db.abastecimentos.filter(function(a){return a.id===abastId;})[0];
+  if(!ab){fecharModalRejeicao();return;}
+  var newHod=parseFloat(document.getElementById('rej-hod').value);
+  var newVol=parseFloat(document.getElementById('rej-vol').value);
+  if(!newHod||!newVol){alert('Preencha horímetro e volume.');return;}
+  ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
+  saveDB(); fecharModalRejeicao(); renderNotif();
+  alert('Lançamento corrigido e aprovado.');
+}
+
+function excluirRejeicao(abastId){
+  if(!confirm('Excluir este abastecimento?'))return;
+  db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==abastId;});
+  saveDB(); fecharModalRejeicao(); renderNotif();
+}
+
+function fecharModalRejeicao(){
+  var m=document.getElementById('modal-rejeicao');
+  if(m) m.style.display='none';
 }
 
 function marcarLida(id){
@@ -1851,7 +1890,6 @@ function apagarSelecionados(){
   var selecionados=Object.entries(_histSel).filter(function(kv){return kv[1].checked;});
   if(!selecionados.length){alert('Nenhum item selecionado.');return;}
   if(!confirm('Apagar '+selecionados.length+' lançamento'+(selecionados.length>1?'s':'')+' selecionado'+(selecionados.length>1?'s':'')+'?'))return;
-  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
   selecionados.forEach(function(kv){
     var id=kv[0], tipo=kv[1].tipo;
     if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
@@ -1859,11 +1897,10 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
+  // Recalculate saldo
   saveDB();
-  db.saldo=savedSaldo;
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-  fbPush();
   renderHistorico();
+  renderResumo();
   updateDelSelBtn();
 }
 
@@ -1985,13 +2022,11 @@ function deletarPeriodo(){
     var matchEq=!filtEq||a.equip===filtEq;
     return !(inRange&&matchEq);
   });
-  // Preserve current saldo — deletion from history does not affect stock levels
-  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
+  // Recalculate saldo after deletion
   saveDB();
-  db.saldo=savedSaldo;
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-  fbPush();
-  renderHistorico(); alert('Lançamentos removidos do histórico. Saldos mantidos.');
+  renderHistorico();
+  renderResumo();
+  alert('Lançamentos removidos. Resumo recalculado.');
 }
 
 function exportCSV(){
