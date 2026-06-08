@@ -184,21 +184,12 @@ input,select,textarea,button{font-family:inherit}
 
   <!-- TANQUES (Entrada + Comboio unificados) -->
   <div id="screen-entrada" class="screen">
-    <div class="topbar"><div class="tb"><h1>Tanques</h1><div class="tb-sub" id="tank-sub">Entradas e carregamentos</div></div></div>
-    <!-- Internal tab switcher -->
-    <div style="display:flex;background:var(--cd);border-bottom:1px solid var(--br);flex-shrink:0">
-      <button id="tab-btn-ent" onclick="tankTab('ent')" style="flex:1;padding:11px 8px;border:none;background:none;font-size:13px;font-weight:600;color:var(--green);border-bottom:2px solid var(--green);cursor:pointer">
-        <i class="ti ti-truck-delivery" style="font-size:15px;margin-right:5px"></i>Entrada no Tanque
-      </button>
-      <button id="tab-btn-com" onclick="tankTab('com')" style="flex:1;padding:11px 8px;border:none;background:none;font-size:13px;font-weight:500;color:var(--t2);border-bottom:2px solid transparent;cursor:pointer">
-        <i class="ti ti-flame" style="font-size:15px;margin-right:5px"></i>Abast. Comboio
-      </button>
-    </div>
-
-    <!-- ENTRADA TAB -->
-    <div id="tab-ent" class="sb">
+    <div class="topbar"><div class="tb"><h1>Tanques</h1></div></div>
+    <div class="sb">
+      <div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <i class="ti ti-truck-delivery" style="font-size:16px;color:var(--bl)"></i>Entrada no tanque
+      </div>
       <div class="card">
-        <div class="ct">Registrar recebimento</div>
         <div class="field"><label>Data</label><input type="date" id="e-data"></div>
         <div class="r2">
           <div class="field"><label>Volume (L)</label><input type="number" id="e-vol" min="1" step="0.1" placeholder="Ex: 5000" inputmode="decimal"></div>
@@ -206,9 +197,9 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
         <div style="height:1px;background:var(--br);margin:4px 0 14px"></div>
-        <div class="seg-label">Bomba do pátio</div>
-        <div id="e-foto-area" class="pha" onclick="abrirCamEntrada()" style="padding:20px 16px;margin-bottom:12px">
-          <i class="ti ti-camera" id="e-foto-icon" style="font-size:28px;color:var(--t3);display:block;margin-bottom:6px"></i>
+        <div class="seg-label">Bomba do pátio <span style="color:var(--t3);font-weight:400">(opcional)</span></div>
+        <div id="e-foto-area" class="pha" onclick="abrirCamEntrada()" style="padding:18px 16px;margin-bottom:12px">
+          <i class="ti ti-camera" id="e-foto-icon" style="font-size:26px;color:var(--t3);display:block;margin-bottom:6px"></i>
           <div class="pt" id="e-foto-label" style="font-size:12px">Fotografar bomba do pátio</div>
           <div class="ps" id="e-foto-sub" style="font-size:11px">Visor do horímetro ou bomba</div>
         </div>
@@ -222,13 +213,14 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <button class="btn bp" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
       </div>
-      <div class="card"><div class="ct">Histórico de entradas</div><div id="hist-ent"></div></div>
-    </div>
+      <div class="card" style="margin-bottom:8px"><div class="ct">Últimas entradas</div><div id="hist-ent"></div></div>
 
-    <!-- COMBOIO TAB -->
-    <div id="tab-com" class="sb" style="display:none">
+      <div style="height:3px;background:var(--br);border-radius:2px;margin:16px 0"></div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <i class="ti ti-flame" style="font-size:16px;color:var(--am)"></i>Abastecimento do comboio
+      </div>
       <div class="card">
-        <div class="ct">Registrar carregamento</div>
         <div class="r2">
           <div class="field"><label>Data</label><input type="date" id="c-data"></div>
           <div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000" inputmode="decimal"></div>
@@ -239,7 +231,7 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
       </div>
-      <div class="card"><div class="ct">Histórico de carregamentos</div><div id="hist-com"></div></div>
+      <div class="card"><div class="ct">Últimos carregamentos</div><div id="hist-com"></div></div>
     </div>
     <nav class="bnav" id="nav-entrada"></nav>
   </div>
@@ -934,30 +926,32 @@ function onFotoBomba(input){
 
 function preprocessImagem(dataUrl, callback){
   try{
-    var img = new Image();
-    img.onload = function(){
-      var canvas = document.createElement('canvas');
-      // Scale up for better OCR accuracy
-      var scale = Math.min(4, 1200/Math.max(img.width,img.height));
-      canvas.width  = img.width  * scale;
-      canvas.height = img.height * scale;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      // Convert to grayscale and increase contrast
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var data = imageData.data;
-      for(var i=0;i<data.length;i+=4){
-        var gray = 0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
-        // High contrast threshold for handwritten digits
-        var val = gray > 140 ? 255 : 0;
-        data[i]=data[i+1]=data[i+2]=val;
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement('canvas');
+      var ctx=canvas.getContext('2d');
+      // Crop to central 80% width, 50% height — removes borders, focuses on the number display
+      var cx=Math.floor(img.width*0.10), cy=Math.floor(img.height*0.25);
+      var cw=Math.floor(img.width*0.80), ch=Math.floor(img.height*0.50);
+      var scale=Math.min(5,1400/Math.max(cw,ch));
+      canvas.width=Math.floor(cw*scale); canvas.height=Math.floor(ch*scale);
+      ctx.drawImage(img,cx,cy,cw,ch,0,0,canvas.width,canvas.height);
+      // Adaptive threshold: measure average brightness then binarize
+      var id=ctx.getImageData(0,0,canvas.width,canvas.height);
+      var d=id.data, tot=0;
+      for(var i=0;i<d.length;i+=4) tot+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      var avg=tot/(d.length/4);
+      var thr=Math.max(80,Math.min(200,avg*0.85));
+      for(var j=0;j<d.length;j+=4){
+        var g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2];
+        var v=g>thr?255:0; d[j]=d[j+1]=d[j+2]=v;
       }
-      ctx.putImageData(imageData,0,0);
+      ctx.putImageData(id,0,0);
       callback(canvas.toDataURL('image/png'));
     };
-    img.onerror = function(){ callback(dataUrl); };
-    img.src = dataUrl;
-  }catch(e){ callback(dataUrl); }
+    img.onerror=function(){callback(dataUrl);};
+    img.src=dataUrl;
+  }catch(e){callback(dataUrl);}
 }
 
 function runOCR(dataUrl){
@@ -970,13 +964,17 @@ function runOCR(dataUrl){
         tessedit_pageseg_mode:'7'
       })
       .then(function(res){
-        var num=(res.data.text||'').replace(/[^0-9]/g,'').trim();
+        var _rt=(res.data.text||'').trim();
+        var _rm=_rt.match(/[0-9]+/g)||[];
+        var num=_rm.reduce(function(a,b){return b.length>=a.length?b:a;},'');
         if(num&&num.length>=1){
           fs.analisando=false; fs.hod=num; renderField();
         } else {
           // Retry without whitelist (catches digits written oddly)
           return Tesseract.recognize(processedUrl,'eng',{logger:function(){}}).then(function(res2){
-            var num2=(res2.data.text||'').replace(/[^0-9]/g,'').trim();
+            var _t2=(res2.data.text||'').trim();
+            var _m2=_t2.match(/[0-9]+/g)||[];
+            var num2=_m2.reduce(function(a,b){return b.length>=a.length?b:a;},'');
             fs.analisando=false;
             fs.hod=(num2&&num2.length>=1)?num2:null;
             renderField();
@@ -1030,8 +1028,15 @@ function fsConfirmar(){
   var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
   db.abastecimentos.push(abast);
 
-  if(fs.imgHod&&fs.imgId){
-    try{localStorage.setItem('foto_'+fs.imgId,JSON.stringify({id:fs.imgId,data:today(),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),imgHod:fs.imgHod,imgBomba:fs.imgBomba||null,conferido:false}));}catch(e){}
+  if(fs.imgHod||fs.imgBomba){
+    var fid=fs.imgId||uid();
+    try{
+      var fRec={id:fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),conferido:false};
+      if(fs.imgHod) fRec.imgHod=fs.imgHod;
+      if(fs.imgBomba) fRec.imgBomba=fs.imgBomba;
+      localStorage.setItem('foto_'+fid,JSON.stringify(fRec));
+      abast.fotoId=fid;
+    }catch(e){console.error('Foto:',e);}
   }
   saveDB();
 
@@ -1402,10 +1407,15 @@ function renderFotos(){
     var eq=db.equipamentos.filter(function(e){return e.cod===f.equip;})[0];
     var unid=eq&&eq.unidade==='km'?'km':'h';
     var st=f.conferido?'<span class="fbadge fbok">Conferida</span>':'<span class="fbadge fbpend">Pendente</span>';
-    var imgs='';
-    if(f.imgHod) imgs+='<img src="'+f.imgHod+'" loading="lazy" style="width:50%;display:inline-block;max-height:160px;object-fit:cover">';
-    if(f.imgBomba) imgs+='<img src="'+f.imgBomba+'" loading="lazy" style="width:50%;display:inline-block;max-height:160px;object-fit:cover">';
-    if(!f.imgHod&&f.img) imgs='<img src="'+f.img+'" loading="lazy">'; // backwards compat
+    var imgs='',imgSrcs=[];
+    if(f.imgHod) imgSrcs.push(f.imgHod);
+    if(f.imgBomba) imgSrcs.push(f.imgBomba);
+    if(!imgSrcs.length&&f.img) imgSrcs.push(f.img);
+    if(imgSrcs.length){
+      imgs='<div style="display:flex;gap:4px;padding:8px 8px 0">';
+      imgSrcs.forEach(function(s){imgs+='<img src="'+s+'" loading="lazy" style="flex:1;max-height:90px;object-fit:cover;border-radius:6px">';});
+      imgs+='</div>';
+    }
     return'<div class="foto-card">'+imgs+'<div class="fcb"><div class="fct">'+f.equip+' — '+f.hod+' '+unid+' • '+Number(f.vol).toFixed(0)+' L</div>'+
       '<div class="fcs">'+fmtDate(f.data)+' '+st+'</div>'+
       '<div class="fca">'+(!f.conferido?'<button class="btn bp bsm" onclick="conferirFoto(\''+f.id+'\')"><i class="ti ti-check"></i> Conferir</button>':'')+
@@ -1612,26 +1622,7 @@ function confirmarApagar(){
 // ─────────────────────────────────────────────
 //  TANQUES TAB SWITCH (Item 4)
 // ─────────────────────────────────────────────
-function tankTab(tab){
-  var tabEnt=document.getElementById('tab-ent');
-  var tabCom=document.getElementById('tab-com');
-  var btnEnt=document.getElementById('tab-btn-ent');
-  var btnCom=document.getElementById('tab-btn-com');
-  if(!tabEnt||!tabCom)return;
-  if(tab==='ent'){
-    tabEnt.style.display=''; tabCom.style.display='none';
-    btnEnt.style.color='var(--green)'; btnEnt.style.borderBottomColor='var(--green)'; btnEnt.style.fontWeight='600';
-    btnCom.style.color='var(--t2)'; btnCom.style.borderBottomColor='transparent'; btnCom.style.fontWeight='500';
-  } else {
-    tabEnt.style.display='none'; tabCom.style.display='';
-    btnCom.style.color='var(--green)'; btnCom.style.borderBottomColor='var(--green)'; btnCom.style.fontWeight='600';
-    btnEnt.style.color='var(--t2)'; btnEnt.style.borderBottomColor='transparent'; btnEnt.style.fontWeight='500';
-    // Populate operador dropdown
-    var sel=document.getElementById('c-op');
-    if(sel) sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
-    renderHistCom();
-  }
-}
+function tankTab(tab){}
 
 // ─────────────────────────────────────────────
 //  HISTÓRICO COM CHECKBOX (Item 2)
@@ -1707,10 +1698,24 @@ function renderHistorico(){
   var el=document.getElementById('hist-lista');
   if(!todos.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento no período</div>';return;}
   el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+todos.length+' lançamento'+(todos.length>1?'s':'')+'</div>'+
-  todos.map(function(r){
-    var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
-    return'<div class="hi"><div class="hic '+r.tipo+'"><i class="ti '+ic+'"></i></div><div class="hb"><div class="hn">'+r.nome+'</div><div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div><div class="hv">'+r.vol+'</div></div>';
-  }).join('');
+  (function(){
+    var html='';
+    todos.forEach(function(r){
+      var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
+      var rid=(r.raw&&r.raw.id)||'';
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--br)">';
+      html+='<input type="checkbox" class="hist-cb" data-id="'+rid+'" data-tipo="'+r.tipo+'" onchange="onHistCbChange(this)"';
+      html+=' style="width:20px;height:20px;flex-shrink:0;accent-color:var(--green);cursor:pointer">';
+      html+='<div class="hic '+r.tipo+'" style="flex-shrink:0"><i class="ti '+ic+'"></i></div>';
+      html+='<div class="hb" style="flex:1;min-width:0">';
+      html+='<div class="hn">'+r.nome+'</div>';
+      html+='<div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div>';
+      html+='</div>';
+      html+='<div class="hv">'+r.vol+'</div>';
+      html+='</div>';
+    });
+    return html;
+  })();
 }
 
 function exportHistXLS(){
