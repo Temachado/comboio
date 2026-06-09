@@ -425,7 +425,9 @@ var DB_KEY = 'fuelterra_v6';
 var FB_KEY = 'fuelterra_fb_url';
 var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],ciclos:[],cicloAtivo:null,saldo:{res:0,com:0},admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
-var fbRef = null, fbApp = null, fbActive = false, fbRole = 'campo';
+var fbApp = null, fbActive = false, fbRole = 'campo';
+var fbRefMaster = null;  // /comboio_master — Mac writes here
+var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos here
 
 // Field wizard state — never destroyed during input
 var fs = {step:1, equip:null, hod:null, litros:null,
@@ -480,152 +482,126 @@ function ativarFirebase(){
 var _fbIgnoreNext = false;
 
 function iniciarFirebase(url, showAlert, role){
+  fbRole = role||'campo';
   try{
-    // Always off existing listener first
-    try{if(fbRef)fbRef.off();}catch(e){}
-    fbRef=null; fbActive=false;
-    // Reuse or create app with fixed name
-    try{
-      fbApp = firebase.app('comboio');
-      // Update DB URL if changed
-      fbApp = firebase.initializeApp({databaseURL:url},'comboio_'+Date.now());
-    }catch(e){
-      fbApp = firebase.initializeApp({databaseURL:url},'comboio');
-    }
-    fbRef = fbApp.database().ref('comboio');
-    fbActive = true;
-    fbRole = role||'campo'; // 'admin' = push only, 'campo' = listen only
+    // Clean up previous connections
+    try{if(fbRefMaster)fbRefMaster.off();}catch(e){}
+    try{if(fbRefCampo)fbRefCampo.off();}catch(e){}
+    try{if(fbApp)fbApp.delete();}catch(e){}
+    fbApp=null; fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
-    // Listen for remote changes — replace all data from Firebase
-    fbRef.on('value', function(snap){
-      // Admin role: only accept abastecimentos and notificacoes from field operators
-      // Ignores all other keys — Mac is master for those
-      if(fbRole==='admin'){
-        if(_fbIgnoreNext){_fbIgnoreNext=false; return;}
-        var snap2=snap.val(); if(!snap2) return;
-        var macChanged=false;
-        // Accept abastecimentos from field (merge)
-        if(snap2.abastecimentos&&Array.isArray(snap2.abastecimentos)){
-          var macLocalIds=db.abastecimentos.map(function(a){return a.id;});
-          var fromField=snap2.abastecimentos.filter(function(a){return macLocalIds.indexOf(a.id)===-1;});
-          if(fromField.length){
-            db.abastecimentos=db.abastecimentos.concat(fromField);
-            macChanged=true;
-          }
-        }
-        // Accept notificacoes from field (merge)
-        if(snap2.notificacoes&&Array.isArray(snap2.notificacoes)){
-          var macLocalNIds=(db.notificacoes||[]).map(function(n){return n.id;});
-          var fromFieldN=snap2.notificacoes.filter(function(n){return macLocalNIds.indexOf(n.id)===-1;});
-          if(fromFieldN.length){
-            db.notificacoes=(db.notificacoes||[]).concat(fromFieldN);
-            macChanged=true;
-          }
-        }
-        if(macChanged){
+    // Create Firebase app
+    try{fbApp=firebase.app('cb');}catch(e){
+      fbApp=firebase.initializeApp({databaseURL:url},'cb');
+    }
+    var db2=fbApp.database();
+    fbRefMaster = db2.ref('comboio_master');
+    fbRefCampo  = db2.ref('comboio_campo');
+    fbActive = true;
+
+    if(fbRole==='admin'){
+      // MAC: Listen ONLY to campo abastecimentos
+      fbRefCampo.child('abastecimentos').on('value', function(snap){
+        var arr=snap.val();
+        if(!arr||!Array.isArray(arr)) return;
+        var localIds=db.abastecimentos.map(function(a){return a.id;});
+        var novos=arr.filter(function(a){return localIds.indexOf(a.id)===-1;});
+        if(novos.length){
+          db.abastecimentos=db.abastecimentos.concat(novos);
           try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
           updateNotifBadge();
-          var aEl=document.querySelector('.screen.active');
-          if(aEl){
-            var aId=aEl.id.replace('screen-','');
-            if(aId==='resumo') renderResumo();
-            else if(aId==='notif') renderNotif();
-            else if(aId==='historico') renderHistorico();
+          var ae=document.querySelector('.screen.active');
+          if(ae){var sid=ae.id.replace('screen-','');
+            if(sid==='resumo') renderResumo();
+            else if(sid==='historico') renderHistorico();
+            else if(sid==='notif') renderNotif();
           }
         }
-        return;
-      }
-      if(_fbIgnoreNext){_fbIgnoreNext=false;return;}
-      var r = snap.val();
-      if(!r) return;
-      var changed = false;
-      // iPhone receives: master data from Mac
-      var masterKeys=['equipamentos','operadores','entradas','comboios','ciclos','cicloAtivo','saldo'];
-      masterKeys.forEach(function(k){
-        if(r[k]!==undefined&&JSON.stringify(r[k])!==JSON.stringify(db[k])){
-          db[k]=r[k]; changed=true;
+      }, function(e){console.error('Mac campo listener:',e);});
+
+      // MAC: Also listen to campo notificacoes
+      fbRefCampo.child('notificacoes').on('value', function(snap){
+        var arr=snap.val();
+        if(!arr||!Array.isArray(arr)) return;
+        var localNIds=(db.notificacoes||[]).map(function(n){return n.id;});
+        var novos=arr.filter(function(n){return localNIds.indexOf(n.id)===-1;});
+        if(novos.length){
+          db.notificacoes=(db.notificacoes||[]).concat(novos);
+          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+          updateNotifBadge();
         }
-      });
-      // Abastecimentos: merge local + remote (don't lose local entries)
-      if(r.abastecimentos&&Array.isArray(r.abastecimentos)){
-        var locIds=db.abastecimentos.map(function(a){return a.id;});
-        var newOnes=r.abastecimentos.filter(function(a){return locIds.indexOf(a.id)===-1;});
-        if(newOnes.length){db.abastecimentos=db.abastecimentos.concat(newOnes);changed=true;}
-        // Also update existing ones if changed from Mac
-        r.abastecimentos.forEach(function(ra){
-          var li=db.abastecimentos.findIndex(function(a){return a.id===ra.id;});
-          if(li>=0&&JSON.stringify(db.abastecimentos[li])!==JSON.stringify(ra)){
-            db.abastecimentos[li]=ra; changed=true;
+      }, function(e){console.error('Mac notif listener:',e);});
+
+    } else {
+      // IPHONE: Listen to master (Mac data) — full replace
+      fbRefMaster.on('value', function(snap){
+        var r=snap.val();
+        if(!r) return;
+        var changed=false;
+        // Replace master data completely
+        ['equipamentos','operadores','entradas','comboios','ciclos','cicloAtivo','saldo'].forEach(function(k){
+          if(r[k]!==undefined && JSON.stringify(r[k])!==JSON.stringify(db[k])){
+            db[k]=r[k]; changed=true;
           }
         });
-      }
-      // Notificações: merge
-      if(r.notificacoes&&Array.isArray(r.notificacoes)){
-        var locNIds=(db.notificacoes||[]).map(function(n){return n.id;});
-        var newNotifs=r.notificacoes.filter(function(n){return locNIds.indexOf(n.id)===-1;});
-        if(newNotifs.length){db.notificacoes=(db.notificacoes||[]).concat(newNotifs);changed=true;}
-      }
-      if(changed){
-        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-        renderSyncStatus();
-        var activeEl=document.querySelector('.screen.active');
-        if(activeEl){
-          var sid=activeEl.id.replace('screen-','');
-          if(sid==='resumo') renderResumo();
-          else if(sid==='entrada') renderHistEnt();
-          else if(sid==='comboio') renderHistCom();
-          else if(sid==='fotos') renderFotos();
-          else if(sid==='admin') renderAdmin();
-          else if(sid==='notif') renderNotif();
+        // Merge abastecimentos — keep local, add from master
+        if(r.abastecimentos&&Array.isArray(r.abastecimentos)){
+          var locIds=db.abastecimentos.map(function(a){return a.id;});
+          var fromMac=r.abastecimentos.filter(function(a){return locIds.indexOf(a.id)===-1;});
+          if(fromMac.length){db.abastecimentos=db.abastecimentos.concat(fromMac);changed=true;}
         }
-      }
-    }, function(err){
-      fbActive=false;
-      console.error('Firebase listen error:',err);
-      renderSyncStatus();
-    });
+        if(changed){
+          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+          renderSyncStatus();
+          var ae=document.querySelector('.screen.active');
+          if(ae){var sid=ae.id.replace('screen-','');
+            if(sid==='resumo') renderResumo();
+            else if(sid==='field') renderField();
+            else if(sid==='entrada'){renderHistEnt();renderHistCom();}
+            else if(sid==='fotos') renderFotos();
+            else if(sid==='notif') renderNotif();
+          }
+        }
+      }, function(e){console.error('iPhone master listener:',e);});
+    }
 
     renderSyncStatus();
-    fbPush();
-    if(showAlert) alert('Sincronização ativa!\nDados serão atualizados em tempo real em todos os dispositivos.');
+    if(fbRole==='admin') fbPush();
+    if(showAlert) alert('Sincroniza\u00e7\u00e3o ativada!');
   }catch(e){
     fbActive=false;
     console.error('Firebase init error:',e);
-    if(showAlert) alert('Erro ao conectar: '+e.message+'\n\nVerifique a URL do Firebase.');
+    if(showAlert) alert('Erro ao conectar: '+e.message);
   }
 }
 
+
 function fbPush(){
-  // Only Mac (admin logged in) pushes to Firebase
-  // iPhone only listens — never overwrites Mac data
-  if(!fbRef||!fbActive) return;
-  if(fbRole!=='admin') return;
-  _fbIgnoreNext = true;
+  // Only Mac (admin role) pushes to master
+  if(!fbRefMaster||!fbActive||fbRole!=='admin') return;
   try{
-    fbRef.set({
+    fbRefMaster.set({
       equipamentos:db.equipamentos||[],
       operadores:db.operadores||[],
       entradas:db.entradas||[],
       comboios:db.comboios||[],
       abastecimentos:db.abastecimentos||[],
-      notificacoes:db.notificacoes||[],
       ciclos:db.ciclos||[],
       cicloAtivo:db.cicloAtivo||null,
       saldo:db.saldo||{res:0,com:0}
-    }, function(err){
-      if(err){_fbIgnoreNext=false; console.error('fbPush error:',err);}
     });
-  }catch(e){_fbIgnoreNext=false; console.error('fbPush catch:',e);}
+  }catch(e){console.error('fbPush:',e);}
 }
+
 
 function renderSyncStatus(){
   var el=document.getElementById('sync-status'); if(!el) return;
   var url=getFbUrl();
   if(fbActive&&url){
     var mode=fbRole==='admin'
-      ?'Mac — enviando cadastros e registros para iPhone'
-      :'Campo — enviando abastecimentos para Mac, recebendo cadastros';
-    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa<br><span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
+      ?'Mac → iPhone (mestre)'
+      :'iPhone recebe do Mac — campo envia abastecimentos';
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — <span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
   } else if(url){
     el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado.</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
@@ -1410,11 +1386,10 @@ function fsConfirmar(){
   }
 
   // Update cycle after equipment fill
-  // Operador de campo: envia abastecimentos e notificações ao Mac via Firebase
-  if(fbRef&&fbActive&&fbRole==='campo'){
+  // Operador de campo: envia abastecimentos ao Mac via /comboio_campo/
+  if(fbRefCampo&&fbActive&&fbRole==='campo'){
     try{
-      fbRef.child('abastecimentos').set(db.abastecimentos||[]);
-      fbRef.child('notificacoes').set(db.notificacoes||[]);
+      fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);
     }catch(e){console.error('Campo push:',e);}
   }
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
