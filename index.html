@@ -171,9 +171,8 @@ input,select,textarea,button{font-family:inherit}
   <div id="screen-resumo" class="screen">
     <div class="topbar"><div class="tb"><div style="flex:1"><h1>Controle de combustível</h1><div class="tb-sub" id="res-date"></div></div><span class="pill" id="res-pill">offline</span></div></div>
     <div class="sb">
-      <div class="metrics" id="res-metrics"></div>
       <div id="res-ciclo"></div>
-      <button id="btn-reiniciar" class="btn bs" onclick="reiniciarControle()" style="display:none;margin-bottom:14px"><i class="ti ti-refresh"></i> Reiniciar controle do resumo</button>
+      <button id="btn-reiniciar" class="btn bs" onclick="reiniciarControle()" style="display:none;margin-bottom:12px;width:100%"><i class="ti ti-refresh"></i> Reiniciar controle do resumo</button>
       <div class="card"><div class="ct">Últimos lançamentos (semana)</div><div id="res-hist"></div></div>
     </div>
     <nav class="bnav" id="nav-resumo"></nav>
@@ -569,7 +568,8 @@ function iniciarFirebase(url, showAlert, role){
       renderSyncStatus();
     });
 
-    // Always listen to campo entries (for master device)
+    // Always listen to campo entries — for ALL devices
+    // This ensures Mac gets iPhone abastecimentos and ciclo updates
     fbRefCampo.child('abastecimentos').on('value', function(snap){
       var arr=snap.val();
       if(!arr||!Array.isArray(arr)) return;
@@ -578,7 +578,18 @@ function iniciarFirebase(url, showAlert, role){
       if(novos.length){
         db.abastecimentos=db.abastecimentos.concat(novos);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        updateSaldo();
+        // Update ciclo with new field data
+        if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
         updateNotifBadge();
+        // Refresh active screen
+        var ae=document.querySelector('.screen.active');
+        if(ae){
+          var sid=ae.id.replace('screen-','');
+          if(sid==='resumo') renderResumo();
+          else if(sid==='historico') renderHistorico();
+          else if(sid==='notif') renderNotif();
+        }
       }
     });
 
@@ -952,18 +963,14 @@ function renderResumo(){
   var pill=document.getElementById('res-pill');
   pill.textContent=navigator.onLine?'online':'offline';
   pill.className='pill '+(navigator.onLine?'p-on':'p-off');
-  document.getElementById('res-metrics').innerHTML=
-    '<div class="met"><div class="ml">Reservatório</div><div class="mv">'+Math.max(0,sr).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros disponíveis</div></div>'+
-    '<div class="met ok"><div class="ml">Comboio</div><div class="mv">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros no comboio</div></div>'+
-    '<div class="met"><div class="ml">Total recebido</div><div class="mv">'+te.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div><div class="ms">litros histórico</div></div>'+
-    '<div class="met"><div class="ml">Diferença</div><div class="mv">'+dif.toFixed(0)+'</div><div class="ms">acumulado</div></div>';
+  // metrics remove// metrics display removed
   // Inject ciclo panel — active or last closed
   var cicloPanel=document.getElementById('res-ciclo');
   if(cicloPanel) cicloPanel.innerHTML=renderCicloPanel();
 
   // Reiniciar button (admin only)
   var btnRei=document.getElementById('btn-reiniciar');
-  if(btnRei) btnRei.style.display=adminLogado?'':'none';
+  if(btnRei) btnRei.style.display=(adminLogado&&(db.cicloAtivo||( db.ciclos&&db.ciclos.length)))?'flex':'none';
   // Alerts moved to notificações tab
   // Show only current week (Mon-Sun)
   var now=new Date(), dow=now.getDay(), diff=dow===0?6:dow-1;
@@ -1444,9 +1451,10 @@ function fsConfirmar(){
   }
 
   // Update cycle after equipment fill
-  // Operador de campo: envia abastecimentos ao Mac via /comboio_campo/
-  if(fbRefCampo&&fbActive&&fbRole==='campo'){
+  // Operador de campo: envia abastecimentos via Firebase
+  if(fbRefCampo&&fbActive){
     try{
+      // Write to campo node for Mac to pick up
       fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);
     }catch(e){console.error('Campo push:',e);}
   }
@@ -2082,8 +2090,9 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
-  // Recalculate saldo
   saveDB();
+  if(fbRefCampo&&fbActive){try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}}
+  if(fbRefMaster&&fbActive){setTimeout(fbPush,300);}
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
