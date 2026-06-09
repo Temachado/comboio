@@ -494,16 +494,73 @@ function iniciarFirebase(url, showAlert){
 
     // Listen for remote changes — replace all data from Firebase
     fbRef.on('value', function(snap){
+      // Mac (admin): only accept abastecimentos and notificacoes from field operators
+      // Ignores all other keys (equipamentos, etc.) — Mac is master for those
+      if(adminLogado){
+        if(_fbIgnoreNext){_fbIgnoreNext=false; return;}
+        var snap2=snap.val(); if(!snap2) return;
+        var macChanged=false;
+        // Accept abastecimentos from field (merge)
+        if(snap2.abastecimentos&&Array.isArray(snap2.abastecimentos)){
+          var macLocalIds=db.abastecimentos.map(function(a){return a.id;});
+          var fromField=snap2.abastecimentos.filter(function(a){return macLocalIds.indexOf(a.id)===-1;});
+          if(fromField.length){
+            db.abastecimentos=db.abastecimentos.concat(fromField);
+            macChanged=true;
+          }
+        }
+        // Accept notificacoes from field (merge)
+        if(snap2.notificacoes&&Array.isArray(snap2.notificacoes)){
+          var macLocalNIds=(db.notificacoes||[]).map(function(n){return n.id;});
+          var fromFieldN=snap2.notificacoes.filter(function(n){return macLocalNIds.indexOf(n.id)===-1;});
+          if(fromFieldN.length){
+            db.notificacoes=(db.notificacoes||[]).concat(fromFieldN);
+            macChanged=true;
+          }
+        }
+        if(macChanged){
+          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+          updateNotifBadge();
+          var aEl=document.querySelector('.screen.active');
+          if(aEl){
+            var aId=aEl.id.replace('screen-','');
+            if(aId==='resumo') renderResumo();
+            else if(aId==='notif') renderNotif();
+            else if(aId==='historico') renderHistorico();
+          }
+        }
+        return;
+      }
       if(_fbIgnoreNext){_fbIgnoreNext=false;return;}
       var r = snap.val();
       if(!r) return;
       var changed = false;
-      var keys = ['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes'];
-      keys.forEach(function(k){
-        if(r[k] !== undefined && JSON.stringify(r[k])!==JSON.stringify(db[k])){
+      // iPhone receives: master data from Mac
+      var masterKeys=['equipamentos','operadores','entradas','comboios','ciclos','cicloAtivo','saldo'];
+      masterKeys.forEach(function(k){
+        if(r[k]!==undefined&&JSON.stringify(r[k])!==JSON.stringify(db[k])){
           db[k]=r[k]; changed=true;
         }
       });
+      // Abastecimentos: merge local + remote (don't lose local entries)
+      if(r.abastecimentos&&Array.isArray(r.abastecimentos)){
+        var locIds=db.abastecimentos.map(function(a){return a.id;});
+        var newOnes=r.abastecimentos.filter(function(a){return locIds.indexOf(a.id)===-1;});
+        if(newOnes.length){db.abastecimentos=db.abastecimentos.concat(newOnes);changed=true;}
+        // Also update existing ones if changed from Mac
+        r.abastecimentos.forEach(function(ra){
+          var li=db.abastecimentos.findIndex(function(a){return a.id===ra.id;});
+          if(li>=0&&JSON.stringify(db.abastecimentos[li])!==JSON.stringify(ra)){
+            db.abastecimentos[li]=ra; changed=true;
+          }
+        });
+      }
+      // Notificações: merge
+      if(r.notificacoes&&Array.isArray(r.notificacoes)){
+        var locNIds=(db.notificacoes||[]).map(function(n){return n.id;});
+        var newNotifs=r.notificacoes.filter(function(n){return locNIds.indexOf(n.id)===-1;});
+        if(newNotifs.length){db.notificacoes=(db.notificacoes||[]).concat(newNotifs);changed=true;}
+      }
       if(changed){
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         renderSyncStatus();
@@ -535,7 +592,10 @@ function iniciarFirebase(url, showAlert){
 }
 
 function fbPush(){
+  // Only Mac (admin logged in) pushes to Firebase
+  // iPhone only listens — never overwrites Mac data
   if(!fbRef||!fbActive) return;
+  if(!adminLogado) return;
   _fbIgnoreNext = true;
   try{
     fbRef.set({
@@ -558,7 +618,10 @@ function renderSyncStatus(){
   var el=document.getElementById('sync-status'); if(!el) return;
   var url=getFbUrl();
   if(fbActive&&url){
-    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — dados atualizados em tempo real.</span></div>';
+    var mode=adminLogado
+      ?'Mac — enviando cadastros e registros para iPhone'
+      :'Campo — enviando abastecimentos para Mac, recebendo cadastros';
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa<br><span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
   } else if(url){
     el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado.</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
@@ -597,6 +660,9 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
+    // Mac just logged in — push local data to Firebase immediately
+    // This overwrites any stale data from iPhone
+    setTimeout(function(){if(fbActive&&fbRef)fbPush();},800);
   } else {
     document.getElementById('login-err').style.display='block';
   }
@@ -1336,6 +1402,13 @@ function fsConfirmar(){
   }
 
   // Update cycle after equipment fill
+  // Operador de campo: envia abastecimentos e notificações ao Mac via Firebase
+  if(fbRef&&fbActive&&!adminLogado){
+    try{
+      fbRef.child('abastecimentos').set(db.abastecimentos||[]);
+      fbRef.child('notificacoes').set(db.notificacoes||[]);
+    }catch(e){console.error('Campo push:',e);}
+  }
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
   fs.step=5; renderField();
 }
