@@ -425,7 +425,7 @@ var DB_KEY = 'fuelterra_v6';
 var FB_KEY = 'fuelterra_fb_url';
 var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],ciclos:[],cicloAtivo:null,saldo:{res:0,com:0},admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
-var fbRef = null, fbApp = null, fbActive = false;
+var fbRef = null, fbApp = null, fbActive = false, fbRole = 'campo';
 
 // Field wizard state — never destroyed during input
 var fs = {step:1, equip:null, hod:null, litros:null,
@@ -471,12 +471,15 @@ function ativarFirebase(){
   var url=(document.getElementById('fb-url').value||'').trim();
   if(!url){alert('Informe a URL do Firebase.');return;}
   setFbUrl(url);
-  iniciarFirebase(url,true);
+  _fbStarted=false; // allow restart with new URL
+  startFirebaseForRole(adminLogado?'admin':'campo');
+  if(adminLogado) setTimeout(function(){if(fbActive&&fbRef)fbPush();},800);
+  alert('Sincronização ativada!');
 }
 
 var _fbIgnoreNext = false;
 
-function iniciarFirebase(url, showAlert){
+function iniciarFirebase(url, showAlert, role){
   try{
     // Always off existing listener first
     try{if(fbRef)fbRef.off();}catch(e){}
@@ -491,12 +494,13 @@ function iniciarFirebase(url, showAlert){
     }
     fbRef = fbApp.database().ref('comboio');
     fbActive = true;
+    fbRole = role||'campo'; // 'admin' = push only, 'campo' = listen only
 
     // Listen for remote changes — replace all data from Firebase
     fbRef.on('value', function(snap){
-      // Mac (admin): only accept abastecimentos and notificacoes from field operators
-      // Ignores all other keys (equipamentos, etc.) — Mac is master for those
-      if(adminLogado){
+      // Admin role: only accept abastecimentos and notificacoes from field operators
+      // Ignores all other keys — Mac is master for those
+      if(fbRole==='admin'){
         if(_fbIgnoreNext){_fbIgnoreNext=false; return;}
         var snap2=snap.val(); if(!snap2) return;
         var macChanged=false;
@@ -595,7 +599,7 @@ function fbPush(){
   // Only Mac (admin logged in) pushes to Firebase
   // iPhone only listens — never overwrites Mac data
   if(!fbRef||!fbActive) return;
-  if(!adminLogado) return;
+  if(fbRole!=='admin') return;
   _fbIgnoreNext = true;
   try{
     fbRef.set({
@@ -618,7 +622,7 @@ function renderSyncStatus(){
   var el=document.getElementById('sync-status'); if(!el) return;
   var url=getFbUrl();
   if(fbActive&&url){
-    var mode=adminLogado
+    var mode=fbRole==='admin'
       ?'Mac — enviando cadastros e registros para iPhone'
       :'Campo — enviando abastecimentos para Mac, recebendo cadastros';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa<br><span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
@@ -637,6 +641,8 @@ function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
+  // Campo: start Firebase as listener only
+  startFirebaseForRole('campo');
 }
 function mostrarLoginAdmin(){
   document.getElementById('splash').style.display='none';
@@ -660,9 +666,10 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
-    // Mac just logged in — push local data to Firebase immediately
-    // This overwrites any stale data from iPhone
-    setTimeout(function(){if(fbActive&&fbRef)fbPush();},800);
+    // Admin: start Firebase as push-only master
+    // Start Firebase THEN push local data — ensures Mac data wins
+    startFirebaseForRole('admin');
+    setTimeout(function(){if(fbActive&&fbRef)fbPush();},1000);
   } else {
     document.getElementById('login-err').style.display='block';
   }
@@ -847,12 +854,13 @@ function encerrarCiclo(resultado){
 }
 
 function reiniciarControle(){
-  if(!confirm('Zerar o quadro resumo?\n\nOs contadores visuais voltam a zero.\nO ciclo de controle permanece ativo.\nOs registros são mantidos no histórico.'))return;
-  // Only reset display saldo — cycle keeps running
+  if(!confirm('Zerar o quadro resumo?\n\nOs contadores e histórico de ciclos voltam a zero.\nOs registros de abastecimento são mantidos.'))return;
   db.saldo={res:0,com:0};
+  db.cicloAtivo=null;
+  db.ciclos=[];
   saveDB();
   renderResumo();
-  alert('Resumo zerado. Ciclo de controle continua ativo.');
+  alert('Resumo e ciclos zerados.');
 }
 
 function renderCicloAtivo(){
@@ -1403,7 +1411,7 @@ function fsConfirmar(){
 
   // Update cycle after equipment fill
   // Operador de campo: envia abastecimentos e notificações ao Mac via Firebase
-  if(fbRef&&fbActive&&!adminLogado){
+  if(fbRef&&fbActive&&fbRole==='campo'){
     try{
       fbRef.child('abastecimentos').set(db.abastecimentos||[]);
       fbRef.child('notificacoes').set(db.notificacoes||[]);
@@ -2217,17 +2225,16 @@ loadDB();
   }catch(ex){}
 })();
 
-// Auto-start Firebase if URL saved
-(function(){
-  try{
-    var url=getFbUrl();
-    if(url){
-      setTimeout(function(){
-        try{iniciarFirebase(url,false);}catch(e){console.error('FB autostart:',e);}
-      },500);
-    }
-  }catch(e){}
-})();
+// Firebase starts only AFTER role is chosen (entrarCampo or doLogin)
+// This prevents iPhone data from overwriting Mac before login
+var _fbStarted = false;
+function startFirebaseForRole(role){
+  if(_fbStarted) return;
+  var url=getFbUrl();
+  if(!url) return;
+  _fbStarted=true;
+  try{iniciarFirebase(url, false, role);}catch(e){console.error('FB start:',e);}
+}
 
 // Init nav
 document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav('resumo');});
