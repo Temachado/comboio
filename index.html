@@ -427,6 +427,16 @@ var FB_KEY = 'fuelterra_fb_url';
 var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],ciclos:[],cicloAtivo:null,saldo:{res:0,com:0},admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
 var fbApp = null, fbActive = false, fbRole = 'campo';
+// Persistent device ID — identifies this specific device
+var DEVICE_KEY = 'comboio_device_id';
+var myDeviceId = (function(){
+  try{
+    var id = localStorage.getItem(DEVICE_KEY);
+    if(!id){ id = 'dev_'+Date.now()+'_'+Math.random().toString(36).slice(2,8); localStorage.setItem(DEVICE_KEY,id); }
+    return id;
+  }catch(e){ return 'dev_'+Date.now(); }
+})();
+var masterDeviceId = null; // set when Firebase data arrives
 var fbRefMaster = null;  // /comboio_master — Mac writes here
 var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos here
 
@@ -501,45 +511,38 @@ function iniciarFirebase(url, showAlert, role){
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    if(fbRole==='admin'){
-      // MAC: Listen ONLY to campo abastecimentos
-      fbRefCampo.child('abastecimentos').on('value', function(snap){
-        var arr=snap.val();
-        if(!arr||!Array.isArray(arr)) return;
-        var localIds=db.abastecimentos.map(function(a){return a.id;});
-        var novos=arr.filter(function(a){return localIds.indexOf(a.id)===-1;});
-        if(novos.length){
-          db.abastecimentos=db.abastecimentos.concat(novos);
-          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-          updateNotifBadge();
-          var ae=document.querySelector('.screen.active');
-          if(ae){var sid=ae.id.replace('screen-','');
-            if(sid==='resumo') renderResumo();
-            else if(sid==='historico') renderHistorico();
-            else if(sid==='notif') renderNotif();
+    // UNIFIED LISTENER: works for both Mac and iPhone
+    // Uses masterId to determine who is the source of truth
+    fbRefMaster.on('value', function(snap){
+      var r=snap.val();
+      if(!r){ renderSyncStatus(); return; }
+      
+      var incomingMasterId=r._masterId||null;
+      var iAmMaster=(incomingMasterId && incomingMasterId===myDeviceId);
+      
+      masterDeviceId=incomingMasterId;
+      if(iAmMaster){
+        // This is MY data coming back — I am the Mac/master
+        // Only accept new abastecimentos from campo
+        fbRefCampo.child('abastecimentos').once('value',function(cs){
+          var arr=cs.val();
+          if(arr&&Array.isArray(arr)){
+            var lids=db.abastecimentos.map(function(a){return a.id;});
+            var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+            if(novos.length){
+              db.abastecimentos=db.abastecimentos.concat(novos);
+              try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+              var ae=document.querySelector('.screen.active');
+              if(ae){var sid=ae.id.replace('screen-','');
+                if(sid==='resumo') renderResumo();
+                else if(sid==='historico') renderHistorico();
+              }
+            }
           }
-        }
-      }, function(e){console.error('Mac campo listener:',e);});
-
-      // MAC: Also listen to campo notificacoes
-      fbRefCampo.child('notificacoes').on('value', function(snap){
-        var arr=snap.val();
-        if(!arr||!Array.isArray(arr)) return;
-        var localNIds=(db.notificacoes||[]).map(function(n){return n.id;});
-        var novos=arr.filter(function(n){return localNIds.indexOf(n.id)===-1;});
-        if(novos.length){
-          db.notificacoes=(db.notificacoes||[]).concat(novos);
-          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-          updateNotifBadge();
-        }
-      }, function(e){console.error('Mac notif listener:',e);});
-
-    } else {
-      // IPHONE/CAMPO: Listen to /comboio_master — apply all Mac data
-      fbRefMaster.on('value', function(snap){
-        var r=snap.val();
-        if(!r){ renderSyncStatus(); return; }
-        // Apply ALL master data — Mac is the source of truth
+        });
+      } else {
+        // I am NOT the master — receive all data from Firebase
+        masterDeviceId=incomingMasterId;
         var keys=['equipamentos','operadores','entradas','comboios',
                   'abastecimentos','ciclos','cicloAtivo','saldo'];
         keys.forEach(function(k){
@@ -547,23 +550,37 @@ function iniciarFirebase(url, showAlert, role){
         });
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         renderSyncStatus();
-        // Refresh current screen
         var ae=document.querySelector('.screen.active');
         if(ae){
           var sid=ae.id.replace('screen-','');
           if(sid==='resumo') renderResumo();
           else if(sid==='field') renderField();
           else if(sid==='entrada'){renderHistEnt();renderHistCom();}
+          else if(sid==='admin') renderAdmin();
           else if(sid==='fotos') renderFotos();
           else if(sid==='notif') renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-      }, function(err){
-        console.error('Campo master listener:',err.message||err);
-        fbActive=false;
-        renderSyncStatus();
-      });
-    }
+      }
+      renderSyncStatus();
+    }, function(err){
+      console.error('FB listener error:',err.message||err);
+      fbActive=false;
+      renderSyncStatus();
+    });
+
+    // Always listen to campo entries (for master device)
+    fbRefCampo.child('abastecimentos').on('value', function(snap){
+      var arr=snap.val();
+      if(!arr||!Array.isArray(arr)) return;
+      var lids=db.abastecimentos.map(function(a){return a.id;});
+      var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+      if(novos.length){
+        db.abastecimentos=db.abastecimentos.concat(novos);
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        updateNotifBadge();
+      }
+    });
 
     renderSyncStatus();
     if(fbRole==='admin') fbPush();
@@ -588,7 +605,9 @@ function fbPush(){
       abastecimentos:db.abastecimentos||[],
       ciclos:db.ciclos||[],
       cicloAtivo:db.cicloAtivo||null,
-      saldo:db.saldo||{res:0,com:0}
+      saldo:db.saldo||{res:0,com:0},
+      _masterId:myDeviceId,
+      _masterTs:Date.now()
     });
   }catch(e){console.error('fbPush:',e);}
 }
@@ -598,9 +617,8 @@ function renderSyncStatus(){
   var el=document.getElementById('sync-status'); if(!el) return;
   var url=getFbUrl();
   if(fbActive&&url){
-    var mode=fbRole==='admin'
-      ?'Mac → iPhone (mestre)'
-      :'iPhone recebe do Mac — campo envia abastecimentos';
+    var isMasterDev=(masterDeviceId&&masterDeviceId===myDeviceId);
+    var mode=isMasterDev?'Este dispositivo é o mestre':'Recebendo dados do dispositivo mestre';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — <span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
   } else if(url){
     el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado. Aguardando dados do Mac...</span></div>';
