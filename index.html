@@ -491,6 +491,28 @@ function ativarFirebase(){
 
 var _fbIgnoreNext = false;
 
+// Named handler for campo abastecimentos — allows detach/reattach
+function onCampoAbastUpdate(snap){
+  var arr=snap.val();
+  if(!arr||!Array.isArray(arr)) return;
+  var lids=db.abastecimentos.map(function(a){return a.id;});
+  var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+  if(novos.length){
+    db.abastecimentos=db.abastecimentos.concat(novos);
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+    updateSaldo();
+    if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
+    updateNotifBadge();
+    var ae=document.querySelector('.screen.active');
+    if(ae){
+      var sid=ae.id.replace('screen-','');
+      if(sid==='resumo') renderResumo();
+      else if(sid==='historico') renderHistorico();
+      else if(sid==='notif') renderNotif();
+    }
+  }
+}
+
 function iniciarFirebase(url, showAlert, role){
   fbRole = role||'campo';
   try{
@@ -569,29 +591,7 @@ function iniciarFirebase(url, showAlert, role){
     });
 
     // Always listen to campo entries — for ALL devices
-    // This ensures Mac gets iPhone abastecimentos and ciclo updates
-    fbRefCampo.child('abastecimentos').on('value', function(snap){
-      var arr=snap.val();
-      if(!arr||!Array.isArray(arr)) return;
-      var lids=db.abastecimentos.map(function(a){return a.id;});
-      var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
-      if(novos.length){
-        db.abastecimentos=db.abastecimentos.concat(novos);
-        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-        updateSaldo();
-        // Update ciclo with new field data
-        if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
-        updateNotifBadge();
-        // Refresh active screen
-        var ae=document.querySelector('.screen.active');
-        if(ae){
-          var sid=ae.id.replace('screen-','');
-          if(sid==='resumo') renderResumo();
-          else if(sid==='historico') renderHistorico();
-          else if(sid==='notif') renderNotif();
-        }
-      }
-    });
+    fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
     if(fbRole==='admin') fbPush();
@@ -905,11 +905,7 @@ function renderCicloAtivo(){
       bar(pctEq,ok?'var(--green)':pctEq>90?'var(--red)':'var(--bl)')+
     '</div>'+
     '</div>'+
-    (Math.abs(difEntry)>0?
-      '<div class="alert '+(ok?'aok':'aw')+'" style="margin:0">'+
-      '<i class="ti ti-'+(ok?'check':'alert-triangle')+'"></i>'+
-      '<span>Diferença: <strong>'+(difEntry>0?'+':'')+difEntry.toFixed(0)+' L</strong>'+
-      ' ('+Math.abs(ve>0?difEntry/ve*100:0).toFixed(1)+'%) — tolerância 2%</span></div>':'')+'</div>';
+    '</div>';
 }
 
 function renderUltimoCiclo(){
@@ -2090,9 +2086,19 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
+  // Pause campo listener to prevent deleted items from reappearing
+  if(fbRefCampo) try{fbRefCampo.child('abastecimentos').off();}catch(e){}
   saveDB();
-  if(fbRefCampo&&fbActive){try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}}
-  if(fbRefMaster&&fbActive){setTimeout(fbPush,300);}
+  // Update campo node with cleaned list
+  if(fbRefCampo&&fbActive) try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}
+  // Push master
+  setTimeout(fbPush, 100);
+  // Re-attach campo listener after a delay
+  setTimeout(function(){
+    if(fbRefCampo&&fbActive){
+      fbRefCampo.child('abastecimentos').on('value',onCampoAbastUpdate);
+    }
+  }, 2000);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
