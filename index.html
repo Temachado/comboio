@@ -317,8 +317,8 @@ input,select,textarea,button{font-family:inherit}
         <div id="sync-status" style="margin-bottom:12px"></div>
         <div class="field">
           <label>URL do Firebase Realtime Database</label>
-          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
-          <div style="font-size:11px;color:var(--am);margin-top:6px"><i class="ti ti-lock" style="font-size:12px"></i> Regras Firebase: acesse o console → Realtime Database → Regras e substitua por: <code style="background:#faeeda;padding:2px 6px;border-radius:4px">{"rules":{".read":true,".write":true}}</code></div>
+          <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com" oninput="this.value=this.value.replace('http://','https://')">
+
           <div style="font-size:11px;color:var(--t2);margin-top:5px">Obtenha a URL em: <strong>console.firebase.google.com</strong> → seu projeto → Realtime Database</div>
         </div>
         <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
@@ -492,9 +492,10 @@ function iniciarFirebase(url, showAlert, role){
     fbApp=null; fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
     // Create Firebase app
-    // Always create fresh app with unique name to avoid stale connections
-    var _appName='cb'+Date.now();
-    fbApp=firebase.initializeApp({databaseURL:url}, _appName);
+    // Delete ALL existing Firebase apps first
+    var existingApps=firebase.apps||[];
+    existingApps.forEach(function(app){try{app.delete();}catch(e){}});
+    fbApp=firebase.initializeApp({databaseURL:url},'comboio');
     var db2=fbApp.database();
     fbRefMaster = db2.ref('comboio_master');
     fbRefCampo  = db2.ref('comboio_campo');
@@ -651,6 +652,7 @@ function doLogin(){
 }
 function logout(){
   adminLogado=false;
+  _fbStarted=false; // allow reinit as campo if needed
   document.getElementById('main-app').style.display='none';
   document.getElementById('splash').style.display='flex';
 }
@@ -1192,29 +1194,22 @@ function onFotoBomba(input){
   input.value='';
 }
 
-// Compress image to reduce localStorage usage
-function comprimirImg(dataUrl, qualidade){
+// Compress image synchronously using canvas
+function comprimirImg(dataUrl, qualidade, callback){
   try{
-    var canvas=document.createElement('canvas');
     var img=new Image();
-    // Synchronous approach for small images
-    var result=dataUrl;
-    // Async would be better but we need sync here
-    // Use reduced max dimension: 800px
-    var MAX=800;
-    var tmpCanvas=document.createElement('canvas');
-    var tmpCtx=tmpCanvas.getContext('2d');
-    var tmpImg=new Image();
-    tmpImg.src=dataUrl;
-    if(tmpImg.width>0){
-      var scale=Math.min(1,MAX/Math.max(tmpImg.width,tmpImg.height));
-      tmpCanvas.width=Math.floor(tmpImg.width*scale);
-      tmpCanvas.height=Math.floor(tmpImg.height*scale);
-      tmpCtx.drawImage(tmpImg,0,0,tmpCanvas.width,tmpCanvas.height);
-      result=tmpCanvas.toDataURL('image/jpeg',qualidade||0.5);
-    }
-    return result;
-  }catch(e){return dataUrl;}
+    img.onload=function(){
+      var MAX=600;
+      var scale=Math.min(1,MAX/Math.max(img.width||1,img.height||1));
+      var cv=document.createElement('canvas');
+      cv.width=Math.max(1,Math.floor(img.width*scale));
+      cv.height=Math.max(1,Math.floor(img.height*scale));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      callback(cv.toDataURL('image/jpeg',qualidade||0.4));
+    };
+    img.onerror=function(){callback(dataUrl);};
+    img.src=dataUrl;
+  }catch(e){callback(dataUrl);}
 }
 
 function preprocessImagem(dataUrl, callback){
@@ -1323,20 +1318,36 @@ function fsConfirmar(){
 
   if(fs.fotoHod||fs.fotoBomba){
     var fid=fs.imgId||uid();
-    try{
-      var fRec={id:fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),conferido:false};
-      // Compress images to JPEG 40% before storing to avoid localStorage quota
-      if(fs.imgHod) fRec.imgHod=comprimirImg(fs.imgHod,0.4);
-      if(fs.imgBomba) fRec.imgBomba=comprimirImg(fs.imgBomba,0.4);
-      localStorage.setItem('foto_'+fid,JSON.stringify(fRec));
-      abast.fotoId=fid;
-    }catch(e){
-      // If storage full, save record without images
+    abast.fotoId=fid;
+    // Save foto record with compressed images asynchronously
+    var _fid=fid, _equip=equip.cod, _hod=hodAtual, _vol=Number(fs.litros);
+    var _imgHod=fs.imgHod||null, _imgBomba=fs.imgBomba||null;
+    function salvarFotoRecord(hImg, bImg){
+      var fRec={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+        equip:_equip,hod:_hod,vol:_vol,conferido:false};
+      if(hImg) fRec.imgHod=hImg;
+      if(bImg) fRec.imgBomba=bImg;
       try{
-        var fRecSmall={id:fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),conferido:false,semFoto:true};
-        localStorage.setItem('foto_'+fid,JSON.stringify(fRecSmall));
-        abast.fotoId=fid;
-      }catch(e2){console.error('Foto storage full:',e2);}
+        localStorage.setItem('foto_'+_fid,JSON.stringify(fRec));
+      }catch(e){
+        // Storage full — save without images
+        var fr2={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+          equip:_equip,hod:_hod,vol:_vol,conferido:false,semFoto:true};
+        try{localStorage.setItem('foto_'+_fid,JSON.stringify(fr2));}catch(e2){}
+      }
+    }
+    if(_imgHod){
+      comprimirImg(_imgHod,0.4,function(h){
+        if(_imgBomba){
+          comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(h,b);});
+        } else {
+          salvarFotoRecord(h,null);
+        }
+      });
+    } else if(_imgBomba){
+      comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(null,b);});
+    } else {
+      salvarFotoRecord(null,null);
     }
   }
   saveDB();
@@ -1813,9 +1824,14 @@ function togFormEq(){var f=document.getElementById('form-eq');f.style.display=f.
 function togFormUser(){var f=document.getElementById('form-user');f.style.display=f.style.display==='none'?'block':'none';}
 
 function salvarEq(){
-  var cod=document.getElementById('eq-cod').value.trim().toUpperCase();
+  var codEl=document.getElementById('eq-cod');
+  var cod=codEl.value.trim().toUpperCase();
+  var editando=codEl.dataset.editando||'';
   if(!cod){alert('Informe o código.');return;}
-  if(db.equipamentos.filter(function(e){return e.cod===cod;}).length){alert('Código já existe.');return;}
+  // Only check duplicate when NOT in edit mode
+  if(!editando && db.equipamentos.filter(function(e){return e.cod===cod;}).length){
+    alert('Código já existe.');return;
+  }
   var _modelo=document.getElementById('eq-mod').value.trim();
   var _placa=document.getElementById('eq-placa').value.trim().toUpperCase();
   var _frente=document.getElementById('eq-frente').value.trim();
