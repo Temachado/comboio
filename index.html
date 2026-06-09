@@ -318,6 +318,7 @@ input,select,textarea,button{font-family:inherit}
         <div class="field">
           <label>URL do Firebase Realtime Database</label>
           <input type="url" id="fb-url" autocapitalize="none" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
+          <div style="font-size:11px;color:var(--am);margin-top:6px"><i class="ti ti-lock" style="font-size:12px"></i> Regras Firebase: acesse o console → Realtime Database → Regras e substitua por: <code style="background:#faeeda;padding:2px 6px;border-radius:4px">{"rules":{".read":true,".write":true}}</code></div>
           <div style="font-size:11px;color:var(--t2);margin-top:5px">Obtenha a URL em: <strong>console.firebase.google.com</strong> → seu projeto → Realtime Database</div>
         </div>
         <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
@@ -533,31 +534,22 @@ function iniciarFirebase(url, showAlert, role){
       }, function(e){console.error('Mac notif listener:',e);});
 
     } else {
-      // IPHONE: Listen to master (Mac data) — full replace
+      // IPHONE/CAMPO: Listen to /comboio_master — apply all Mac data
       fbRefMaster.on('value', function(snap){
         var r=snap.val();
-        if(!r){
-          // No data yet on master — normal on first use
-          renderSyncStatus();
-          return;
-        }
-        var changed=false;
-        ['equipamentos','operadores','entradas','comboios','ciclos','cicloAtivo','saldo'].forEach(function(k){
-          if(r[k]!==undefined && JSON.stringify(r[k])!==JSON.stringify(db[k])){
-            db[k]=r[k]; changed=true;
-          }
+        if(!r){ renderSyncStatus(); return; }
+        // Apply ALL master data — Mac is the source of truth
+        var keys=['equipamentos','operadores','entradas','comboios',
+                  'abastecimentos','ciclos','cicloAtivo','saldo'];
+        keys.forEach(function(k){
+          if(r[k]!==undefined) db[k]=r[k];
         });
-        if(r.abastecimentos&&Array.isArray(r.abastecimentos)){
-          var locIds=db.abastecimentos.map(function(a){return a.id;});
-          var fromMac=r.abastecimentos.filter(function(a){return locIds.indexOf(a.id)===-1;});
-          if(fromMac.length){db.abastecimentos=db.abastecimentos.concat(fromMac);changed=true;}
-        }
-        if(changed){
-          try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-        }
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         renderSyncStatus();
+        // Refresh current screen
         var ae=document.querySelector('.screen.active');
-        if(ae){var sid=ae.id.replace('screen-','');
+        if(ae){
+          var sid=ae.id.replace('screen-','');
           if(sid==='resumo') renderResumo();
           else if(sid==='field') renderField();
           else if(sid==='entrada'){renderHistEnt();renderHistCom();}
@@ -566,7 +558,7 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='historico') renderHistorico();
         }
       }, function(err){
-        console.error('iPhone master listener error:',err);
+        console.error('Campo master listener:',err.message||err);
         fbActive=false;
         renderSyncStatus();
       });
@@ -921,8 +913,6 @@ function renderUltimoCiclo(){
     '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
     '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
     bar(pctEq,cor)+'</div></div>'+
-    '<div style="text-align:center;font-size:11px;color:'+(ok?'var(--green)':'var(--am)')+'">'+
-    'Diferença: '+(dif>0?'+':'')+dif.toFixed(0)+' L ('+pct+'%)'+(ok?' — volumes conferem':'')+'</div>'+
     '</div>';
 }
 
@@ -1202,6 +1192,31 @@ function onFotoBomba(input){
   input.value='';
 }
 
+// Compress image to reduce localStorage usage
+function comprimirImg(dataUrl, qualidade){
+  try{
+    var canvas=document.createElement('canvas');
+    var img=new Image();
+    // Synchronous approach for small images
+    var result=dataUrl;
+    // Async would be better but we need sync here
+    // Use reduced max dimension: 800px
+    var MAX=800;
+    var tmpCanvas=document.createElement('canvas');
+    var tmpCtx=tmpCanvas.getContext('2d');
+    var tmpImg=new Image();
+    tmpImg.src=dataUrl;
+    if(tmpImg.width>0){
+      var scale=Math.min(1,MAX/Math.max(tmpImg.width,tmpImg.height));
+      tmpCanvas.width=Math.floor(tmpImg.width*scale);
+      tmpCanvas.height=Math.floor(tmpImg.height*scale);
+      tmpCtx.drawImage(tmpImg,0,0,tmpCanvas.width,tmpCanvas.height);
+      result=tmpCanvas.toDataURL('image/jpeg',qualidade||0.5);
+    }
+    return result;
+  }catch(e){return dataUrl;}
+}
+
 function preprocessImagem(dataUrl, callback){
   try{
     var img=new Image();
@@ -1306,15 +1321,23 @@ function fsConfirmar(){
   var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
   db.abastecimentos.push(abast);
 
-  if(fs.imgHod||fs.imgBomba){
+  if(fs.fotoHod||fs.fotoBomba){
     var fid=fs.imgId||uid();
     try{
       var fRec={id:fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),conferido:false};
-      if(fs.imgHod) fRec.imgHod=fs.imgHod;
-      if(fs.imgBomba) fRec.imgBomba=fs.imgBomba;
+      // Compress images to JPEG 40% before storing to avoid localStorage quota
+      if(fs.imgHod) fRec.imgHod=comprimirImg(fs.imgHod,0.4);
+      if(fs.imgBomba) fRec.imgBomba=comprimirImg(fs.imgBomba,0.4);
       localStorage.setItem('foto_'+fid,JSON.stringify(fRec));
       abast.fotoId=fid;
-    }catch(e){console.error('Foto:',e);}
+    }catch(e){
+      // If storage full, save record without images
+      try{
+        var fRecSmall={id:fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,hod:hodAtual,vol:Number(fs.litros),conferido:false,semFoto:true};
+        localStorage.setItem('foto_'+fid,JSON.stringify(fRecSmall));
+        abast.fotoId=fid;
+      }catch(e2){console.error('Foto storage full:',e2);}
+    }
   }
   saveDB();
 
@@ -1796,12 +1819,23 @@ function salvarEq(){
   var _modelo=document.getElementById('eq-mod').value.trim();
   var _placa=document.getElementById('eq-placa').value.trim().toUpperCase();
   var _frente=document.getElementById('eq-frente').value.trim();
-  db.equipamentos.push({cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:_modelo,placa:_placa,tank:parseFloat(document.getElementById('eq-tank').value)||0,unidade:document.getElementById('eq-unid').value,consumo:parseFloat(document.getElementById('eq-cons').value)||0,frente:_frente});
+  var novoEq={cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:_modelo,placa:_placa,
+    tank:parseFloat(document.getElementById('eq-tank').value)||0,
+    unidade:document.getElementById('eq-unid').value,
+    consumo:parseFloat(document.getElementById('eq-cons').value)||0,
+    frente:_frente};
+  if(editando){
+    db.equipamentos=db.equipamentos.map(function(e){return e.cod===editando?novoEq:e;});
+    codEl.dataset.editando='';
+    alert('Equipamento atualizado!');
+  } else {
+    db.equipamentos.push(novoEq);
+    alert('Equipamento cadastrado!');
+  }
   saveDB();
   ['eq-cod','eq-mod','eq-placa','eq-tank','eq-cons','eq-frente'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('form-eq').style.display='none';
   renderAdmin();
-  alert('Equipamento cadastrado!');
 }
 function removerEq(cod){
   if(!confirm('Remover "'+cod+'"?'))return;
