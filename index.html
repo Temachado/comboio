@@ -491,9 +491,9 @@ function iniciarFirebase(url, showAlert, role){
     fbApp=null; fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
     // Create Firebase app
-    try{fbApp=firebase.app('cb');}catch(e){
-      fbApp=firebase.initializeApp({databaseURL:url},'cb');
-    }
+    // Always create fresh app with unique name to avoid stale connections
+    var _appName='cb'+Date.now();
+    fbApp=firebase.initializeApp({databaseURL:url}, _appName);
     var db2=fbApp.database();
     fbRefMaster = db2.ref('comboio_master');
     fbRefCampo  = db2.ref('comboio_campo');
@@ -536,15 +536,17 @@ function iniciarFirebase(url, showAlert, role){
       // IPHONE: Listen to master (Mac data) — full replace
       fbRefMaster.on('value', function(snap){
         var r=snap.val();
-        if(!r) return;
+        if(!r){
+          // No data yet on master — normal on first use
+          renderSyncStatus();
+          return;
+        }
         var changed=false;
-        // Replace master data completely
         ['equipamentos','operadores','entradas','comboios','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined && JSON.stringify(r[k])!==JSON.stringify(db[k])){
             db[k]=r[k]; changed=true;
           }
         });
-        // Merge abastecimentos — keep local, add from master
         if(r.abastecimentos&&Array.isArray(r.abastecimentos)){
           var locIds=db.abastecimentos.map(function(a){return a.id;});
           var fromMac=r.abastecimentos.filter(function(a){return locIds.indexOf(a.id)===-1;});
@@ -552,17 +554,22 @@ function iniciarFirebase(url, showAlert, role){
         }
         if(changed){
           try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-          renderSyncStatus();
-          var ae=document.querySelector('.screen.active');
-          if(ae){var sid=ae.id.replace('screen-','');
-            if(sid==='resumo') renderResumo();
-            else if(sid==='field') renderField();
-            else if(sid==='entrada'){renderHistEnt();renderHistCom();}
-            else if(sid==='fotos') renderFotos();
-            else if(sid==='notif') renderNotif();
-          }
         }
-      }, function(e){console.error('iPhone master listener:',e);});
+        renderSyncStatus();
+        var ae=document.querySelector('.screen.active');
+        if(ae){var sid=ae.id.replace('screen-','');
+          if(sid==='resumo') renderResumo();
+          else if(sid==='field') renderField();
+          else if(sid==='entrada'){renderHistEnt();renderHistCom();}
+          else if(sid==='fotos') renderFotos();
+          else if(sid==='notif') renderNotif();
+          else if(sid==='historico') renderHistorico();
+        }
+      }, function(err){
+        console.error('iPhone master listener error:',err);
+        fbActive=false;
+        renderSyncStatus();
+      });
     }
 
     renderSyncStatus();
@@ -603,7 +610,7 @@ function renderSyncStatus(){
       :'iPhone recebe do Mac — campo envia abastecimentos';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — <span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
   } else if(url){
-    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado mas desconectado.</span></div>';
+    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado. Aguardando dados do Mac...</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
   } else {
     el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
@@ -914,9 +921,8 @@ function renderUltimoCiclo(){
     '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
     '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
     bar(pctEq,cor)+'</div></div>'+
-    '<div class="alert '+(ok?'aok':'aw')+'" style="margin:0">'+
-    '<i class="ti ti-'+(ok?'circle-check':'alert-triangle')+'"></i>'+
-    '<span>Diferença: <strong>'+(dif>0?'+':'')+dif.toFixed(0)+' L</strong> ('+pct+'%)'+(ok?' — volumes conferem':' — acima de 2%')+'</span></div>'+
+    '<div style="text-align:center;font-size:11px;color:'+(ok?'var(--green)':'var(--am)')+'">'+
+    'Diferença: '+(dif>0?'+':'')+dif.toFixed(0)+' L ('+pct+'%)'+(ok?' — volumes conferem':'')+'</div>'+
     '</div>';
 }
 
