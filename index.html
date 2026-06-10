@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Comboio">
 <meta name="theme-color" content="#0f6e56">
+<meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="pragma" content="no-cache">
+<meta name="app-version" content="1781089106">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -320,8 +323,12 @@ input,select,textarea,button{font-family:inherit}
 
           <div style="font-size:11px;color:var(--t2);margin-top:5px">Obtenha a URL em: <strong>console.firebase.google.com</strong> → seu projeto → Realtime Database</div>
         </div>
-        <button class="btn bp" onclick="ativarFirebase()"><i class="ti ti-cloud"></i> Ativar sincronização</button>
-        <button class="btn bs" onclick="gerarLink()"><i class="ti ti-link"></i> Gerar link de cadastro (sem internet)</button>
+        <div class="alert ai" style="margin-bottom:12px;font-size:11px"><i class="ti ti-clock"></i><span>Regras Firebase expiram em 30 dias. Renove em: console Firebase → Realtime Database → Regras → publique <code style="background:rgba(0,0,0,.07);padding:1px 5px;border-radius:3px">{"rules":{".read":true,".write":true}}</code></span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button class="btn bp" onclick="ativarComoMestre()" style="font-size:12px"><i class="ti ti-device-desktop"></i> Mac (mestre)</button>
+          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> iPhone (receptor)</button>
+        </div>
+        <button class="btn bs" onclick="gerarLink()" style="font-size:12px"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
       </div>
 
       <!-- Credenciais -->
@@ -406,7 +413,7 @@ input,select,textarea,button{font-family:inherit}
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
         <button class="btn bs bsm" onclick="toggleSelAll()" id="btn-sel-all"><i class="ti ti-checkbox"></i> Selecionar</button>
-        <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" style="display:none"><i class="ti ti-trash"></i> Apagar</button>
+        <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" disabled style="opacity:.35"><i class="ti ti-trash"></i> Apagar</button>
         <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
       </div>
       <div id="hist-ciclos"></div>
@@ -480,13 +487,31 @@ function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return
 function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 
 function ativarFirebase(){
+  ativarComoMestre(); // legacy — defaults to master
+}
+function _getUrlFromField(){
   var url=(document.getElementById('fb-url').value||'').trim();
-  if(!url){alert('Informe a URL do Firebase.');return;}
+  if(!url){alert('Informe a URL do Firebase Realtime Database.');return null;}
+  if(!url.startsWith('https://')){url='https://'+url.replace('http://','');}
   setFbUrl(url);
-  _fbStarted=false; // allow restart with new URL
-  startFirebaseForRole(adminLogado?'admin':'campo');
-  if(adminLogado) setTimeout(function(){if(fbActive&&fbRef)fbPush();},800);
-  alert('Sincronização ativada!');
+  return url;
+}
+function ativarComoMestre(){
+  var url=_getUrlFromField(); if(!url)return;
+  try{localStorage.setItem('comboio_is_master','true');}catch(e){}
+  _fbStarted=false;
+  iniciarFirebase(url, false, 'admin');
+  setTimeout(function(){if(fbActive)fbPush();},800);
+  renderSyncStatus();
+  alert('Ativado como MESTRE (Mac). Dados serão enviados ao Firebase.');
+}
+function ativarComoReceptor(){
+  var url=_getUrlFromField(); if(!url)return;
+  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  _fbStarted=false;
+  iniciarFirebase(url, false, 'campo');
+  renderSyncStatus();
+  alert('Ativado como RECEPTOR (iPhone). Dados serão recebidos do Mac.');
 }
 
 var _fbIgnoreNext = false;
@@ -582,8 +607,9 @@ function iniciarFirebase(url, showAlert, role){
 
 
 function fbPush(){
-  // Only Mac (admin role) pushes to master
-  if(!fbRefMaster||!fbActive||fbRole!=='admin') return;
+  // Only master device pushes
+  if(!fbRefMaster||!fbActive) return;
+  try{if(localStorage.getItem('comboio_is_master')!=='true')return;}catch(e){return;}
   try{
     fbRefMaster.set({
       equipamentos:db.equipamentos||[],
@@ -605,9 +631,9 @@ function renderSyncStatus(){
   var el=document.getElementById('sync-status'); if(!el) return;
   var url=getFbUrl();
   if(fbActive&&url){
-    var isMasterDev=(masterDeviceId&&masterDeviceId===myDeviceId);
-    var mode=isMasterDev?'Este dispositivo é o mestre':'Recebendo dados do dispositivo mestre';
-    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — <span style="font-weight:400;font-size:11px">'+mode+'</span></span></div>';
+    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
     el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Firebase configurado. Aguardando dados do Mac...</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
@@ -623,8 +649,13 @@ function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
-  // Campo: start Firebase as listener only
-  startFirebaseForRole('campo');
+  // Campo: auto-start as receptor if URL is saved
+  var url=getFbUrl();
+  if(url){
+    try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+    _fbStarted=false;
+    iniciarFirebase(url, false, 'campo');
+  }
 }
 function mostrarLoginAdmin(){
   document.getElementById('splash').style.display='none';
@@ -648,10 +679,15 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
-    // Admin: start Firebase as push-only master
-    // Start Firebase THEN push local data — ensures Mac data wins
-    startFirebaseForRole('admin');
-    setTimeout(function(){if(fbActive&&fbRef)fbPush();},1000);
+    // Auto-start Firebase on login if URL saved
+    var _fbUrl=getFbUrl();
+    if(_fbUrl){
+      _fbStarted=false;
+      var _isMaster=false;
+      try{_isMaster=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+      iniciarFirebase(_fbUrl, false, _isMaster?'admin':'campo');
+      if(_isMaster) setTimeout(function(){if(fbActive)fbPush();},800);
+    }
   } else {
     document.getElementById('login-err').style.display='block';
   }
@@ -2056,8 +2092,11 @@ function onHistCbChange(cb){
 function updateDelSelBtn(){
   var sel=Object.values(_histSel).filter(function(x){return x.checked;}).length;
   var btn=document.getElementById('btn-del-sel');
-  if(btn) btn.style.display=sel>0?'':'none';
-  if(btn&&sel>0) btn.innerHTML='<i class="ti ti-trash"></i> Apagar ('+sel+')';
+  if(btn){
+    btn.disabled=sel<=0;
+    btn.style.opacity=sel>0?'1':'.35';
+    btn.innerHTML='<i class="ti ti-trash"></i> Apagar'+(sel>0?' ('+sel+')':'');
+  }
 }
 function apagarSelecionados(){
   var selecionados=Object.entries(_histSel).filter(function(kv){return kv[1].checked;});
@@ -2294,19 +2333,23 @@ document.getElementById('c-data').value=today();
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
-      // Check for updates every time page loads
-      reg.addEventListener('updatefound',function(){
-        var newSW=reg.installing;
-        newSW.addEventListener('statechange',function(){
-          if(newSW.state==='installed'&&navigator.serviceWorker.controller){
-            // New version ready — show update banner
-            var banner=document.createElement('div');
-            banner.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--green);color:#e1f5ee;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;font-family:sans-serif';
-            banner.innerHTML='<span><i class="ti ti-refresh" style="margin-right:6px"></i>Nova versão disponível</span><button onclick="window.location.reload()" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer">Atualizar</button>';
-            document.body.appendChild(banner);
+      reg.update(); // Force check on every load
+      var handleUpdate=function(worker){
+        worker.addEventListener('statechange',function(){
+          if(this.state==='activated'){
+            // Show banner and auto-reload after 3s
+            var b=document.createElement('div');
+            b.id='update-banner';
+            b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600';
+            b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+            document.body.appendChild(b);
           }
         });
-      });
+      };
+      if(reg.waiting) handleUpdate(reg.waiting);
+      reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
+      // Periodic check every 5 minutes
+      setInterval(function(){ reg.update(); }, 300000);
     }).catch(function(){});
   });
 }
