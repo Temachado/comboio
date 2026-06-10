@@ -405,9 +405,9 @@ input,select,textarea,button{font-family:inherit}
         <input type="date" id="hist-ate" style="flex:1;border:1px solid var(--br);border-radius:var(--rs);padding:8px 10px;font-size:13px" onchange="renderHistorico()">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
-        <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" style="display:none"><i class="ti ti-trash"></i> Apagar selecionados</button>
         <button class="btn bs bsm" onclick="toggleSelAll()" id="btn-sel-all"><i class="ti ti-checkbox"></i> Selecionar</button>
+        <button class="btn bd bsm" onclick="apagarSelecionados()" id="btn-del-sel" style="display:none"><i class="ti ti-trash"></i> Apagar</button>
+        <button class="btn bp bsm" onclick="exportHistXLS()"><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
       </div>
       <div id="hist-ciclos"></div>
       <div id="hist-lista"></div>
@@ -515,90 +515,67 @@ function onCampoAbastUpdate(snap){
 
 function iniciarFirebase(url, showAlert, role){
   fbRole = role||'campo';
-  try{
-    // Clean up previous connections
-    try{if(fbRefMaster)fbRefMaster.off();}catch(e){}
-    try{if(fbRefCampo)fbRefCampo.off();}catch(e){}
-    try{if(fbApp)fbApp.delete();}catch(e){}
-    fbApp=null; fbRefMaster=null; fbRefCampo=null; fbActive=false;
+  // Always off existing listeners first
+  try{if(fbRefMaster) fbRefMaster.off();}catch(e){}
+  try{if(fbRefCampo)  fbRefCampo.off(); }catch(e){}
+  fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
-    // Create Firebase app
-    // Delete ALL existing Firebase apps first
-    var existingApps=firebase.apps||[];
-    existingApps.forEach(function(app){try{app.delete();}catch(e){}});
-    fbApp=firebase.initializeApp({databaseURL:url},'comboio');
-    var db2=fbApp.database();
+  try{
+    // Use timestamp name — avoids "already exists" error completely
+    var appName='cb_'+Date.now();
+    fbApp = firebase.initializeApp({databaseURL:url}, appName);
+    var db2 = fbApp.database();
     fbRefMaster = db2.ref('comboio_master');
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    // UNIFIED LISTENER: works for both Mac and iPhone
-    // Uses masterId to determine who is the source of truth
+    // UNIFIED listener — works for Mac AND iPhone
+    // deviceId determines who is master, not login role
     fbRefMaster.on('value', function(snap){
-      var r=snap.val();
+      var r = snap.val();
       if(!r){ renderSyncStatus(); return; }
-      
-      var incomingMasterId=r._masterId||null;
-      var iAmMaster=(incomingMasterId && incomingMasterId===myDeviceId);
-      
-      masterDeviceId=incomingMasterId;
-      if(iAmMaster){
-        // This is MY data coming back — I am the Mac/master
-        // Only accept new abastecimentos from campo
-        fbRefCampo.child('abastecimentos').once('value',function(cs){
-          var arr=cs.val();
-          if(arr&&Array.isArray(arr)){
-            var lids=db.abastecimentos.map(function(a){return a.id;});
-            var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
-            if(novos.length){
-              db.abastecimentos=db.abastecimentos.concat(novos);
-              try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-              var ae=document.querySelector('.screen.active');
-              if(ae){var sid=ae.id.replace('screen-','');
-                if(sid==='resumo') renderResumo();
-                else if(sid==='historico') renderHistorico();
-              }
-            }
-          }
-        });
-      } else {
-        // I am NOT the master — receive all data from Firebase
-        masterDeviceId=incomingMasterId;
+
+      var incomingId = r._masterId||null;
+      masterDeviceId = incomingId;
+      var iAmMaster  = (incomingId && incomingId===myDeviceId);
+
+      if(!iAmMaster){
+        // I am NOT the master → apply ALL Mac data
         var keys=['equipamentos','operadores','entradas','comboios',
                   'abastecimentos','ciclos','cicloAtivo','saldo'];
         keys.forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-        renderSyncStatus();
+        updateSaldo();
         var ae=document.querySelector('.screen.active');
         if(ae){
           var sid=ae.id.replace('screen-','');
-          if(sid==='resumo') renderResumo();
-          else if(sid==='field') renderField();
+          if(sid==='resumo')  renderResumo();
+          else if(sid==='field')  renderField();
           else if(sid==='entrada'){renderHistEnt();renderHistCom();}
-          else if(sid==='admin') renderAdmin();
-          else if(sid==='fotos') renderFotos();
-          else if(sid==='notif') renderNotif();
+          else if(sid==='admin')  renderAdmin();
+          else if(sid==='fotos')  renderFotos();
+          else if(sid==='notif')  renderNotif();
           else if(sid==='historico') renderHistorico();
         }
       }
       renderSyncStatus();
     }, function(err){
-      console.error('FB listener error:',err.message||err);
-      fbActive=false;
-      renderSyncStatus();
+      console.error('FB master error:',err.message||err);
+      fbActive=false; renderSyncStatus();
     });
 
-    // Always listen to campo entries — for ALL devices
+    // Campo listener — receive field abastecimentos on ALL devices
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
-    if(fbRole==='admin') fbPush();
-    if(showAlert) alert('Sincroniza\u00e7\u00e3o ativada!');
+    // If master, push local data immediately
+    setTimeout(function(){ if(fbActive) fbPush(); }, 600);
+    if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
-    console.error('Firebase init error:',e);
+    console.error('FB init error:',e.message||e);
     if(showAlert) alert('Erro ao conectar: '+e.message);
   }
 }
@@ -873,33 +850,39 @@ function renderCicloAtivo(){
   if(!db.cicloAtivo||db.cicloAtivo.encerrado) return '';
   var ca=db.cicloAtivo;
   var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
+  var saldoRes=Math.max(0,ve-vc);
+  var saldoCom=Math.max(0,vc-vq);
   var pctCom=ve>0?Math.round(vc/ve*100):0;
   var pctEq=ve>0?Math.round(vq/ve*100):0;
-  var difEntry=vq-ve;
-  var ok=Math.abs(difEntry)<=0||Math.abs(difEntry)/ve<=TOL;
+  var ok=ve>0&&Math.abs(vq-ve)/ve<=TOL;
   function bar(pct,cor){
     var p=Math.min(100,Math.max(0,pct));
-    return'<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
       '<div style="background:'+cor+';width:'+p+'%;height:100%;border-radius:4px;transition:width .4s"></div></div>';
   }
-  return'<div class="card" style="border:2px solid var(--green);margin-bottom:12px">'+
+  return '<div class="card" style="border:2px solid var(--green);margin-bottom:12px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
     '<div style="font-size:13px;font-weight:600;color:var(--green)"><i class="ti ti-refresh" style="margin-right:6px"></i>Ciclo ativo — desde '+fmtDate(ca.inicio)+'</div>'+
     '<span class="badge bg">em andamento</span></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
+
     '<div>'+
-      '<div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">ENTRADA</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:var(--tx)">'+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Entrada</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace">'+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
       '<div style="font-size:10px;color:var(--t3)">litros</div>'+
+      '<div style="font-size:11px;color:var(--green);margin-top:4px;font-weight:600">Saldo: '+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
     '</div>'+
+
     '<div>'+
-      '<div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">COMBOIO</div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
       '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(pctCom>102?'var(--red)':'var(--am)')+'">'+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
       '<div style="font-size:10px;color:var(--t3)">'+pctCom+'% da entrada</div>'+
       bar(pctCom,pctCom>102?'var(--red)':'var(--am)')+
+      '<div style="font-size:11px;color:var(--am);margin-top:4px;font-weight:600">Saldo: '+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
     '</div>'+
+
     '<div>'+
-      '<div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">EQUIPAMENTOS</div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
       '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(ok?'var(--green)':pctEq>80?'var(--red)':'var(--tx)')+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
       '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
       bar(pctEq,ok?'var(--green)':pctEq>90?'var(--red)':'var(--bl)')+
@@ -907,6 +890,7 @@ function renderCicloAtivo(){
     '</div>'+
     '</div>';
 }
+
 
 function renderUltimoCiclo(){
   if(!db.ciclos||!db.ciclos.length) return '';
