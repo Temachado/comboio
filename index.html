@@ -323,7 +323,6 @@ input,select,textarea,button{font-family:inherit}
 
           <div style="font-size:11px;color:var(--t2);margin-top:5px">Obtenha a URL em: <strong>console.firebase.google.com</strong> → seu projeto → Realtime Database</div>
         </div>
-        <div class="alert ai" style="margin-bottom:12px;font-size:11px"><i class="ti ti-clock"></i><span>Regras Firebase expiram em 30 dias. Renove em: console Firebase → Realtime Database → Regras → publique <code style="background:rgba(0,0,0,.07);padding:1px 5px;border-radius:3px">{"rules":{".read":true,".write":true}}</code></span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <button class="btn bp" onclick="ativarComoMestre()" style="font-size:12px"><i class="ti ti-device-desktop"></i> Mac (mestre)</button>
           <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> iPhone (receptor)</button>
@@ -886,37 +885,47 @@ function renderCicloAtivo(){
   if(!db.cicloAtivo||db.cicloAtivo.encerrado) return '';
   var ca=db.cicloAtivo;
   var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
-  var saldoRes=Math.max(0,ve-vc);
-  var saldoCom=Math.max(0,vc-vq);
-  var pctCom=ve>0?Math.round(vc/ve*100):0;
-  var pctEq=ve>0?Math.round(vq/ve*100):0;
+  var saldoRes=Math.max(0,ve-vc);   // tanque principal restante
+  var saldoCom=Math.max(0,vc-vq);   // comboio restante
+  var pctRes=ve>0?Math.round(saldoRes/ve*100):100;
+  var pctCom=vc>0?Math.round(saldoCom/vc*100):100;
+  var pctEq =ve>0?Math.round(vq/ve*100):0;
   var ok=ve>0&&Math.abs(vq-ve)/ve<=TOL;
-  function bar(pct,cor){
+
+  function bar(pct,cor,bg){
+    bg=bg||'var(--br)';
     var p=Math.min(100,Math.max(0,pct));
-    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+    return '<div style="background:'+bg+';border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
       '<div style="background:'+cor+';width:'+p+'%;height:100%;border-radius:4px;transition:width .4s"></div></div>';
   }
+
   return '<div class="card" style="border:2px solid var(--green);margin-bottom:12px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-    '<div style="font-size:13px;font-weight:600;color:var(--green)"><i class="ti ti-refresh" style="margin-right:6px"></i>Ciclo ativo — desde '+fmtDate(ca.inicio)+'</div>'+
+    '<div style="font-size:13px;font-weight:600;color:var(--green)">'+
+    '<i class="ti ti-refresh" style="margin-right:6px"></i>Ciclo ativo — desde '+fmtDate(ca.inicio)+'</div>'+
     '<span class="badge bg">em andamento</span></div>'+
+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
 
+    // TANQUE: saldo = entrada - carregado no comboio
     '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Entrada</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace">'+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">litros</div>'+
-      '<div style="font-size:11px;color:var(--green);margin-top:4px;font-weight:600">Saldo: '+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
+      bar(pctRes,'var(--green)')+
+      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Entrada: '+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
     '</div>'+
 
+    // COMBOIO: saldo = carregado - distribuído equipamentos
     '<div>'+
       '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(pctCom>102?'var(--red)':'var(--am)')+'">'+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">'+pctCom+'% da entrada</div>'+
-      bar(pctCom,pctCom>102?'var(--red)':'var(--am)')+
-      '<div style="font-size:11px;color:var(--am);margin-top:4px;font-weight:600">Saldo: '+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--tx)')+'">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
+      bar(pctCom,saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--bl)')+
+      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Carregado: '+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
     '</div>'+
 
+    // EQUIPAMENTOS: total distribuído
     '<div>'+
       '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
       '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(ok?'var(--green)':pctEq>80?'var(--red)':'var(--tx)')+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
@@ -933,35 +942,50 @@ function renderUltimoCiclo(){
   var ci=db.ciclos[0];
   var ok=ci.resultado==='ok';
   var ve=Number(ci.volEntrada||0), vc=Number(ci.volComboio||0), vq=Number(ci.volEquip||0);
+  var saldoRes=Math.max(0,ve-vc);
+  var saldoCom=Math.max(0,vc-vq);
   var dif=vq-ve;
   var pct=ve>0?(Math.abs(dif)/ve*100).toFixed(1):'0';
-  function bar(pct,cor){
-    var p=Math.min(100,Math.max(0,pct));
-    return'<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
-      '<div style="background:'+cor+';width:'+p+'%;height:100%;border-radius:4px"></div></div>';
-  }
-  var pctCom=ve>0?Math.round(vc/ve*100):0;
-  var pctEq=ve>0?Math.round(vq/ve*100):0;
   var cor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
   var bdColor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
-  return'<div class="card" style="border:2px solid '+bdColor+';margin-bottom:12px;opacity:.85">'+
+
+  function bar(pct2,cor2){
+    var p=Math.min(100,Math.max(0,pct2));
+    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+      '<div style="background:'+cor2+';width:'+p+'%;height:100%;border-radius:4px"></div></div>';
+  }
+
+  return '<div class="card" style="border:2px solid '+bdColor+';margin-bottom:12px;opacity:.85">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-    '<div style="font-size:13px;font-weight:600;color:'+cor+'"><i class="ti ti-history" style="margin-right:6px"></i>Último ciclo — '+fmtDate(ci.inicio)+(ci.fim&&ci.fim!==ci.inicio?' a '+fmtDate(ci.fim):'')+'</div>'+
+    '<div style="font-size:13px;font-weight:600;color:'+cor+'">'+
+    '<i class="ti ti-history" style="margin-right:6px"></i>Último ciclo — '+
+    fmtDate(ci.inicio)+(ci.fim&&ci.fim!==ci.inicio?' a '+fmtDate(ci.fim):'')+
+    '</div>'+
     '<span class="badge '+(ok?'bg':ci.resultado==='manual'?'bb':'ba')+'">'+(ok?'OK':ci.resultado==='manual'?'manual':'divergência')+'</span></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">'+
-    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">ENTRADA</div>'+
-    '<div style="font-size:22px;font-weight:600;font-family:monospace">'+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-    '<div style="font-size:10px;color:var(--t3)">litros</div></div>'+
-    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">COMBOIO</div>'+
-    '<div style="font-size:22px;font-weight:600;font-family:monospace;color:var(--am)">'+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-    '<div style="font-size:10px;color:var(--t3)">'+pctCom+'% da entrada</div>'+
-    bar(pctCom,'var(--am)')+'</div>'+
-    '<div><div style="font-size:11px;color:var(--t3);margin-bottom:4px;font-weight:600">EQUIPAMENTOS</div>'+
-    '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-    '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
-    bar(pctEq,cor)+'</div></div>'+
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
+      bar(ve>0?Math.round(saldoRes/ve*100):0,'var(--green)')+
+    '</div>'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
+      bar(vc>0?Math.round(saldoCom/vc*100):0,'var(--bl)')+
+    '</div>'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">distribuídos</div>'+
+      bar(ve>0?Math.round(vq/ve*100):0,cor)+
+    '</div>'+
+    '</div>'+
     '</div>';
 }
+
 
 function renderCicloPanel(){
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) return renderCicloAtivo();
