@@ -502,14 +502,18 @@ function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:d
 function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
 function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 
-function reconectarFirebase(){
-  var url=getFbUrl();
-  if(!url){alert('Configure a URL do Firebase primeiro.');return;}
+// Central auto-connect — used everywhere, safe to call multiple times
+var _fbConnecting=false;
+function _fbAutoConectar(){
+  if(_fbConnecting||fbActive) return; // already connecting or connected
+  var url=getFbUrl(); if(!url) return;
   var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-  window._fbLastError=null;
+  _fbConnecting=true;
   _fbStarted=false;
+  window._fbLastError=null;
   iniciarFirebase(url,false,_isM?'admin':'campo');
   if(_isM) setTimeout(function(){if(fbActive)fbPush();},800);
+  setTimeout(function(){_fbConnecting=false;},5000); // reset flag after 5s
 }
 function ativarFirebase(){
   ativarComoMestre(); // legacy — defaults to master
@@ -524,19 +528,17 @@ function _getUrlFromField(){
 function ativarComoMestre(){
   var url=_getUrlFromField(); if(!url)return;
   try{localStorage.setItem('comboio_is_master','true');}catch(e){}
-  _fbStarted=false;
-  iniciarFirebase(url, false, 'admin');
+  _fbConnecting=false; _fbStarted=false;
+  iniciarFirebase(url,false,'admin');
   setTimeout(function(){if(fbActive)fbPush();},800);
-  renderSyncStatus();
-  alert('Ativado como MESTRE (Mac). Dados serão enviados ao Firebase.');
+  alert('Mac configurado como MESTRE. A partir de agora conecta automaticamente.');
 }
 function ativarComoReceptor(){
   var url=_getUrlFromField(); if(!url)return;
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  _fbStarted=false;
-  iniciarFirebase(url, false, 'campo');
-  renderSyncStatus();
-  alert('Ativado como RECEPTOR (iPhone). Dados serão recebidos do Mac.');
+  _fbConnecting=false; _fbStarted=false;
+  iniciarFirebase(url,false,'campo');
+  alert('iPhone configurado como RECEPTOR. A partir de agora conecta automaticamente.');
 }
 
 var _fbIgnoreNext = false;
@@ -615,15 +617,10 @@ function iniciarFirebase(url, showAlert, role){
       console.error('FB master error:',err.message||err);
       fbActive=false;
       window._fbLastError=err.message||String(err);
+      _fbConnecting=false;
       renderSyncStatus();
-      // Auto-retry after 8 seconds
-      setTimeout(function(){
-        var url=getFbUrl();
-        if(url&&!fbActive){
-          var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-          iniciarFirebase(url,false,_isM?'admin':'campo');
-        }
-      },8000);
+      // Silent retry after 10s
+      setTimeout(_fbAutoConectar, 10000);
     });
 
     // Campo listener — receive field abastecimentos on ALL devices
@@ -670,13 +667,9 @@ function renderSyncStatus(){
     var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
-    var _errMsg=window._fbLastError?(' — '+window._fbLastError):'';
-    var _isM2=false; try{_isM2=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var _role=_isM2?'admin':'campo';
-    el.innerHTML='<div class="alert aw" style="flex-direction:column;align-items:flex-start;gap:8px">'+
-      '<div><i class="ti ti-cloud-off" style="margin-right:6px"></i>Firebase desconectado'+_errMsg+'</div>'+
-      '<button class="btn bp" style="font-size:12px;padding:8px 14px;width:100%" onclick="reconectarFirebase()">'+
-      '<i class="ti ti-refresh"></i> Reconectar</button></div>';
+    // Disconnected — trigger silent reconnect and show minimal status
+    _fbAutoConectar();
+    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando ao Firebase...</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
   } else {
     el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
@@ -690,13 +683,10 @@ function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
-  // Campo: auto-start as receptor if URL is saved
-  var url=getFbUrl();
-  if(url){
-    try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-    _fbStarted=false;
-    iniciarFirebase(url, false, 'campo');
-  }
+  // Always mark this device as receptor
+  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  // Auto-connect silently
+  setTimeout(_fbAutoConectar, 500);
 }
 function mostrarLoginAdmin(){
   document.getElementById('splash').style.display='none';
@@ -720,15 +710,8 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
-    // Auto-start Firebase on login if URL saved
-    var _fbUrl=getFbUrl();
-    if(_fbUrl){
-      _fbStarted=false;
-      var _isMaster=false;
-      try{_isMaster=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-      iniciarFirebase(_fbUrl, false, _isMaster?'admin':'campo');
-      if(_isMaster) setTimeout(function(){if(fbActive)fbPush();},800);
-    }
+    // Auto-connect using saved role (set once via Mac/iPhone buttons)
+    setTimeout(_fbAutoConectar, 500);
   } else {
     document.getElementById('login-err').style.display='block';
   }
@@ -2315,21 +2298,6 @@ document.getElementById('e-data').value=today();
 document.getElementById('c-data').value=today();
 
 // Service Worker
-// Auto-connect Firebase if URL and role already configured
-window.addEventListener('DOMContentLoaded',function(){
-  setTimeout(function(){
-    var url=getFbUrl();
-    // Only auto-connect if user is already past splash (app loaded from cache/PWA)
-    var mainVisible=document.getElementById('main-app')&&document.getElementById('main-app').style.display!=='none';
-    if(url&&mainVisible&&!fbActive){
-      var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-      _fbStarted=false;
-      iniciarFirebase(url,false,_isM?'admin':'campo');
-      if(_isM) setTimeout(function(){if(fbActive)fbPush();},1000);
-    }
-  },1500);
-});
-
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
