@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1781750000">
+<meta name="app-version" content="1781860000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -474,7 +474,16 @@ var fs = {step:1, equip:null, hod:null, litros:null,
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+    if(s){
+      var p=JSON.parse(s);
+      ['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
+      if(p.admin&&p.admin.usuario) db.admin=p.admin;
+      // Restaura timestamp local — crítico para sincronização por timestamp
+      if(p._localTs) db._localTs=p._localTs;
+    }
+    // Fallback: chave dedicada (mais confiável que dentro do JSON)
+    var ts=localStorage.getItem('comboio_localTs');
+    if(ts && Number(ts) > (db._localTs||0)) db._localTs=Number(ts);
   }catch(e){}
 }
 function updateSaldo(){
@@ -487,8 +496,11 @@ function updateSaldo(){
 }
 function saveDB(){
   updateSaldo();
-  db._localTs = Date.now(); // timestamp da última alteração local
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  db._localTs = Date.now();
+  try{
+    localStorage.setItem(DB_KEY,JSON.stringify(db));
+    localStorage.setItem('comboio_localTs', String(db._localTs)); // chave dedicada, mais robusta
+  }catch(e){alert('Erro ao salvar dados.');}
   fbPush();
 }
 function today(){return new Date().toISOString().slice(0,10);}
@@ -498,27 +510,206 @@ function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:d
 function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
 
 // ─────────────────────────────────────────────
-//  FIREBASE
+//  FIREBASE — arquitetura limpa
+//  • Um único app Firebase por sessão
+//  • Listeners registrados uma única vez
+//  • Sync bidirecional: vence o timestamp mais recente
+//  • Admin em qualquer dispositivo pode escrever
 // ─────────────────────────────────────────────
 function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
 function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 
-// Central auto-connect — used everywhere, safe to call multiple times
-var _fbConnecting=false;
-function _fbAutoConectar(){
-  if(_fbConnecting||fbActive) return; // already connecting or connected
-  var url=getFbUrl(); if(!url) return;
+var _fbApp      = null;   // instância única do Firebase
+var _fbDb       = null;   // database único
+var _fbIniting  = false;  // trava contra init paralelo
+var _fbListenersOk = false; // listeners já registrados nesta sessão
+
+function _fbGetLocalTs(){
+  var t = db._localTs||0;
+  try{ var s=localStorage.getItem('comboio_localTs'); if(s&&Number(s)>t) t=Number(s); }catch(e){}
+  return t;
+}
+
+function _fbSetLocalTs(ts){
+  db._localTs = ts;
+  try{ localStorage.setItem('comboio_localTs', String(ts)); }catch(e){}
+}
+
+// Inicializa o Firebase UMA VEZ por sessão
+function _fbInit(url){
+  if(_fbApp) return true; // já inicializado
+  try{
+    _fbApp = firebase.initializeApp({databaseURL: url}, 'comboio_app');
+    _fbDb  = _fbApp.database();
+    fbRefMaster = _fbDb.ref('comboio_master');
+    fbRefCampo  = _fbDb.ref('comboio_campo');
+    return true;
+  }catch(e){
+    console.error('[FB] init erro:', e);
+    _fbApp = null; _fbDb = null;
+    return false;
+  }
+}
+
+// Registra os listeners UMA VEZ
+function _fbRegistrarListeners(){
+  if(_fbListenersOk) return;
+  _fbListenersOk = true;
+
+  // ── MASTER listener: recebe dados do outro dispositivo ──
+  fbRefMaster.on('value', function(snap){
+    var r = snap.val();
+    if(!r) return;
+
+    var remoteId = r._masterId||null;
+    var remoteTs = r._masterTs||0;
+
+    // Echo: ignorar dados que eu mesmo enviei
+    if(remoteId === myDeviceId) return;
+
+    var localTs = _fbGetLocalTs();
+
+    console.log('[Sync] remoto='+ new Date(remoteTs).toLocaleTimeString() +
+                ' local='+ new Date(localTs).toLocaleTimeString() +
+                ' diff='+(remoteTs-localTs)+'ms de='+remoteId);
+
+    if(remoteTs <= localTs){
+      // Meus dados são mais recentes — reenvio para sobrescrever o Firebase
+      console.log('[Sync] Meu dado é mais recente → reenviando');
+      setTimeout(_fbEnviar, 400);
+      return;
+    }
+
+    // Dado remoto mais recente — aplica localmente
+    console.log('[Sync] Dado remoto mais recente → aplicando');
+    ['equipamentos','operadores','entradas','comboios',
+     'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
+      if(r[k]!==undefined) db[k]=r[k];
+    });
+    _fbSetLocalTs(remoteTs);
+    try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
+    updateSaldo();
+    _fbAtualizarTela();
+
+  }, function(err){
+    console.error('[FB] listener erro:', err.message||err);
+    fbActive = false;
+    renderSyncStatus();
+    setTimeout(_fbConectar, 15000);
+  });
+
+  // ── CAMPO listener: recebe abastecimentos do iPhone campo ──
+  fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
+}
+
+// Conecta ao Firebase (seguro chamar múltiplas vezes)
+function _fbConectar(){
+  if(fbActive || _fbIniting) return;
+  var url = getFbUrl(); if(!url) return;
+
+  _fbIniting = true;
+  var ok = _fbInit(url);
+  if(!ok){ _fbIniting=false; return; }
+
+  fbActive = true;
+  _fbIniting = false;
+  _fbRegistrarListeners();
+  renderSyncStatus();
+
+  // Se pode escrever, envia dados locais ao conectar
+  if(_fbPodeEscrever()){
+    setTimeout(_fbEnviar, 600);
+  }
+}
+
+// Verifica se este dispositivo pode escrever no Firebase
+function _fbPodeEscrever(){
+  if(!fbActive || !fbRefMaster) return false;
   var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-  _fbConnecting=true;
-  _fbStarted=false;
-  window._fbLastError=null;
-  iniciarFirebase(url,false,_isM?'admin':'campo');
-  if(_isM) setTimeout(function(){if(fbActive)fbPush();},800);
-  setTimeout(function(){_fbConnecting=false;},5000); // reset flag after 5s
+  return _isM || adminLogado;
 }
-function ativarFirebase(){
-  ativarComoMestre(); // legacy — defaults to master
+
+// Envia dados locais para o Firebase (substitui fbPush)
+function _fbEnviar(){
+  if(!_fbPodeEscrever()) return;
+  var ts = _fbGetLocalTs() || Date.now();
+  try{
+    fbRefMaster.set({
+      equipamentos : db.equipamentos||[],
+      operadores   : db.operadores||[],
+      entradas     : db.entradas||[],
+      comboios     : db.comboios||[],
+      abastecimentos: db.abastecimentos||[],
+      ciclos       : db.ciclos||[],
+      cicloAtivo   : db.cicloAtivo||null,
+      saldo        : db.saldo||{res:0,com:0},
+      _masterId    : myDeviceId,
+      _masterTs    : ts
+    });
+    console.log('[Sync] Enviado ts='+ new Date(ts).toLocaleTimeString());
+  }catch(e){ console.error('[FB] enviar erro:', e); }
 }
+
+// Atualiza a tela após receber dados remotos
+function _fbAtualizarTela(){
+  var ae = document.querySelector('.screen.active');
+  if(!ae) return;
+  var sid = ae.id.replace('screen-','');
+  if(sid==='resumo')   renderResumo();
+  else if(sid==='field')    renderField();
+  else if(sid==='entrada')  { renderHistEnt(); renderHistCom(); }
+  else if(sid==='admin')    renderAdmin();
+  else if(sid==='fotos')    renderFotos();
+  else if(sid==='notif')    renderNotif();
+  else if(sid==='historico') renderHistorico();
+  updateNotifBadge();
+  renderSyncStatus();
+}
+
+// ── Aliases para compatibilidade com código existente ──
+function fbPush(){ _fbEnviar(); }
+function iniciarFirebase(url, showAlert, role){
+  setFbUrl(url);
+  fbRole = role||'campo';
+  _fbConectar();
+  if(showAlert) setTimeout(function(){ alert('Sincronização ativada!'); }, 800);
+}
+function _fbAutoConectar(){ _fbConectar(); }
+
+function renderSyncStatus(){
+  var el=document.getElementById('sync-status'); if(!el) return;
+  var url=getFbUrl();
+  if(fbActive&&url){
+    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+    var mode;
+    if(_isM)           mode='<strong>Mac (mestre)</strong> — envio e recebimento ativos';
+    else if(adminLogado) mode='<strong>Admin bidirecional</strong> — envio e recebimento ativos';
+    else               mode='<strong>Campo (receptor)</strong> — recebendo dados em tempo real';
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
+  } else if(url){
+    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando...</span></div>';
+    var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
+  } else {
+    el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
+  }
+}
+
+function ativarComoMestre(){
+  var url=_getUrlFromField(); if(!url) return;
+  try{localStorage.setItem('comboio_is_master','true');}catch(e){}
+  _fbConectar();
+  setTimeout(function(){ _fbEnviar(); renderSyncStatus(); },800);
+  alert('Mac configurado como MESTRE. Conecta automaticamente daqui em diante.');
+}
+function ativarComoReceptor(){
+  var url=_getUrlFromField(); if(!url) return;
+  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  _fbConectar();
+  renderSyncStatus();
+  alert('iPhone configurado como RECEPTOR. Conecta automaticamente daqui em diante.');
+}
+function ativarFirebase(){ ativarComoMestre(); }
+
 function _getUrlFromField(){
   var url=(document.getElementById('fb-url').value||'').trim();
   if(!url){alert('Informe a URL do Firebase Realtime Database.');return null;}
@@ -526,30 +717,12 @@ function _getUrlFromField(){
   setFbUrl(url);
   return url;
 }
-function ativarComoMestre(){
-  var url=_getUrlFromField(); if(!url)return;
-  try{localStorage.setItem('comboio_is_master','true');}catch(e){}
-  _fbConnecting=false; _fbStarted=false;
-  iniciarFirebase(url,false,'admin');
-  setTimeout(function(){if(fbActive)fbPush();},800);
-  alert('Mac configurado como MESTRE. A partir de agora conecta automaticamente.');
-}
-function ativarComoReceptor(){
-  var url=_getUrlFromField(); if(!url)return;
-  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  _fbConnecting=false; _fbStarted=false;
-  iniciarFirebase(url,false,'campo');
-  alert('iPhone configurado como RECEPTOR. A partir de agora conecta automaticamente.');
-}
 
-var _fbIgnoreNext = false;
-
-// Named handler for campo abastecimentos — allows detach/reattach
+// Named handler para campo — mantém para compatibilidade
 function onCampoAbastUpdate(snap){
   var arr=snap.val();
   if(!arr||!Array.isArray(arr)) return;
   var lids=db.abastecimentos.map(function(a){return a.id;});
-  // Ignora registros originados neste dispositivo (evita echo/duplicata)
   var novos=arr.filter(function(a){
     return lids.indexOf(a.id)===-1 && a._device!==myDeviceId;
   });
@@ -562,137 +735,10 @@ function onCampoAbastUpdate(snap){
     var ae=document.querySelector('.screen.active');
     if(ae){
       var sid=ae.id.replace('screen-','');
-      if(sid==='resumo') renderResumo();
+      if(sid==='resumo')    renderResumo();
       else if(sid==='historico') renderHistorico();
-      else if(sid==='notif') renderNotif();
+      else if(sid==='notif')     renderNotif();
     }
-  }
-}
-
-function iniciarFirebase(url, showAlert, role){
-  fbRole = role||'campo';
-  // Always off existing listeners first
-  try{if(fbRefMaster) fbRefMaster.off();}catch(e){}
-  try{if(fbRefCampo)  fbRefCampo.off(); }catch(e){}
-  fbRefMaster=null; fbRefCampo=null; fbActive=false;
-
-  try{
-    // Use timestamp name — avoids "already exists" error completely
-    var appName='cb_'+Date.now();
-    fbApp = firebase.initializeApp({databaseURL:url}, appName);
-    var db2 = fbApp.database();
-    fbRefMaster = db2.ref('comboio_master');
-    fbRefCampo  = db2.ref('comboio_campo');
-    fbActive = true;
-
-    // UNIFIED listener — works for Mac AND iPhone
-    // Admin em qualquer dispositivo pode escrever; vence sempre o dado mais recente
-    fbRefMaster.on('value', function(snap){
-      var r = snap.val();
-      if(!r){ renderSyncStatus(); return; }
-
-      var incomingId = r._masterId||null;
-      var incomingTs = r._masterTs||0;
-      masterDeviceId = incomingId;
-
-      // Sou eu quem enviou esse dado — ignora echo
-      var iAmSender = (incomingId && incomingId===myDeviceId);
-      if(iAmSender){ renderSyncStatus(); return; }
-
-      // Compara timestamps: só aplica se o dado remoto for mais recente que o local
-      var localTs = db._localTs||0;
-      if(incomingTs <= localTs){
-        // Dado remoto é mais antigo — meus dados locais prevalecem, reenvio para Firebase
-        setTimeout(fbPush, 300);
-        renderSyncStatus();
-        return;
-      }
-
-      // Dado remoto é mais recente → aplica
-      var keys=['equipamentos','operadores','entradas','comboios',
-                'abastecimentos','ciclos','cicloAtivo','saldo'];
-      keys.forEach(function(k){
-        if(r[k]!==undefined) db[k]=r[k];
-      });
-      db._localTs = incomingTs; // sincroniza timestamp local com o remoto
-      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-      updateSaldo();
-      var ae=document.querySelector('.screen.active');
-      if(ae){
-        var sid=ae.id.replace('screen-','');
-        if(sid==='resumo')  renderResumo();
-        else if(sid==='field')  renderField();
-        else if(sid==='entrada'){renderHistEnt();renderHistCom();}
-        else if(sid==='admin')  renderAdmin();
-        else if(sid==='fotos')  renderFotos();
-        else if(sid==='notif')  renderNotif();
-        else if(sid==='historico') renderHistorico();
-      }
-      renderSyncStatus();
-    }, function(err){
-      console.error('FB master error:',err.message||err);
-      fbActive=false;
-      window._fbLastError=err.message||String(err);
-      _fbConnecting=false;
-      renderSyncStatus();
-      // Silent retry after 10s
-      setTimeout(_fbAutoConectar, 10000);
-    });
-
-    // Campo listener — receive field abastecimentos on ALL devices
-    fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
-
-    renderSyncStatus();
-    // If master, push local data immediately
-    setTimeout(function(){ if(fbActive) fbPush(); }, 600);
-    if(showAlert) alert('Sincronização ativada!');
-  }catch(e){
-    fbActive=false;
-    console.error('FB init error:',e.message||e);
-    if(showAlert) alert('Erro ao conectar: '+e.message);
-  }
-}
-
-
-function fbPush(){
-  // Qualquer dispositivo admin pode escrever no master
-  if(!fbRefMaster||!fbActive) return;
-  var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-  // Permite push se: configurado como mestre OU logado como admin
-  if(!_isM && !adminLogado) return;
-  try{
-    fbRefMaster.set({
-      equipamentos:db.equipamentos||[],
-      operadores:db.operadores||[],
-      entradas:db.entradas||[],
-      comboios:db.comboios||[],
-      abastecimentos:db.abastecimentos||[],
-      ciclos:db.ciclos||[],
-      cicloAtivo:db.cicloAtivo||null,
-      saldo:db.saldo||{res:0,com:0},
-      _masterId:myDeviceId,
-      _masterTs:db._localTs||Date.now()  // usa o timestamp da última alteração real
-    });
-  }catch(e){console.error('fbPush:',e);}
-}
-
-
-function renderSyncStatus(){
-  var el=document.getElementById('sync-status'); if(!el) return;
-  var url=getFbUrl();
-  if(fbActive&&url){
-    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode;
-    if(_isM) mode='<strong>Mac (mestre)</strong> — enviando dados';
-    else if(adminLogado) mode='<strong>Admin bidirecional</strong> — envio e recebimento ativos';
-    else mode='<strong>Campo (receptor)</strong> — recebendo dados';
-    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
-  } else if(url){
-    _fbAutoConectar();
-    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando ao Firebase...</span></div>';
-    var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
-  } else {
-    el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
   }
 }
 
@@ -703,10 +749,8 @@ function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
-  // Always mark this device as receptor
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  // Auto-connect silently
-  setTimeout(_fbAutoConectar, 500);
+  setTimeout(_fbConectar, 500);
 }
 function mostrarLoginAdmin(){
   document.getElementById('splash').style.display='none';
@@ -730,16 +774,9 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
-    // Reconecta Firebase — admin pode ler e escrever independente do papel configurado
-    // Se já estava conectado, apenas atualiza o status; senão conecta
-    if(fbActive){
-      renderSyncStatus();
-      // Envia dados locais para sincronizar
-      setTimeout(fbPush, 500);
-    } else {
-      _fbStarted=false;
-      setTimeout(_fbAutoConectar, 500);
-    }
+    // Conecta (ou já está conectado) e envia dados locais
+    _fbConectar();
+    setTimeout(function(){ _fbEnviar(); renderSyncStatus(); }, 700);
   } else {
     document.getElementById('login-err').style.display='block';
   }
@@ -2312,15 +2349,11 @@ loadDB();
   }catch(ex){}
 })();
 
-// Firebase starts only AFTER role is chosen (entrarCampo or doLogin)
-// This prevents iPhone data from overwriting Mac before login
-var _fbStarted = false;
+// Firebase conecta automaticamente após login/campo
+var _fbStarted = false; // mantido para compatibilidade
 function startFirebaseForRole(role){
-  if(_fbStarted) return;
-  var url=getFbUrl();
-  if(!url) return;
-  _fbStarted=true;
-  try{iniciarFirebase(url, false, role);}catch(e){console.error('FB start:',e);}
+  fbRole = role||'campo';
+  _fbConectar();
 }
 
 // Init nav
@@ -2350,15 +2383,10 @@ if('serviceWorker' in navigator){
       reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
       // Periodic check every 5 minutes
       setInterval(function(){ reg.update(); }, 300000);
-      // Periodic Firebase reconnect check every 30 seconds
+      // Reconexão silenciosa a cada 30s se desconectado
       setInterval(function(){
-        var url=getFbUrl();
-        if(url&&!fbActive){
-          var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-          _fbStarted=false;
-          iniciarFirebase(url,false,_isM?'admin':'campo');
-        }
-      },30000);
+        if(getFbUrl() && !fbActive) _fbConectar();
+      }, 30000);
     }).catch(function(){});
   });
 }
