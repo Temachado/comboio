@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1781860000">
+<meta name="app-version" content="1781930000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -348,6 +348,17 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
         <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
         <button class="btn bd" onclick="toggleModalApagar()"><i class="ti ti-trash"></i> Apagar dados</button>
+      </div>
+
+      <!-- Backups automáticos Firebase -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="ct" style="margin-bottom:0">Backups automáticos</div>
+          <button class="btn bs bsm" onclick="renderBackupPanel()"><i class="ti ti-refresh"></i> Atualizar</button>
+        </div>
+        <p class="note" style="margin-bottom:12px">Backup diário salvo automaticamente no Firebase. Mantém os últimos 7 dias.</p>
+        <div id="backup-panel"><div class="note">Clique em Atualizar para ver os backups disponíveis.</div></div>
+      </div>
 
 <!-- Modal apagar individual -->
 <div id="modal-apagar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:flex-end;justify-content:center;padding:0">
@@ -376,7 +387,6 @@ input,select,textarea,button{font-family:inherit}
     </div>
   </div>
 </div>
-      </div>
 
       <button class="btn bs" onclick="logout()"><i class="ti ti-logout"></i> Sair da área administrativa</button>
     </div>
@@ -619,6 +629,7 @@ function _fbConectar(){
   // Se pode escrever, envia dados locais ao conectar
   if(_fbPodeEscrever()){
     setTimeout(_fbEnviar, 600);
+    setTimeout(_fbBackupDiario, 3000); // backup diário após sync inicial
   }
 }
 
@@ -648,6 +659,112 @@ function _fbEnviar(){
     });
     console.log('[Sync] Enviado ts='+ new Date(ts).toLocaleTimeString());
   }catch(e){ console.error('[FB] enviar erro:', e); }
+}
+
+// ─────────────────────────────────────────────
+//  BACKUP DIÁRIO AUTOMÁTICO
+//  • Caminho: /comboio_backup/YYYY-MM-DD
+//  • Executa uma vez por dia (controle via localStorage)
+//  • Mantém últimos 7 dias, exclui os anteriores
+//  • Só o dispositivo mestre ou admin executa
+// ─────────────────────────────────────────────
+var BACKUP_KEY = 'comboio_ultimo_backup';
+var BACKUP_DIAS = 90;
+
+function _fbBackupDiario(){
+  if(!_fbPodeEscrever()) return;
+  if(!_fbDb) return;
+
+  var hoje = today();
+
+  // Verifica se já fez backup hoje
+  try{
+    var ultimo = localStorage.getItem(BACKUP_KEY);
+    if(ultimo === hoje){
+      console.log('[Backup] Já realizado hoje: '+hoje);
+      return;
+    }
+  }catch(e){}
+
+  var refBackup = _fbDb.ref('comboio_backup');
+
+  // Salva backup de hoje
+  refBackup.child(hoje).set({
+    abastecimentos : db.abastecimentos||[],
+    entradas       : db.entradas||[],
+    comboios       : db.comboios||[],
+    ciclos         : db.ciclos||[],
+    cicloAtivo     : db.cicloAtivo||null,
+    saldo          : db.saldo||{res:0,com:0},
+    _ts            : Date.now(),
+    _total         : (db.abastecimentos||[]).length
+  }).then(function(){
+    console.log('[Backup] Salvo: '+hoje+' ('+( db.abastecimentos||[]).length+' abastecimentos)');
+    try{ localStorage.setItem(BACKUP_KEY, hoje); }catch(e){}
+
+    // Limpa backups com mais de 7 dias
+    refBackup.once('value', function(snap){
+      var dados = snap.val();
+      if(!dados) return;
+      var datas = Object.keys(dados).sort(); // ordem crescente
+      var limite = datas.length - BACKUP_DIAS;
+      if(limite > 0){
+        var paraExcluir = datas.slice(0, limite);
+        paraExcluir.forEach(function(dt){
+          refBackup.child(dt).remove();
+          console.log('[Backup] Excluído backup antigo: '+dt);
+        });
+      }
+    });
+  }).catch(function(e){
+    console.error('[Backup] Erro ao salvar:', e);
+  });
+}
+
+// Restaurar backup de uma data específica (chamado pelo modal admin)
+function _fbRestaurarBackup(data){
+  if(!_fbDb) return;
+  if(!confirm('Restaurar backup de '+fmtDate(data)+'?\n\nOs dados atuais serão substituídos pelos do backup desta data.\n\nEsta ação não tem volta.')) return;
+  _fbDb.ref('comboio_backup/'+data).once('value', function(snap){
+    var r = snap.val();
+    if(!r){ alert('Backup não encontrado para '+fmtDate(data)+'.'); return; }
+    ['abastecimentos','entradas','comboios','ciclos','cicloAtivo','saldo'].forEach(function(k){
+      if(r[k]!==undefined) db[k]=r[k];
+    });
+    saveDB();
+    _fbAtualizarTela();
+    alert('Backup de '+fmtDate(data)+' restaurado com sucesso!\n'+
+          (r._total||0)+' abastecimentos recuperados.');
+  });
+}
+
+// Renderiza painel de backups disponíveis na tela admin
+function renderBackupPanel(){
+  var el = document.getElementById('backup-panel'); if(!el) return;
+  if(!_fbDb){ el.innerHTML='<div class="note">Firebase não conectado.</div>'; return; }
+  el.innerHTML='<div style="font-size:11px;color:var(--t3)">Carregando...</div>';
+  _fbDb.ref('comboio_backup').once('value', function(snap){
+    var dados = snap.val();
+    if(!dados || !Object.keys(dados).length){
+      el.innerHTML='<div class="note">Nenhum backup disponível ainda. O primeiro será criado automaticamente hoje.</div>';
+      return;
+    }
+    var datas = Object.keys(dados).sort().reverse(); // mais recente primeiro
+    el.innerHTML = datas.map(function(dt){
+      var b = dados[dt];
+      var total = b._total||0;
+      var hora = b._ts ? new Date(b._ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br)">' +
+        '<div>' +
+          '<div style="font-size:13px;font-weight:600">'+fmtDate(dt)+'</div>' +
+          '<div style="font-size:11px;color:var(--t3)">'+total+' abastecimento'+(total!==1?'s':'')+' • salvo às '+hora+'</div>' +
+        '</div>' +
+        '<button class="btn bs bsm" onclick="_fbRestaurarBackup(\''+dt+'\')">'+
+          '<i class="ti ti-restore"></i> Restaurar' +
+        '</button>' +
+      '</div>';
+    }).join('');
+  });
 }
 
 // Atualiza a tela após receber dados remotos
