@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1781700000">
+<meta name="app-version" content="1781750000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -487,6 +487,7 @@ function updateSaldo(){
 }
 function saveDB(){
   updateSaldo();
+  db._localTs = Date.now(); // timestamp da última alteração local
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
   fbPush();
 }
@@ -585,7 +586,7 @@ function iniciarFirebase(url, showAlert, role){
     fbActive = true;
 
     // UNIFIED listener — works for Mac AND iPhone
-    // Admin em qualquer dispositivo pode escrever; receptor recebe tudo
+    // Admin em qualquer dispositivo pode escrever; vence sempre o dado mais recente
     fbRefMaster.on('value', function(snap){
       var r = snap.val();
       if(!r){ renderSyncStatus(); return; }
@@ -594,32 +595,38 @@ function iniciarFirebase(url, showAlert, role){
       var incomingTs = r._masterTs||0;
       masterDeviceId = incomingId;
 
-      // Sou eu quem enviou esse dado — ignora (evita sobrescrever dados locais)
+      // Sou eu quem enviou esse dado — ignora echo
       var iAmSender = (incomingId && incomingId===myDeviceId);
-      // Sou receptor puro (campo sem admin)
-      var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-      var isReceptorPuro = !_isM && !adminLogado;
+      if(iAmSender){ renderSyncStatus(); return; }
 
-      if(!iAmSender){
-        // Recebo dados de outro dispositivo → aplico tudo
-        var keys=['equipamentos','operadores','entradas','comboios',
-                  'abastecimentos','ciclos','cicloAtivo','saldo'];
-        keys.forEach(function(k){
-          if(r[k]!==undefined) db[k]=r[k];
-        });
-        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-        updateSaldo();
-        var ae=document.querySelector('.screen.active');
-        if(ae){
-          var sid=ae.id.replace('screen-','');
-          if(sid==='resumo')  renderResumo();
-          else if(sid==='field')  renderField();
-          else if(sid==='entrada'){renderHistEnt();renderHistCom();}
-          else if(sid==='admin')  renderAdmin();
-          else if(sid==='fotos')  renderFotos();
-          else if(sid==='notif')  renderNotif();
-          else if(sid==='historico') renderHistorico();
-        }
+      // Compara timestamps: só aplica se o dado remoto for mais recente que o local
+      var localTs = db._localTs||0;
+      if(incomingTs <= localTs){
+        // Dado remoto é mais antigo — meus dados locais prevalecem, reenvio para Firebase
+        setTimeout(fbPush, 300);
+        renderSyncStatus();
+        return;
+      }
+
+      // Dado remoto é mais recente → aplica
+      var keys=['equipamentos','operadores','entradas','comboios',
+                'abastecimentos','ciclos','cicloAtivo','saldo'];
+      keys.forEach(function(k){
+        if(r[k]!==undefined) db[k]=r[k];
+      });
+      db._localTs = incomingTs; // sincroniza timestamp local com o remoto
+      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+      updateSaldo();
+      var ae=document.querySelector('.screen.active');
+      if(ae){
+        var sid=ae.id.replace('screen-','');
+        if(sid==='resumo')  renderResumo();
+        else if(sid==='field')  renderField();
+        else if(sid==='entrada'){renderHistEnt();renderHistCom();}
+        else if(sid==='admin')  renderAdmin();
+        else if(sid==='fotos')  renderFotos();
+        else if(sid==='notif')  renderNotif();
+        else if(sid==='historico') renderHistorico();
       }
       renderSyncStatus();
     }, function(err){
@@ -664,7 +671,7 @@ function fbPush(){
       cicloAtivo:db.cicloAtivo||null,
       saldo:db.saldo||{res:0,com:0},
       _masterId:myDeviceId,
-      _masterTs:Date.now()
+      _masterTs:db._localTs||Date.now()  // usa o timestamp da última alteração real
     });
   }catch(e){console.error('fbPush:',e);}
 }
