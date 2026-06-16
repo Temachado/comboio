@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1781089106">
+<meta name="app-version" content="1781700000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -548,7 +548,10 @@ function onCampoAbastUpdate(snap){
   var arr=snap.val();
   if(!arr||!Array.isArray(arr)) return;
   var lids=db.abastecimentos.map(function(a){return a.id;});
-  var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+  // Ignora registros originados neste dispositivo (evita echo/duplicata)
+  var novos=arr.filter(function(a){
+    return lids.indexOf(a.id)===-1 && a._device!==myDeviceId;
+  });
   if(novos.length){
     db.abastecimentos=db.abastecimentos.concat(novos);
     try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
@@ -582,17 +585,23 @@ function iniciarFirebase(url, showAlert, role){
     fbActive = true;
 
     // UNIFIED listener — works for Mac AND iPhone
-    // deviceId determines who is master, not login role
+    // Admin em qualquer dispositivo pode escrever; receptor recebe tudo
     fbRefMaster.on('value', function(snap){
       var r = snap.val();
       if(!r){ renderSyncStatus(); return; }
 
       var incomingId = r._masterId||null;
+      var incomingTs = r._masterTs||0;
       masterDeviceId = incomingId;
-      var iAmMaster  = (incomingId && incomingId===myDeviceId);
 
-      if(!iAmMaster){
-        // I am NOT the master → apply ALL Mac data
+      // Sou eu quem enviou esse dado — ignora (evita sobrescrever dados locais)
+      var iAmSender = (incomingId && incomingId===myDeviceId);
+      // Sou receptor puro (campo sem admin)
+      var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+      var isReceptorPuro = !_isM && !adminLogado;
+
+      if(!iAmSender){
+        // Recebo dados de outro dispositivo → aplico tudo
         var keys=['equipamentos','operadores','entradas','comboios',
                   'abastecimentos','ciclos','cicloAtivo','saldo'];
         keys.forEach(function(k){
@@ -639,9 +648,11 @@ function iniciarFirebase(url, showAlert, role){
 
 
 function fbPush(){
-  // Only master device pushes
+  // Qualquer dispositivo admin pode escrever no master
   if(!fbRefMaster||!fbActive) return;
-  try{if(localStorage.getItem('comboio_is_master')!=='true')return;}catch(e){return;}
+  var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+  // Permite push se: configurado como mestre OU logado como admin
+  if(!_isM && !adminLogado) return;
   try{
     fbRefMaster.set({
       equipamentos:db.equipamentos||[],
@@ -664,10 +675,12 @@ function renderSyncStatus(){
   var url=getFbUrl();
   if(fbActive&&url){
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
+    var mode;
+    if(_isM) mode='<strong>Mac (mestre)</strong> — enviando dados';
+    else if(adminLogado) mode='<strong>Admin bidirecional</strong> — envio e recebimento ativos';
+    else mode='<strong>Campo (receptor)</strong> — recebendo dados';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
-    // Disconnected — trigger silent reconnect and show minimal status
     _fbAutoConectar();
     el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando ao Firebase...</span></div>';
     var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
@@ -710,15 +723,23 @@ function doLogin(){
     document.getElementById('login-admin').style.display='none';
     document.getElementById('main-app').style.display='';
     navigate('resumo');
-    // Auto-connect using saved role (set once via Mac/iPhone buttons)
-    setTimeout(_fbAutoConectar, 500);
+    // Reconecta Firebase — admin pode ler e escrever independente do papel configurado
+    // Se já estava conectado, apenas atualiza o status; senão conecta
+    if(fbActive){
+      renderSyncStatus();
+      // Envia dados locais para sincronizar
+      setTimeout(fbPush, 500);
+    } else {
+      _fbStarted=false;
+      setTimeout(_fbAutoConectar, 500);
+    }
   } else {
     document.getElementById('login-err').style.display='block';
   }
 }
 function logout(){
   adminLogado=false;
-  _fbStarted=false; // allow reinit as campo if needed
+  _fbStarted=false;
   document.getElementById('main-app').style.display='none';
   document.getElementById('splash').style.display='flex';
 }
@@ -1385,7 +1406,10 @@ function runOCREntrada(dataUrl, callback){
   });
 }
 
+var _fsConfirmando=false;
 function fsConfirmar(){
+  if(_fsConfirmando) return; // evita duplo clique
+  _fsConfirmando=true;
   var id=uid();
   var hodAtual=Number(fs.hod);
   var equip=fs.equip;
@@ -1398,7 +1422,7 @@ function fsConfirmar(){
     ultimoHod=Number(ultimo.hod);
   }
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,_device:myDeviceId};
   db.abastecimentos.push(abast);
 
   if(fs.fotoHod||fs.fotoBomba){
@@ -1538,6 +1562,7 @@ function fsConfirmar(){
     try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
   }
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
+  _fsConfirmando=false;
   fs.step=5; renderField();
 }
 
