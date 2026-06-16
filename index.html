@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782100000">
+<meta name="app-version" content="1782160000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1424,18 +1424,6 @@ function renderFS2(){
     hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
   }
 
-  // Photo area bomba
-  var bombaHtml='';
-  if(fs.fotoHod||fs.hod){
-    if(fs.fotoBomba){
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
-    } else {
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
-    }
-  }
-
   return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
     '<div style="margin-bottom:14px"><div class="seg-label">Horímetro</div>'+hodPhotoHtml+'</div>'+
     '<div class="field">'+
@@ -1445,9 +1433,7 @@ function renderFS2(){
     ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
     hodRefHtml+
     '</div>'+
-    bombaHtml+
     '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
-    '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)">'+
     '<button id="btn-hod" class="btn bp" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>'+
     '<button class="btn bs" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';
 }
@@ -1463,20 +1449,8 @@ function renderFS3(){
     (cap>0?'<span>Cap. tanque: <strong style="color:var(--t2)">'+cap.toLocaleString('pt-BR')+' L</strong></span>':'')+
   '</div>';
 
-  // Photo area bomba
-  var bombaStep='';
-  if(!fs.fotoBomba){
-    bombaStep='<div style="margin-bottom:14px"><div class="seg-label">Foto da bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-      '<div class="pha" onclick="abrirCamBomba()" style="padding:16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div>'+
-      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
-  } else {
-    bombaStep='<div style="margin-bottom:14px"><div class="pha has" onclick="abrirCamBomba()" style="padding:14px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto da bomba capturada</div></div>'+
-      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
-  }
-
   return '<div class="sbar"><span class="sbarlabel"><i class="ti ti-droplet"></i> Saldo no comboio</span>'+
     '<span class="sbarval">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div>'+
-    bombaStep+
     '<div class="seg-label">Quantidade abastecida</div>'+
     '<div class="lrow">'+
     '<button class="ladj" onclick="fsAdj(-50)">−</button>'+
@@ -1805,162 +1779,152 @@ function runOCREntrada(dataUrl, callback){
 
 var _fsConfirmando=false;
 function fsConfirmar(){
-  if(_fsConfirmando) return; // evita duplo clique
+  if(_fsConfirmando) return;
   _fsConfirmando=true;
-  var id=uid();
-  var hodAtual=Number(fs.hod);
-  var equip=fs.equip;
 
-  // Check hod against last recorded value for this equipment
-  var historico=db.abastecimentos.filter(function(a){return a.equip===equip.cod;});
-  var ultimoHod=null;
-  if(historico.length){
-    var ultimo=historico.reduce(function(prev,cur){return Number(cur.hod)>Number(prev.hod)?cur:prev;});
-    ultimoHod=Number(ultimo.hod);
-  }
+  try{
+    var id=uid();
+    var hodAtual=Number(fs.hod);
+    var equip=fs.equip;
+    var volAtual=Number(fs.litros);
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,_device:myDeviceId};
-  db.abastecimentos.push(abast);
+    // Verifica horímetro anterior para notificação
+    var historico=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&Number(a.hod)>0;});
+    var ultimoHod=null;
+    if(historico.length){
+      var ultimo=historico.reduce(function(prev,cur){return Number(cur.hod)>Number(prev.hod)?cur:prev;});
+      ultimoHod=Number(ultimo.hod);
+    }
 
-  if(fs.fotoHod||fs.fotoBomba){
-    var fid=fs.imgId||uid();
-    abast.fotoId=fid;
-    // Save foto record with compressed images asynchronously
-    var _fid=fid, _equip=equip.cod, _hod=hodAtual, _vol=Number(fs.litros);
-    var _imgHod=fs.imgHod||null, _imgBomba=fs.imgBomba||null;
-    function salvarFotoRecord(hImg, bImg){
-      var fRec={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-        equip:_equip,hod:_hod,vol:_vol,conferido:false};
-      if(hImg) fRec.imgHod=hImg;
-      if(bImg) fRec.imgBomba=bImg;
-      try{
-        localStorage.setItem('foto_'+_fid,JSON.stringify(fRec));
-      }catch(e){
-        // Storage full — save without images
-        var fr2={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-          equip:_equip,hod:_hod,vol:_vol,conferido:false,semFoto:true};
-        try{localStorage.setItem('foto_'+_fid,JSON.stringify(fr2));}catch(e2){}
+    // Monta o registro
+    var abast={id:id,data:today(),equip:equip.cod,vol:volAtual,hod:hodAtual,
+               operador:'',fotoId:fs.imgId||null,aprovado:true,_device:myDeviceId};
+
+    // Salva foto do horímetro (apenas — bomba removida do wizard)
+    if(fs.fotoHod&&fs.imgHod){
+      var fid=fs.imgId||uid();
+      abast.fotoId=fid;
+      var _fid=fid,_equip=equip.cod,_hod=hodAtual,_vol=volAtual;
+      var _imgHod=fs.imgHod;
+      function salvarFotoRecord(hImg){
+        var fRec={id:_fid,data:today(),
+          hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+          equip:_equip,hod:_hod,vol:_vol,conferido:false};
+        if(hImg) fRec.imgHod=hImg;
+        try{
+          localStorage.setItem('foto_'+_fid,JSON.stringify(fRec));
+        }catch(e){
+          var fr2={id:_fid,data:today(),
+            hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+            equip:_equip,hod:_hod,vol:_vol,conferido:false,semFoto:true};
+          try{localStorage.setItem('foto_'+_fid,JSON.stringify(fr2));}catch(e2){}
+        }
+      }
+      comprimirImg(_imgHod,0.4,function(h){ salvarFotoRecord(h); });
+    }
+
+    // Adiciona ao banco e salva TUDO de uma vez só no final
+    db.abastecimentos.push(abast);
+
+    // Notificação: horímetro inferior
+    if(ultimoHod!==null && hodAtual<ultimoHod){
+      abast.aprovado=false;
+      criarNotif('hod_inferior',
+        'Horímetro inferior ao registro anterior',
+        equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
+          ' '+(equip.unidade==='km'?'km':'h')+
+          ', mas o último registro era '+ultimoHod.toLocaleString('pt-BR')+
+          '. Verifique e aprove ou rejeite.',
+        {abastId:id,equip:equip.cod,hodLancado:hodAtual,hodAnterior:ultimoHod});
+    }
+
+    // Notificação: consumo divergente (opção B)
+    if(equip.consumo&&equip.consumo>0){
+      var hist2=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.aprovado!==false;});
+      if(hist2.length>=2){
+        var ult2=hist2[hist2.length-1], pen2=hist2[hist2.length-2];
+        var dh2=Number(ult2.hod)-Number(pen2.hod);
+        if(dh2>0){
+          var isKm2=equip.unidade==='km';
+          var cReal=volAtual/dh2*(isKm2?100:1);
+          var cEsp=Number(equip.consumo);
+          var desv=Math.abs(cReal-cEsp)/cEsp;
+          if(desv>0.2){
+            criarNotif('consumo_divergente','Consumo fora do esperado — '+equip.cod,
+              'Registrado: '+cReal.toFixed(2)+' '+(isKm2?'L/100km':'L/h')+
+              ' (esperado: '+cEsp+') — '+Math.round(desv*100)+'% '+(cReal>cEsp?'acima':'abaixo'),
+              {equip:equip.cod,consReal:cReal,consEsp:cEsp});
+          }
+        }
       }
     }
-    if(_imgHod){
-      comprimirImg(_imgHod,0.4,function(h){
-        if(_imgBomba){
-          comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(h,b);});
-        } else {
-          salvarFotoRecord(h,null);
-        }
-      });
-    } else if(_imgBomba){
-      comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(null,b);});
-    } else {
-      salvarFotoRecord(null,null);
-    }
-  }
-  saveDB();
 
-  // Notificação: horímetro inferior ao último registro
-  if(ultimoHod!==null && hodAtual<ultimoHod){
-    abast.aprovado=false;
-    criarNotif(
-      'hod_inferior',
-      'Horímetro inferior ao registro anterior',
-      equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+' '+(equip.unidade==='km'?'km':'h')+', mas o último registro era '+ultimoHod.toLocaleString('pt-BR')+'. Verifique e aprove ou rejeite este lançamento.',
-      {abastId:id, equip:equip.cod, hodLancado:hodAtual, hodAnterior:ultimoHod}
-    );
+    // Notificação: volume > capacidade
+    if(equip.tank>0&&volAtual>equip.tank){
+      criarNotif('volume_excede_tank','Volume supera capacidade do tanque',
+        equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L',{abastId:id});
+    }
+
+    // Notificação: opção B faixa min/max
+    if(hodAtual>0){
+      var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id;})
+        .sort(function(a,b){return Number(b.hod)-Number(a.hod);});
+      if(_ph.length>0){
+        var _dh=hodAtual-Number(_ph[0].hod);
+        if(_dh>0){
+          var _isKm=equip.unidade==='km';
+          var _cr=volAtual/_dh*(_isKm?100:1);
+          var _abR=db.abastecimentos.filter(function(a){return a.id===id;})[0];
+          if(_abR) _abR.consumoCalc=Math.round(_cr*100)/100;
+          var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
+          if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
+            var _u=_isKm?'L/100km':'L/h';
+            criarNotif('consumo_fora_faixa','Consumo fora da faixa esperada',
+              equip.cod+': '+_cr.toFixed(1)+' '+_u+' (faixa: '+_cMin+'-'+_cMax+' '+_u+')',{abastId:id});
+          }
+        }
+      }
+    }
+
+    // Notificação: saldo comboio baixo
+    var saldoCom=getSaldoCom();
+    if(saldoCom<300&&saldoCom>=0){
+      var jaNotifCom=db.notificacoes&&db.notificacoes.filter(function(n){
+        return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;
+      if(!jaNotifCom) criarNotif('comboio_baixo','Comboio com menos de 300 litros',
+        'Saldo atual: '+Math.max(0,saldoCom).toFixed(0)+' L.',{saldo:saldoCom});
+    }
+
+    // Notificação: reservatório baixo
+    var saldoRes=getSaldoRes();
+    if(saldoRes<500&&saldoRes>=0){
+      var jaNotif=db.notificacoes&&db.notificacoes.filter(function(n){
+        return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;
+      if(!jaNotif) criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros',
+        'Saldo atual: '+Math.max(0,saldoRes).toFixed(0)+' L.',{saldo:saldoRes});
+    }
+
+    // Persiste tudo de uma vez — só agora grava no localStorage e Firebase
     saveDB();
-  }
 
-  // Item 7: consumo médio divergente ±20%
-  if(fs.equip.consumo&&fs.equip.consumo>0){
-    var historico2=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.aprovado!==false;});
-    if(historico2.length>=2){
-      var ultimo2=historico2[historico2.length-1];
-      var penult=historico2[historico2.length-2];
-      var dh2=Number(ultimo2.hod)-Number(penult.hod);
-      if(dh2>0){
-        var isKm2=equip.unidade==='km';
-        var consReal=isKm2?(Number(ultimo2.vol)/dh2*100):(Number(ultimo2.vol)/dh2);
-        var consEsp=Number(equip.consumo);
-        var desvio=Math.abs(consReal-consEsp)/consEsp;
-        if(desvio>0.2){
-          var dir=consReal>consEsp?'acima':'abaixo';
-          criarNotif('consumo_divergente',
-            'Consumo fora do esperado — '+equip.cod,
-            'Consumo registrado: '+consReal.toFixed(2)+' '+(isKm2?'L/100km':'L/h')+
-            ' (esperado: '+consEsp+' '+(isKm2?'L/100km':'L/h')+') — '+
-            Math.round(desvio*100)+'% '+dir+' do esperado.',
-            {equip:equip.cod,consReal:consReal,consEsp:consEsp});
-        }
-      }
+    // Envia para Firebase campo (iPhone campo → Mac)
+    if(fbRefCampo&&fbActive){
+      try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
     }
-  }
 
-  // Item 8: volume > 10% da capacidade do tanque
-  if(equip.tank&&equip.tank>0){
-    var capTank=Number(equip.tank);
-    var volAb=Number(fs.litros);
-    if(volAb>capTank*1.10){
-      criarNotif('volume_excessivo',
-        'Volume superior à capacidade — '+equip.cod,
-        'Abastecimento de '+volAb.toFixed(0)+' L registrado, mas a capacidade do tanque é '+capTank+' L ('+Math.round(volAb/capTank*100)+'%).',
-        {equip:equip.cod,vol:volAb,cap:capTank});
-    }
-  }
+    // Atualiza ciclo
+    if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
 
-  // Item 9: saldo comboio < 300 L
-  var saldoCom=getSaldoCom();
-  if(saldoCom<300&&saldoCom>=0){
-    var jaNotifCom=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;
-    if(!jaNotifCom){
-      criarNotif('comboio_baixo',
-        'Comboio com menos de 300 litros',
-        'Saldo atual do comboio: '+Math.max(0,saldoCom).toFixed(0)+' L. Faça o carregamento.',
-        {saldo:saldoCom});
-    }
-  }
+    // Só chega aqui se tudo correu bem — avança para tela de sucesso
+    _fsConfirmando=false;
+    fs.step=5;
+    renderField();
 
-  // Notificação: reservatório abaixo de 500 L
-  var saldoRes=getSaldoRes();
-  if(saldoRes<500&&saldoRes>=0){
-    var jaNotif=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;
-    if(!jaNotif){
-      criarNotif('reservatorio_baixo',
-        'Reservatório abaixo de 500 litros',
-        'Saldo atual do reservatório principal: '+Math.max(0,saldoRes).toFixed(0)+' L. Solicite reabastecimento.',
-        {saldo:saldoRes});
-    }
+  }catch(e){
+    console.error('[fsConfirmar] erro:', e);
+    _fsConfirmando=false;
+    fsToast('Erro ao registrar abastecimento. Tente novamente.','red',5000);
   }
-
-  // Update cycle after equipment fill
-  // Option B: check consumption vs min/max + store history for Option C
-  if(hodAtual>0){
-    var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id;}).sort(function(a,b){return Number(b.hod)-Number(a.hod);});
-    if(_ph.length>0){
-      var _dh=hodAtual-Number(_ph[0].hod);
-      if(_dh>0){
-        var _isKm=equip.unidade==='km';
-        var _cr=Number(fs.litros)/_dh*(_isKm?100:1);
-        var _abR=db.abastecimentos.filter(function(a){return a.id===id;})[0];
-        if(_abR) _abR.consumoCalc=Math.round(_cr*100)/100;
-        var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
-        if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
-          var _u=_isKm?'L/100km':'L/h';
-          criarNotif('consumo_fora_faixa','Consumo fora da faixa esperada',equip.cod+': '+_cr.toFixed(1)+' '+_u+' (faixa: '+_cMin+'-'+_cMax+' '+_u+')',{abastId:id});
-        }
-      }
-    }
-  }
-  // Volume maior que capacidade do tanque
-  if(equip.tank>0&&Number(fs.litros)>equip.tank){
-    criarNotif('volume_excede_tank','Volume supera capacidade do tanque',equip.cod+': lançado '+Number(fs.litros).toFixed(0)+' L, capacidade '+equip.tank+' L',{abastId:id});
-  }
-  // Operador de campo: envia abastecimentos via Firebase
-  if(fbRefCampo&&fbActive){
-    try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
-  }
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
-  _fsConfirmando=false;
-  fs.step=5; renderField();
 }
 
 // ─────────────────────────────────────────────
