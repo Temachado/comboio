@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782240000">
+<meta name="app-version" content="1782300000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -396,7 +396,7 @@ input,select,textarea,button{font-family:inherit}
 
   <!-- NOTIFICAÇÕES -->
   <div id="screen-notif" class="screen">
-    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Notificações</h1></div><span id="notif-badge-top" class="pill p-adm" style="display:none"></span><button class="btn bs bsm" onclick="marcarTodasLidas()" style="margin-left:8px;padding:6px 10px;font-size:12px"><i class="ti ti-checks"></i> Lidas</button></div></div>
+    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Notificações</h1></div><span id="notif-badge-top" class="pill p-adm" style="display:none"></span><button class="btn bs bsm" onclick="marcarTodasLidas()" style="margin-left:8px;padding:6px 10px;font-size:12px"><i class="ti ti-checks"></i> Lidas</button><button class="btn bd bsm" onclick="apagarNotifLidas()" style="margin-left:6px;padding:6px 10px;font-size:12px"><i class="ti ti-trash"></i> Apagar lidas</button></div></div>
     <div class="sb" id="notif-body"></div>
     <nav class="bnav" id="nav-notif"></nav>
   </div>
@@ -601,7 +601,7 @@ function _fbRegistrarListeners(){
     // Dado remoto mais recente — aplica localmente
     console.log('[Sync] Dado remoto mais recente → aplicando');
     ['equipamentos','operadores','entradas','comboios',
-     'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
+     'abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){
       if(r[k]!==undefined) db[k]=r[k];
     });
     _fbSetLocalTs(remoteTs);
@@ -654,16 +654,17 @@ function _fbEnviar(){
   var ts = _fbGetLocalTs() || Date.now();
   try{
     fbRefMaster.set({
-      equipamentos : db.equipamentos||[],
-      operadores   : db.operadores||[],
-      entradas     : db.entradas||[],
-      comboios     : db.comboios||[],
+      equipamentos  : db.equipamentos||[],
+      operadores    : db.operadores||[],
+      entradas      : db.entradas||[],
+      comboios      : db.comboios||[],
       abastecimentos: db.abastecimentos||[],
-      ciclos       : db.ciclos||[],
-      cicloAtivo   : db.cicloAtivo||null,
-      saldo        : db.saldo||{res:0,com:0},
-      _masterId    : myDeviceId,
-      _masterTs    : ts
+      notificacoes  : db.notificacoes||[],
+      ciclos        : db.ciclos||[],
+      cicloAtivo    : db.cicloAtivo||null,
+      saldo         : db.saldo||{res:0,com:0},
+      _masterId     : myDeviceId,
+      _masterTs     : ts
     });
     console.log('[Sync] Enviado ts='+ new Date(ts).toLocaleTimeString());
   }catch(e){ console.error('[FB] enviar erro:', e); }
@@ -2196,7 +2197,12 @@ function renderNotif(){
       var status=n.aprovada===true?'<span style="color:var(--green)">✓ Aprovado</span>':
                  n.aprovada===false?'<span style="color:var(--red)">✗ Rejeitado</span>':
                  '<span style="color:var(--t3)">Lida</span>';
-      html+='<div style="font-size:11px;margin-top:6px">'+status+'</div>';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">'+
+        '<div style="font-size:11px">'+status+'</div>'+
+        '<button onclick="apagarNotif(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);'+
+          'font-size:12px;cursor:pointer;padding:2px 6px;display:flex;align-items:center;gap:4px">'+
+          '<i class="ti ti-trash" style="font-size:14px"></i></button>'+
+      '</div>';
     }
 
     html+='</div></div></div>';
@@ -2214,6 +2220,19 @@ function marcarLida(id){
 
 function marcarTodasLidas(){
   (db.notificacoes||[]).forEach(function(n){n.lida=true;});
+  saveDB(); updateNotifBadge(); renderNotif();
+}
+
+function apagarNotif(id){
+  db.notificacoes=(db.notificacoes||[]).filter(function(n){return n.id!==id;});
+  saveDB(); updateNotifBadge(); renderNotif();
+}
+
+function apagarNotifLidas(){
+  var lidas=(db.notificacoes||[]).filter(function(n){return n.lida;}).length;
+  if(!lidas){alert('Nenhuma notificação lida para apagar.');return;}
+  if(!confirm('Apagar '+lidas+' notificação'+(lidas>1?'s lidas':' lida')+'?'))return;
+  db.notificacoes=(db.notificacoes||[]).filter(function(n){return !n.lida;});
   saveDB(); updateNotifBadge(); renderNotif();
 }
 
