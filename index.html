@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782600000">
+<meta name="app-version" content="1782620000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2777,7 +2777,7 @@ function renderHistorico(){
         data:a.data,tipo:'fuel',
         nome:a.equip||'—',
         sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo')+(pendente?' • <span style="color:var(--am);font-weight:600">⏳ Aguardando aprovação</span>':''),
-        vol:'<span style="'+(pendente?'color:var(--am)':'')+'">'+(pendente?'(')+''+Number(a.vol).toFixed(0)+' L'+(pendente?')':'')+'</span>',
+        vol:'<span style="'+(pendente?'color:var(--am)':'')+'">'+(pendente?'(':'')+Number(a.vol).toFixed(0)+' L'+(pendente?')':'')+'</span>',
         raw:a
       });
     });
