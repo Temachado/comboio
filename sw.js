@@ -1,5 +1,5 @@
 // Cache version — updated on every deploy to force refresh
-const CACHE = 'combustivel-1782540000';
+const CACHE = 'combustivel-1782600000';
 const FILES = ['./manifest.json'];
 
 self.addEventListener('install', e => {

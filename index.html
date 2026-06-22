@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782540000">
+<meta name="app-version" content="1782600000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -785,15 +785,16 @@ function renderBackupPanel(){
 
 // Atualiza a tela após receber dados remotos
 function _fbAtualizarTela(){
+  updateSaldo(); // sempre recalcula antes de renderizar
   var ae = document.querySelector('.screen.active');
   if(!ae) return;
   var sid = ae.id.replace('screen-','');
-  if(sid==='resumo')   renderResumo();
-  else if(sid==='field')    renderField();
-  else if(sid==='entrada')  { renderHistEnt(); renderHistCom(); }
-  else if(sid==='admin')    renderAdmin();
-  else if(sid==='fotos')    renderFotos();
-  else if(sid==='notif')    renderNotif();
+  if(sid==='resumo')    renderResumo();
+  else if(sid==='field')     renderField();
+  else if(sid==='entrada')   { renderHistEnt(); renderHistCom(); }
+  else if(sid==='admin')     renderAdmin();
+  else if(sid==='fotos')     renderFotos();
+  else if(sid==='notif')     renderNotif();
   else if(sid==='historico') renderHistorico();
   updateNotifBadge();
   renderSyncStatus();
@@ -1239,7 +1240,18 @@ function renderResumo(){
   var todos=[];
   db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
   db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
-  db.abastecimentos.forEach(function(a){if(a.data>=semIniStr&&a.data<=semFimStr)todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L'});});
+  db.abastecimentos.forEach(function(a){
+    if(a.data>=semIniStr&&a.data<=semFimStr){
+      var pendente=a.aprovado===false;
+      todos.push({
+        data:a.data,tipo:'fuel',
+        nome:a.equip||'—',
+        sub:(a.operador||'Campo')+(pendente?' • ⏳ Pendente':''),
+        vol:(pendente?'(':'')+''+Number(a.vol).toFixed(0)+' L'+(pendente?')':''),
+        pendente:pendente
+      });
+    }
+  });
   todos.sort(function(a,b){return b.data.localeCompare(a.data);});
   var el=document.getElementById('res-hist');
   var semLabel=fmtDate(semIniStr)+' a '+fmtDate(semFimStr);
@@ -1250,7 +1262,11 @@ function renderResumo(){
   el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Semana: '+semLabel+'</div>'+
   todos.map(function(r){
     var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
-    return'<div class="hi"><div class="hic '+r.tipo+'"><i class="ti '+ic+'"></i></div><div class="hb"><div class="hn">'+r.nome+'</div><div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div><div class="hv">'+r.vol+'</div></div>';
+    var cor=r.pendente?'color:var(--am)':'';
+    return'<div class="hi"><div class="hic '+r.tipo+'" style="'+(r.pendente?'background:var(--al);color:var(--am)':'')+'"><i class="ti '+ic+'"></i></div>'+
+      '<div class="hb"><div class="hn" style="'+cor+'">'+r.nome+'</div>'+
+      '<div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div>'+
+      '<div class="hv" style="'+cor+'">'+r.vol+'</div></div>';
   }).join('');
 }
 
@@ -2756,7 +2772,14 @@ function renderHistorico(){
   if(!filtTipo||filtTipo==='fuel')
     db.abastecimentos.forEach(function(a){
       if(filtEq&&a.equip!==filtEq) return;
-      todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo'),vol:Number(a.vol).toFixed(0)+' L',raw:a});
+      var pendente=a.aprovado===false;
+      todos.push({
+        data:a.data,tipo:'fuel',
+        nome:a.equip||'—',
+        sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo')+(pendente?' • <span style="color:var(--am);font-weight:600">⏳ Aguardando aprovação</span>':''),
+        vol:'<span style="'+(pendente?'color:var(--am)':'')+'">'+(pendente?'(')+''+Number(a.vol).toFixed(0)+' L'+(pendente?')':'')+'</span>',
+        raw:a
+      });
     });
   if(filtDe) todos=todos.filter(function(r){return r.data>=filtDe;});
   if(filtAte) todos=todos.filter(function(r){return r.data<=filtAte;});
