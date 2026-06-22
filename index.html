@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782460000">
+<meta name="app-version" content="1782540000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -585,36 +585,27 @@ function _fbRegistrarListeners(){
     // Echo: ignorar dados que eu mesmo enviei
     if(remoteId === myDeviceId) return;
 
-    var localTs = _fbGetLocalTs();
+    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+    var isReceptorPuro = !_isM && !adminLogado;
 
     console.log('[Sync] remoto='+ new Date(remoteTs).toLocaleTimeString() +
-                ' local='+ new Date(localTs).toLocaleTimeString() +
-                ' diff='+(remoteTs-localTs)+'ms de='+remoteId);
+                ' local='+ new Date(_fbGetLocalTs()).toLocaleTimeString() +
+                ' receptor='+ isReceptorPuro + ' de='+remoteId);
 
-    if(remoteTs <= localTs){
-      // Verifica se é um reset — arrays principais vazios
-      var isResetRemoto = Array.isArray(r.abastecimentos) && r.abastecimentos.length===0 &&
-                          Array.isArray(r.entradas) && r.entradas.length===0;
-      if(!isResetRemoto){
-        // Meus dados são mais recentes e não é reset — reenvio
-        console.log('[Sync] Meu dado é mais recente → reenviando');
+    // Receptor puro (iPhone campo sem admin) SEMPRE aplica dados do Firebase master
+    // Nunca reescreve — só lê
+    if(!isReceptorPuro){
+      // Dispositivo com permissão de escrita: compara timestamps
+      var localTs = _fbGetLocalTs();
+      if(remoteTs <= localTs){
+        console.log('[Sync] Sou master/admin e meu dado é mais recente → reenviando');
         setTimeout(_fbEnviar, 400);
         return;
       }
-      // É um reset — aplica mesmo sendo mais antigo
-      console.log('[Sync] Reset recebido → aplicando mesmo com timestamp local mais recente');
     }
 
-    // Dado remoto mais recente — aplica localmente
-    console.log('[Sync] Dado remoto mais recente → aplicando');
-
-    // Detecta reset: se arrays principais chegaram vazios, aplica sempre (não verifica timestamp)
-    var isReset = Array.isArray(r.abastecimentos) && r.abastecimentos.length===0 &&
-                  Array.isArray(r.entradas) && r.entradas.length===0;
-    if(isReset){
-      console.log('[Sync] Reset detectado → aplicando sem verificar timestamp');
-    }
-
+    // Aplica dados remotos
+    console.log('[Sync] Aplicando dados remotos');
     ['equipamentos','operadores','entradas','comboios',
      'abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){
       if(r[k]!==undefined) db[k]=r[k];
@@ -649,10 +640,11 @@ function _fbConectar(){
   _fbRegistrarListeners();
   renderSyncStatus();
 
-  // Se pode escrever, envia dados locais ao conectar
+  // Apenas master/admin envia dados ao conectar
+  // Receptor puro só escuta — nunca reescreve Firebase
   if(_fbPodeEscrever()){
     setTimeout(_fbEnviar, 600);
-    setTimeout(_fbBackupDiario, 3000); // backup diário após sync inicial
+    setTimeout(_fbBackupDiario, 3000);
   }
 }
 
@@ -2649,28 +2641,29 @@ function confirmarApagar(){
   if(delAb)  db.abastecimentos=[];
   if(delNot) db.notificacoes=[];
 
-  // Força timestamp mais recente — garante que iPhone/outros dispositivos recebem o reset
+  // Timestamp garantidamente maior que qualquer receptor
+  // (receptores puros agora sempre aceitam master, mas mantemos por segurança)
   _fbSetLocalTs(Date.now());
   saveDB();
 
-  // Envia diretamente para Firebase mesmo que _fbPodeEscrever() retorne falso temporariamente
+  // Envia direto — bypass de _fbPodeEscrever para garantir que sai mesmo em edge cases
   setTimeout(function(){
-    if(fbRefMaster&&fbActive){
-      var ts=_fbGetLocalTs();
-      fbRefMaster.set({
-        equipamentos  : db.equipamentos||[],
-        operadores    : db.operadores||[],
-        entradas      : db.entradas||[],
-        comboios      : db.comboios||[],
-        abastecimentos: db.abastecimentos||[],
-        notificacoes  : db.notificacoes||[],
-        ciclos        : db.ciclos||[],
-        cicloAtivo    : db.cicloAtivo||null,
-        saldo         : db.saldo||{res:0,com:0},
-        _masterId     : myDeviceId,
-        _masterTs     : ts
-      });
-    }
+    if(!fbRefMaster||!fbActive) return;
+    var ts = _fbGetLocalTs();
+    fbRefMaster.set({
+      equipamentos  : db.equipamentos||[],
+      operadores    : db.operadores||[],
+      entradas      : db.entradas||[],
+      comboios      : db.comboios||[],
+      abastecimentos: db.abastecimentos||[],
+      notificacoes  : db.notificacoes||[],
+      ciclos        : db.ciclos||[],
+      cicloAtivo    : db.cicloAtivo||null,
+      saldo         : db.saldo||{res:0,com:0},
+      _masterId     : myDeviceId,
+      _masterTs     : ts
+    });
+    console.log('[Sync] Reset enviado ts='+new Date(ts).toLocaleTimeString());
   }, 200);
 
   toggleModalApagar();
