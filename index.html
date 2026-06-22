@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782380000">
+<meta name="app-version" content="1782460000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -592,14 +592,29 @@ function _fbRegistrarListeners(){
                 ' diff='+(remoteTs-localTs)+'ms de='+remoteId);
 
     if(remoteTs <= localTs){
-      // Meus dados são mais recentes — reenvio para sobrescrever o Firebase
-      console.log('[Sync] Meu dado é mais recente → reenviando');
-      setTimeout(_fbEnviar, 400);
-      return;
+      // Verifica se é um reset — arrays principais vazios
+      var isResetRemoto = Array.isArray(r.abastecimentos) && r.abastecimentos.length===0 &&
+                          Array.isArray(r.entradas) && r.entradas.length===0;
+      if(!isResetRemoto){
+        // Meus dados são mais recentes e não é reset — reenvio
+        console.log('[Sync] Meu dado é mais recente → reenviando');
+        setTimeout(_fbEnviar, 400);
+        return;
+      }
+      // É um reset — aplica mesmo sendo mais antigo
+      console.log('[Sync] Reset recebido → aplicando mesmo com timestamp local mais recente');
     }
 
     // Dado remoto mais recente — aplica localmente
     console.log('[Sync] Dado remoto mais recente → aplicando');
+
+    // Detecta reset: se arrays principais chegaram vazios, aplica sempre (não verifica timestamp)
+    var isReset = Array.isArray(r.abastecimentos) && r.abastecimentos.length===0 &&
+                  Array.isArray(r.entradas) && r.entradas.length===0;
+    if(isReset){
+      console.log('[Sync] Reset detectado → aplicando sem verificar timestamp');
+    }
+
     ['equipamentos','operadores','entradas','comboios',
      'abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){
       if(r[k]!==undefined) db[k]=r[k];
@@ -1579,6 +1594,24 @@ function renderFS4(){
 }
 
 function renderFS5(){
+  // Verifica se o último abastecimento registrado está pendente de aprovação
+  var ultimoAbast=db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod;});
+  ultimoAbast=ultimoAbast.length?ultimoAbast[ultimoAbast.length-1]:null;
+  var pendente=ultimoAbast&&ultimoAbast.aprovado===false;
+
+  if(pendente){
+    return '<div class="ok-screen">'+
+      '<div style="font-size:48px;color:var(--am);margin-bottom:12px"><i class="ti ti-clock-pause"></i></div>'+
+      '<div class="ok-title" style="color:var(--am)">Aguardando aprovação</div>'+
+      '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> registrados<br><br>'+
+      '<span style="font-size:12px;color:var(--am);line-height:1.6">'+
+        'O registro foi salvo mas <strong>não será contabilizado</strong> até o administrador aprovar ou corrigir.<br><br>'+
+        'O administrador foi notificado na aba Avisos.'+
+      '</span></div>'+
+      '<button class="btn bp" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button>'+
+    '</div>';
+  }
+
   return '<div class="ok-screen"><div class="ok-icon"><i class="ti ti-circle-check"></i></div>'+
     '<div class="ok-title">Registrado!</div>'+
     '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br>'+
@@ -1865,48 +1898,30 @@ function fsConfirmar(){
     // Adiciona ao banco e salva TUDO de uma vez só no final
     db.abastecimentos.push(abast);
 
-    // Notificação: horímetro inferior
+    // Notificação: horímetro inferior → marca como não aprovado (ponto 1)
     if(ultimoHod!==null && hodAtual<ultimoHod){
       abast.aprovado=false;
       criarNotif('hod_inferior',
         'Horímetro inferior ao registro anterior',
         equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
           ' '+(equip.unidade==='km'?'km':'h')+
-          ', mas o último registro era '+ultimoHod.toLocaleString('pt-BR')+
-          '. Verifique e aprove ou rejeite.',
+          ' — último registro era '+ultimoHod.toLocaleString('pt-BR')+
+          '. Aguardando aprovação do administrador.',
         {abastId:id,equip:equip.cod,hodLancado:hodAtual,hodAnterior:ultimoHod});
     }
 
-    // Notificação: consumo divergente (opção B)
-    if(equip.consumo&&equip.consumo>0){
-      var hist2=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.aprovado!==false;});
-      if(hist2.length>=2){
-        var ult2=hist2[hist2.length-1], pen2=hist2[hist2.length-2];
-        var dh2=Number(ult2.hod)-Number(pen2.hod);
-        if(dh2>0){
-          var isKm2=equip.unidade==='km';
-          var cReal=volAtual/dh2*(isKm2?100:1);
-          var cEsp=Number(equip.consumo);
-          var desv=Math.abs(cReal-cEsp)/cEsp;
-          if(desv>0.2){
-            criarNotif('consumo_divergente','Consumo fora do esperado — '+equip.cod,
-              'Registrado: '+cReal.toFixed(2)+' '+(isKm2?'L/100km':'L/h')+
-              ' (esperado: '+cEsp+') — '+Math.round(desv*100)+'% '+(cReal>cEsp?'acima':'abaixo'),
-              {equip:equip.cod,consReal:cReal,consEsp:cEsp});
-          }
-        }
-      }
-    }
-
-    // Notificação: volume > capacidade
+    // Notificação: volume > capacidade do tanque → marca como não aprovado (ponto 1)
     if(equip.tank>0&&volAtual>equip.tank){
+      abast.aprovado=false;
       criarNotif('volume_excede_tank','Volume supera capacidade do tanque',
-        equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L',{abastId:id});
+        equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L'+
+        '. Aguardando aprovação do administrador.',
+        {abastId:id,equip:equip.cod,volLancado:volAtual,capacidade:equip.tank});
     }
 
-    // Notificação: opção B faixa min/max
+    // Notificação: consumo fora da faixa min/max (opção B)
     if(hodAtual>0){
-      var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id;})
+      var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id&&a.aprovado!==false;})
         .sort(function(a,b){return Number(b.hod)-Number(a.hod);});
       if(_ph.length>0){
         var _dh=hodAtual-Number(_ph[0].hod);
@@ -1918,29 +1933,12 @@ function fsConfirmar(){
           var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
           if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
             var _u=_isKm?'L/100km':'L/h';
-            criarNotif('consumo_fora_faixa','Consumo fora da faixa esperada',
-              equip.cod+': '+_cr.toFixed(1)+' '+_u+' (faixa: '+_cMin+'-'+_cMax+' '+_u+')',{abastId:id});
+            criarNotif('consumo_fora_faixa','Consumo fora da faixa esperada — '+equip.cod,
+              'Registrado: '+_cr.toFixed(1)+' '+_u+' (faixa esperada: '+_cMin+'–'+_cMax+' '+_u+')',
+              {abastId:id,equip:equip.cod,consReal:_cr,cMin:_cMin,cMax:_cMax});
           }
         }
       }
-    }
-
-    // Notificação: saldo comboio baixo
-    var saldoCom=getSaldoCom();
-    if(saldoCom<300&&saldoCom>=0){
-      var jaNotifCom=db.notificacoes&&db.notificacoes.filter(function(n){
-        return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;
-      if(!jaNotifCom) criarNotif('comboio_baixo','Comboio com menos de 300 litros',
-        'Saldo atual: '+Math.max(0,saldoCom).toFixed(0)+' L.',{saldo:saldoCom});
-    }
-
-    // Notificação: reservatório baixo
-    var saldoRes=getSaldoRes();
-    if(saldoRes<500&&saldoRes>=0){
-      var jaNotif=db.notificacoes&&db.notificacoes.filter(function(n){
-        return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;
-      if(!jaNotif) criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros',
-        'Saldo atual: '+Math.max(0,saldoRes).toFixed(0)+' L.',{saldo:saldoRes});
     }
 
     // Persiste tudo de uma vez — só agora grava no localStorage e Firebase
@@ -2237,7 +2235,7 @@ function apagarNotifLidas(){
   saveDB(); updateNotifBadge(); renderNotif();
 }
 
-// Tipos de notificação permitidos
+// Tipos de notificação permitidos na aba Avisos
 var NOTIF_TIPOS_PERMITIDOS = ['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
 
 function criarNotif(tipo, titulo, descricao, dados){
@@ -2325,8 +2323,9 @@ function abrirModalCorrigir(abastId, notifId){
   document.getElementById('mc-desc').textContent='Equipamento: '+ab.equip+' • '+fmtDate(ab.data);
   document.getElementById('mc-info').innerHTML=
     '<strong>'+(isKm?'Odômetro':'Horímetro')+' lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
-    (hodAnt!==null?' | <strong>Anterior:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+
-    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
+    (hodAnt!==null?' | <strong>Anterior (mínimo):</strong> <span style="color:var(--am)">'+hodAnt.toLocaleString('pt-BR')+' '+unid+'</span>':'')+
+    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L'+
+    (hodAnt!==null?'<br><span style="font-size:11px;color:var(--am)">⚠ O novo valor deve ser maior que '+hodAnt.toLocaleString('pt-BR')+' '+unid+'</span>':'');
   document.getElementById('mc-hod-label').textContent=(isKm?'Odômetro (km)':'Horímetro (h)');
   document.getElementById('mc-hod').value=ab.hod;
   document.getElementById('mc-vol').value=ab.vol;
@@ -2343,12 +2342,31 @@ function salvarCorrecao(){
   var ab=db.abastecimentos.filter(function(a){return a.id===_corrigirAbastId;})[0];
   if(!ab){ fecharModalCorrigir(); return; }
 
+  // Ponto 3: novo horímetro deve ser maior que o último registro anterior
+  var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
+  var isKm=eq&&eq.unidade==='km';
+  var unid=isKm?'km':'h';
+  var histAnt=db.abastecimentos.filter(function(a){
+    return a.equip===ab.equip && a.id!==_corrigirAbastId && Number(a.hod)>0;
+  });
+  var hodMinimo=0;
+  if(histAnt.length){
+    var antRec=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    hodMinimo=Number(antRec.hod);
+  }
+  if(hodMinimo>0 && newHod<=hodMinimo){
+    alert('O horímetro corrigido ('+newHod.toLocaleString('pt-BR')+' '+unid+') '+
+          'deve ser maior que o último registro anterior ('+hodMinimo.toLocaleString('pt-BR')+' '+unid+').\n\n'+
+          'Informe um valor válido.');
+    return;
+  }
+
   var hodAnterior=ab.hod;
   var volAnterior=ab.vol;
 
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
 
-  // Marca notificação original como resolvida
+  // Marca notificações relacionadas como resolvidas
   if(db.notificacoes){
     db.notificacoes.forEach(function(n){
       if(n.dados&&n.dados.abastId===_corrigirAbastId&&!n.lida){
@@ -2357,16 +2375,14 @@ function salvarCorrecao(){
     });
   }
 
-  // Cria notificação de registro corrigido (ponto 2.4 — só na aba avisos)
-  var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km';
-  var unid=isKm?'km':'h';
+  // Cria notificação de registro corrigido (ponto 2.4)
   criarNotif('abast_corrigido',
     'Abastecimento corrigido — '+ab.equip,
     'Registro de '+fmtDate(ab.data)+' corrigido:\n'+
-    (isKm?'Odômetro':'Horímetro')+': '+hodAnterior+' → '+newHod+' '+unid+
+    (isKm?'Odômetro':'Horímetro')+': '+Number(hodAnterior).toLocaleString('pt-BR')+' → '+
+    Number(newHod).toLocaleString('pt-BR')+' '+unid+
     ' | Volume: '+Number(volAnterior).toFixed(0)+' → '+newVol+' L',
-    {abastId:_corrigirAbastId, equip:ab.equip, hodAnterior:hodAnterior, hodNovo:newHod, volAnterior:volAnterior, volNovo:newVol}
+    {abastId:_corrigirAbastId,equip:ab.equip,hodAnterior:hodAnterior,hodNovo:newHod,volAnterior:volAnterior,volNovo:newVol}
   );
 
   saveDB();
