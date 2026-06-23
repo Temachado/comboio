@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782840000">
+<meta name="app-version" content="1782960000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -488,13 +488,13 @@ function loadDB(){
       var p=JSON.parse(s);
       ['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
       if(p.admin&&p.admin.usuario) db.admin=p.admin;
-      // Restaura timestamp local — crítico para sincronização por timestamp
       if(p._localTs) db._localTs=p._localTs;
     }
-    // Fallback: chave dedicada (mais confiável que dentro do JSON)
     var ts=localStorage.getItem('comboio_localTs');
     if(ts && Number(ts) > (db._localTs||0)) db._localTs=Number(ts);
   }catch(e){}
+  // Restaura notificações da chave dedicada — tem prioridade sobre o payload principal
+  _notifCarregar();
 }
 function updateSaldo(){
   // Abastecimentos não aprovados (aprovado===false) não entram no saldo
@@ -512,14 +512,58 @@ function getSaldoCom(){
     db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
     -abastAprovados.reduce(function(s,a){return s+Number(a.vol);},0);
 }
+var NOTIF_LS_KEY = 'comboio_notif_v1';
+
+function _notifSalvar(){
+  try{ localStorage.setItem(NOTIF_LS_KEY, JSON.stringify(db.notificacoes||[])); }catch(e){}
+}
+function _notifCarregar(){
+  try{
+    var s=localStorage.getItem(NOTIF_LS_KEY);
+    if(s){ var arr=JSON.parse(s); if(Array.isArray(arr)&&arr.length>0) db.notificacoes=arr; }
+  }catch(e){}
+}
+
 function saveDB(){
   updateSaldo();
-  db._localTs = Date.now() + 1; // +1ms garante que o ts local é sempre maior que o remoto recebido
+  db._localTs = Date.now() + 1;
   try{
     localStorage.setItem(DB_KEY,JSON.stringify(db));
     localStorage.setItem('comboio_localTs', String(db._localTs));
   }catch(e){alert('Erro ao salvar dados.');}
+  // Salva notificacoes em chave dedicada — imune a qualquer sobrescrita do payload principal
+  _notifSalvar();
   fbPush();
+  setTimeout(_fbSyncNotif, 200);
+}
+
+function _fbSyncNotif(){
+  if(!fbActive||!_fbDb) return;
+  try{
+    _fbDb.ref('comboio_notif').set({
+      notificacoes: db.notificacoes||[],
+      _ts: db._localTs||Date.now(),
+      _device: myDeviceId
+    });
+  }catch(e){ console.error('[Notif] sync erro:',e); }
+}
+
+function _fbRegistrarListenerNotif(){
+  if(!_fbDb) return;
+  _fbDb.ref('comboio_notif').on('value', function(snap){
+    var r=snap.val();
+    if(!r||!r.notificacoes) return;
+    if(r._device===myDeviceId) return;
+    var remoteTs=r._ts||0;
+    var localTs=_fbGetLocalTs();
+    if(remoteTs>=localTs){
+      db.notificacoes=r.notificacoes;
+      _notifSalvar();
+      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+      updateNotifBadge();
+      if(document.querySelector('#screen-notif.active')) renderNotif();
+    }
+  });
 }
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -585,6 +629,13 @@ function _fbRegistrarListeners(){
     // Echo: ignorar dados que eu mesmo enviei
     if(remoteId === myDeviceId) return;
 
+    // Janela de proteção pós-save: ignorar dados do Firebase por 3s após qualquer saveDB
+    // Evita que o Firebase devolva uma versão antiga e sobrescreva notificações recém-criadas
+    if(Date.now() < _fbIgnoreUntil){
+      console.log('[Sync] Dentro da janela de proteção pós-save → ignorando dado remoto');
+      return;
+    }
+
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
     var isReceptorPuro = !_isM && !adminLogado;
 
@@ -611,7 +662,7 @@ function _fbRegistrarListeners(){
     // Aplica dados remotos
     console.log('[Sync] Aplicando dados remotos');
     ['equipamentos','operadores','entradas','comboios',
-     'abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){
+     'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
       if(r[k]!==undefined) db[k]=r[k];
     });
     _fbSetLocalTs(remoteTs);
@@ -642,10 +693,9 @@ function _fbConectar(){
   fbActive = true;
   _fbIniting = false;
   _fbRegistrarListeners();
+  _fbRegistrarListenerNotif(); // listener separado para notificações
   renderSyncStatus();
 
-  // Apenas master/admin envia dados ao conectar
-  // Receptor puro só escuta — nunca reescreve Firebase
   if(_fbPodeEscrever()){
     setTimeout(_fbEnviar, 600);
     setTimeout(_fbBackupDiario, 3000);
@@ -670,7 +720,6 @@ function _fbEnviar(){
       entradas      : db.entradas||[],
       comboios      : db.comboios||[],
       abastecimentos: db.abastecimentos||[],
-      notificacoes  : db.notificacoes||[],
       ciclos        : db.ciclos||[],
       cicloAtivo    : db.cicloAtivo||null,
       saldo         : db.saldo||{res:0,com:0},
@@ -1982,6 +2031,10 @@ function fsConfirmar(){
     // Persiste tudo — abastecimento + notificações de uma vez
     saveDB();
 
+    // Atualiza aba avisos se houver notificações novas
+    updateNotifBadge();
+    if(document.querySelector('#screen-notif.active')) renderNotif();
+
     // Envia para Firebase campo (iPhone campo → Mac)
     if(fbRefCampo&&fbActive){
       try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
@@ -2277,15 +2330,14 @@ function apagarNotifLidas(){
 var NOTIF_TIPOS_PERMITIDOS = ['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
 
 function criarNotif(tipo, titulo, descricao, dados){
-  // Apenas os 4 tipos definidos geram notificação na aba Avisos
   if(NOTIF_TIPOS_PERMITIDOS.indexOf(tipo)===-1) return null;
   var n = {id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{},
     data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
     lida:false, aprovada:null};
   if(!db.notificacoes) db.notificacoes=[];
   db.notificacoes.unshift(n);
-  // NÃO chama saveDB aqui — quem chama criarNotif é responsável por salvar depois
-  // Isso evita salvar estado parcial quando chamado dentro de fsConfirmar
+  // Salva imediatamente na chave dedicada — não depende do saveDB
+  _notifSalvar();
   updateNotifBadge();
   return n.id;
 }
@@ -2686,10 +2738,8 @@ function confirmarApagar(){
   if(delEnt) db.entradas=[];
   if(delCom) db.comboios=[];
   if(delAb)  db.abastecimentos=[];
-  if(delNot) db.notificacoes=[];
+  if(delNot){ db.notificacoes=[]; _fbSyncNotif(); }
 
-  // Timestamp garantidamente maior que qualquer receptor
-  // (receptores puros agora sempre aceitam master, mas mantemos por segurança)
   _fbSetLocalTs(Date.now());
   saveDB();
 
@@ -2703,7 +2753,6 @@ function confirmarApagar(){
       entradas      : db.entradas||[],
       comboios      : db.comboios||[],
       abastecimentos: db.abastecimentos||[],
-      notificacoes  : db.notificacoes||[],
       ciclos        : db.ciclos||[],
       cicloAtivo    : db.cicloAtivo||null,
       saldo         : db.saldo||{res:0,com:0},
