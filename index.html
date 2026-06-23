@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782680000">
+<meta name="app-version" content="1782760000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -860,18 +860,81 @@ function onCampoAbastUpdate(snap){
   var novos=arr.filter(function(a){
     return lids.indexOf(a.id)===-1 && a._device!==myDeviceId;
   });
-  if(novos.length){
-    db.abastecimentos=db.abastecimentos.concat(novos);
-    try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-    updateSaldo();
-    if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
-    updateNotifBadge();
-    var ae=document.querySelector('.screen.active');
-    if(ae){
-      var sid=ae.id.replace('screen-','');
-      if(sid==='resumo')    renderResumo();
-      else if(sid==='historico') renderHistorico();
-      else if(sid==='notif')     renderNotif();
+  if(!novos.length) return;
+
+  novos.forEach(function(abast){
+    db.abastecimentos.push(abast);
+    // Gera notificações no Mac para abastecimentos vindos do campo
+    _gerarNotificacoesAbast(abast);
+  });
+
+  updateSaldo();
+  saveDB();
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
+  updateNotifBadge();
+  var ae=document.querySelector('.screen.active');
+  if(ae){
+    var sid=ae.id.replace('screen-','');
+    if(sid==='resumo')    renderResumo();
+    else if(sid==='historico') renderHistorico();
+    else if(sid==='notif')     renderNotif();
+  }
+}
+
+// Gera notificações para um abastecimento — usado tanto no fsConfirmar quanto no onCampoAbastUpdate
+function _gerarNotificacoesAbast(abast){
+  var equip=db.equipamentos.filter(function(e){return e.cod===abast.equip;})[0];
+  if(!equip) return;
+
+  var hodAtual=Number(abast.hod);
+  var volAtual=Number(abast.vol);
+  var id=abast.id;
+
+  // Busca último horímetro anterior aprovado
+  var hist=db.abastecimentos.filter(function(a){
+    return a.equip===abast.equip && a.id!==id && Number(a.hod)>0 && a.aprovado!==false;
+  });
+  var ultimoHod=null;
+  if(hist.length){
+    var ult=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    ultimoHod=Number(ult.hod);
+  }
+
+  // Horímetro igual ou inferior
+  if(ultimoHod!==null && hodAtual<=ultimoHod){
+    abast.aprovado=false;
+    var _igualOuMenor=hodAtual===ultimoHod?'igual':'inferior';
+    criarNotif('hod_inferior',
+      'Horímetro '+_igualOuMenor+' ao registro anterior',
+      equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
+        ' '+(equip.unidade==='km'?'km':'h')+
+        (hodAtual<ultimoHod?' — último registro era '+ultimoHod.toLocaleString('pt-BR'):' (mesmo valor)')+
+        '. Aguardando aprovação.',
+      {abastId:id,equip:equip.cod,hodLancado:hodAtual,hodAnterior:ultimoHod});
+  }
+
+  // Volume > capacidade
+  if(equip.tank>0&&volAtual>equip.tank){
+    abast.aprovado=false;
+    criarNotif('volume_excede_tank','Volume supera capacidade do tanque',
+      equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L. Aguardando aprovação.',
+      {abastId:id,equip:equip.cod,volLancado:volAtual,capacidade:equip.tank});
+  }
+
+  // Consumo fora da faixa — apenas informativo
+  if(hodAtual>0&&ultimoHod!==null&&hodAtual>ultimoHod){
+    var _dh=hodAtual-ultimoHod;
+    if(_dh>0){
+      var _isKm=equip.unidade==='km';
+      var _cr=volAtual/_dh*(_isKm?100:1);
+      abast.consumoCalc=Math.round(_cr*100)/100;
+      var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
+      if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
+        var _u=_isKm?'L/100km':'L/h';
+        criarNotif('consumo_fora_faixa','Consumo fora da faixa — '+equip.cod,
+          'Calculado: '+_cr.toFixed(1)+' '+_u+' | Faixa: '+_cMin+'–'+_cMax+' '+_u,
+          {abastId:id,equip:equip.cod,consReal:_cr,cMin:_cMin,cMax:_cMax});
+      }
     }
   }
 }
@@ -1238,13 +1301,13 @@ function renderResumo(){
   var semIniStr=semIni.toISOString().slice(0,10);
   var semFimStr=semFim.toISOString().slice(0,10);
   var todos=[];
-  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
-  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
+  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,ts:e.ts||e.id||0,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
+  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,ts:c.ts||c.id||0,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
   db.abastecimentos.forEach(function(a){
     if(a.data>=semIniStr&&a.data<=semFimStr){
       var pendente=a.aprovado===false;
       todos.push({
-        data:a.data,tipo:'fuel',
+        data:a.data,ts:a.ts||a.id||0,tipo:'fuel',
         nome:a.equip||'—',
         sub:(a.operador||'Campo')+(pendente?' • ⏳ Pendente':''),
         vol:(pendente?'(':'')+''+Number(a.vol).toFixed(0)+' L'+(pendente?')':''),
@@ -1252,7 +1315,14 @@ function renderResumo(){
       });
     }
   });
-  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  // Ordena: mais recente primeiro. Usa ts (timestamp) quando disponível; fallback por data
+  todos.sort(function(a,b){
+    var da=a.data, db2=b.data;
+    if(db2!==da) return db2.localeCompare(da); // data mais recente primeiro
+    // Mesma data: usa ts (string id começa com timestamp via uid())
+    var ta=String(a.ts), tb=String(b.ts);
+    return tb.localeCompare(ta);
+  });
   var el=document.getElementById('res-hist');
   var semLabel=fmtDate(semIniStr)+' a '+fmtDate(semFimStr);
   if(!todos.length){
@@ -1869,14 +1939,6 @@ function fsConfirmar(){
     var equip=fs.equip;
     var volAtual=Number(fs.litros);
 
-    // Verifica horímetro anterior para notificação
-    var historico=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&Number(a.hod)>0;});
-    var ultimoHod=null;
-    if(historico.length){
-      var ultimo=historico.reduce(function(prev,cur){return Number(cur.hod)>Number(prev.hod)?cur:prev;});
-      ultimoHod=Number(ultimo.hod);
-    }
-
     // Monta o registro
     var abast={id:id,data:today(),equip:equip.cod,vol:volAtual,hod:hodAtual,
                operador:'',fotoId:fs.imgId||null,aprovado:true,_device:myDeviceId};
@@ -1904,56 +1966,13 @@ function fsConfirmar(){
       comprimirImg(_imgHod,0.4,function(h){ salvarFotoRecord(h); });
     }
 
-    // Adiciona ao banco ANTES de criar notificações
-    // (criarNotif chama saveDB internamente — precisa do abastecimento já no db)
+    // Adiciona ao banco
     db.abastecimentos.push(abast);
 
-    // Notificação: horímetro igual ou inferior → marca como não aprovado
-    if(ultimoHod!==null && hodAtual<=ultimoHod){
-      abast.aprovado=false;
-      var _hodMsg = hodAtual===ultimoHod
-        ? equip.cod+': horímetro lançado ('+hodAtual.toLocaleString('pt-BR')+' '+(equip.unidade==='km'?'km':'h')+') é igual ao último registro. Aguardando aprovação.'
-        : equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+' '+(equip.unidade==='km'?'km':'h')+' — último registro era '+ultimoHod.toLocaleString('pt-BR')+'. Aguardando aprovação.';
-      criarNotif('hod_inferior',
-        hodAtual===ultimoHod ? 'Horímetro igual ao registro anterior' : 'Horímetro inferior ao registro anterior',
-        _hodMsg,
-        {abastId:id,equip:equip.cod,hodLancado:hodAtual,hodAnterior:ultimoHod});
-    }
+    // Gera notificações (horímetro, volume, consumo) — mesma lógica do Mac ao receber do campo
+    _gerarNotificacoesAbast(abast);
 
-    // Notificação: volume > capacidade do tanque → marca como não aprovado
-    if(equip.tank>0&&volAtual>equip.tank){
-      abast.aprovado=false;
-      criarNotif('volume_excede_tank','Volume supera capacidade do tanque',
-        equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L. Aguardando aprovação.',
-        {abastId:id,equip:equip.cod,volLancado:volAtual,capacidade:equip.tank});
-    }
-
-    // Notificação: consumo fora da faixa min/max — apenas informativa, não bloqueia
-    if(hodAtual>0){
-      var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id&&a.aprovado!==false;})
-        .sort(function(a,b){return Number(b.hod)-Number(a.hod);});
-      if(_ph.length>0){
-        var _dh=hodAtual-Number(_ph[0].hod);
-        if(_dh>0){
-          var _isKm=equip.unidade==='km';
-          var _cr=volAtual/_dh*(_isKm?100:1);
-          // Salva consumoCalc no registro para histórico / futura opção C
-          abast.consumoCalc=Math.round(_cr*100)/100;
-          var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
-          if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
-            var _u=_isKm?'L/100km':'L/h';
-            criarNotif('consumo_fora_faixa','Consumo fora da faixa — '+equip.cod,
-              'Calculado: '+_cr.toFixed(1)+' '+_u+' | Faixa esperada: '+_cMin+'–'+_cMax+' '+_u,
-              {abastId:id,equip:equip.cod,consReal:_cr,cMin:_cMin,cMax:_cMax});
-          }
-        }
-      }
-    }
-
-    // Persiste tudo — saveDB aqui é o estado final com abastecimento + notificações já criadas
-    // criarNotif pode ter chamado saveDB internamente, mas chamamos aqui novamente para garantir
-    // que o consumoCalc e aprovado estejam corretos no registro
-    db.abastecimentos[db.abastecimentos.length-1]=abast; // garante estado final correto
+    // Persiste tudo — abastecimento + notificações de uma vez
     saveDB();
 
     // Envia para Firebase campo (iPhone campo → Mac)
@@ -2779,7 +2798,7 @@ function renderHistorico(){
       if(filtEq&&a.equip!==filtEq) return;
       var pendente=a.aprovado===false;
       todos.push({
-        data:a.data,tipo:'fuel',
+        data:a.data,ts:a.ts||a.id||0,tipo:'fuel',
         nome:a.equip||'—',
         sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo')+(pendente?' • <span style="color:var(--am);font-weight:600">⏳ Aguardando aprovação</span>':''),
         vol:'<span style="'+(pendente?'color:var(--am)':'')+'">'+(pendente?'(':'')+Number(a.vol).toFixed(0)+' L'+(pendente?')':'')+'</span>',
@@ -2788,7 +2807,10 @@ function renderHistorico(){
     });
   if(filtDe) todos=todos.filter(function(r){return r.data>=filtDe;});
   if(filtAte) todos=todos.filter(function(r){return r.data<=filtAte;});
-  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  todos.sort(function(a,b){
+    if(b.data!==a.data) return b.data.localeCompare(a.data);
+    return String(b.ts).localeCompare(String(a.ts));
+  });
   var el=document.getElementById('hist-lista');
   if(!todos.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento no período</div>';return;}
   el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+todos.length+' lançamento'+(todos.length>1?'s':'')+'</div>'+
