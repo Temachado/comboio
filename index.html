@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782760000">
+<meta name="app-version" content="1782840000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -514,10 +514,10 @@ function getSaldoCom(){
 }
 function saveDB(){
   updateSaldo();
-  db._localTs = Date.now();
+  db._localTs = Date.now() + 1; // +1ms garante que o ts local é sempre maior que o remoto recebido
   try{
     localStorage.setItem(DB_KEY,JSON.stringify(db));
-    localStorage.setItem('comboio_localTs', String(db._localTs)); // chave dedicada, mais robusta
+    localStorage.setItem('comboio_localTs', String(db._localTs));
   }catch(e){alert('Erro ao salvar dados.');}
   fbPush();
 }
@@ -593,13 +593,17 @@ function _fbRegistrarListeners(){
                 ' receptor='+ isReceptorPuro + ' de='+remoteId);
 
     // Receptor puro (iPhone campo sem admin) SEMPRE aplica dados do Firebase master
-    // Nunca reescreve — só lê
     if(!isReceptorPuro){
-      // Dispositivo com permissão de escrita: compara timestamps
       var localTs = _fbGetLocalTs();
-      if(remoteTs <= localTs){
+      if(remoteTs < localTs){
+        // Dado remoto é mais antigo — reenvio meus dados mais recentes
         console.log('[Sync] Sou master/admin e meu dado é mais recente → reenviando');
         setTimeout(_fbEnviar, 400);
+        return;
+      }
+      if(remoteTs === localTs){
+        // Timestamps iguais = echo do meu próprio envio — ignorar
+        console.log('[Sync] Timestamps iguais = echo próprio → ignorando');
         return;
       }
     }
@@ -1604,54 +1608,52 @@ function renderFS4(){
   var volAtual=Number(fs.litros);
   var cap=e.tank?Number(e.tank):0;
 
-  // Recalcula alertas ativos para mostrar no step de confirmação
-  var alertas4=[];
-
-  // Horímetro inferior
-  var hist4=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0;});
+  // Busca último horímetro aprovado
+  var hist4=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
+  var ultHod4=null;
   if(hist4.length){
-    var ultHod4=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultHod4=Number(ultHod4.hod);
-    if(hodAtual<ultHod4){
-      alertas4.push({cor:'var(--red)',bg:'var(--rl)',icon:'ti-alert-triangle',
-        msg:'Horímetro inferior ao anterior ('+ultHod4.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'). Admin será notificado.'});
-    }
+    var _a4=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    ultHod4=Number(_a4.hod);
   }
 
-  // Volume > capacidade
+  // Erros críticos — bloqueiam confirmação
+  var errosCriticos=[];
+  if(ultHod4!==null&&hodAtual<=ultHod4){
+    var _ig=hodAtual===ultHod4?'igual':'inferior';
+    errosCriticos.push((isKm?'Odômetro':'Horímetro')+' '+_ig+' ao anterior: lançado '+
+      hodAtual.toLocaleString('pt-BR')+' | último: '+ultHod4.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'. Volte e corrija.');
+  }
   if(cap>0&&volAtual>cap){
-    alertas4.push({cor:'var(--red)',bg:'var(--rl)',icon:'ti-alert-triangle',
-      msg:'Volume ('+volAtual.toFixed(0)+' L) supera a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L). Admin será notificado.'});
+    errosCriticos.push('Volume ('+volAtual.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L). Volte e corrija.');
   }
 
-  // Volume > saldo comboio
+  // Alertas informativos — não bloqueiam
+  var alertasInfo=[];
   var sc4=getSaldoCom();
   if(sc4>0&&volAtual>sc4){
-    alertas4.push({cor:'var(--am)',bg:'var(--al)',icon:'ti-alert-triangle',
-      msg:'Volume ('+volAtual.toFixed(0)+' L) maior que o saldo do comboio ('+sc4.toFixed(0)+' L).'});
+    alertasInfo.push('Volume ('+volAtual.toFixed(0)+' L) maior que saldo do comboio ('+sc4.toFixed(0)+' L). Será registrado assim mesmo.');
   }
-
-  // Consumo estimado fora da faixa (pré-visualização)
-  var cMin=e.consumoMin||0, cMax=e.consumoMax||0;
-  if(cMin>0&&cMax>0&&hist4.length){
-    var antHod=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    var dh4=hodAtual-Number(antHod.hod);
-    if(dh4>0){
-      var cr4=volAtual/dh4*(isKm?100:1);
-      var u4=isKm?'L/100km':'L/h';
-      if(cr4<cMin*0.7||cr4>cMax*1.3){
-        alertas4.push({cor:'var(--am)',bg:'var(--al)',icon:'ti-chart-line',
-          msg:'Consumo estimado: '+cr4.toFixed(1)+' '+u4+' (faixa esperada: '+cMin+'–'+cMax+' '+u4+'). Admin será notificado.'});
+  if(ultHod4!==null&&hodAtual>ultHod4){
+    var _dh4=hodAtual-ultHod4;
+    if(_dh4>0){
+      var _cr4=volAtual/_dh4*(isKm?100:1);
+      var _cMin4=e.consumoMin||0,_cMax4=e.consumoMax||0,_u4=isKm?'L/100km':'L/h';
+      if(_cMin4>0&&_cMax4>0&&(_cr4<_cMin4*0.7||_cr4>_cMax4*1.3)){
+        alertasInfo.push('Consumo estimado: '+_cr4.toFixed(1)+' '+_u4+' (faixa: '+_cMin4+'–'+_cMax4+' '+_u4+'). Admin será notificado.');
       }
     }
   }
 
-  var alertasHtml4=alertas4.map(function(a){
-    return '<div style="background:'+a.bg+';border:1.5px solid '+a.cor+';border-radius:var(--rs);'+
-      'padding:10px 12px;margin-bottom:10px;display:flex;align-items:flex-start;gap:8px">'+
-      '<i class="ti '+a.icon+'" style="font-size:16px;color:'+a.cor+';flex-shrink:0;margin-top:1px"></i>'+
-      '<div style="font-size:12px;color:'+a.cor+'">'+a.msg+'</div>'+
-    '</div>';
+  var errosHtml=errosCriticos.map(function(msg){
+    return '<div style="background:var(--rl);border:2px solid var(--red);border-radius:var(--rs);padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:flex-start">'+
+      '<i class="ti ti-alert-triangle" style="color:var(--red);font-size:20px;flex-shrink:0;margin-top:1px"></i>'+
+      '<div style="font-size:13px;font-weight:600;color:var(--red)">'+msg+'</div></div>';
+  }).join('');
+
+  var infoHtml=alertasInfo.map(function(msg){
+    return '<div style="background:var(--al);border:1.5px solid var(--am);border-radius:var(--rs);padding:10px 12px;margin-bottom:8px;display:flex;gap:8px;align-items:flex-start">'+
+      '<i class="ti ti-info-circle" style="color:var(--am);font-size:16px;flex-shrink:0;margin-top:1px"></i>'+
+      '<div style="font-size:12px;color:var(--am)">'+msg+'</div></div>';
   }).join('');
 
   var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
@@ -1662,14 +1664,19 @@ function renderFS4(){
     '<div class="crow"><span class="cl">Volume</span>'+
       '<span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+volAtual.toFixed(0)+' L</span></div>'+
     '<div class="crow"><span class="cl">Fotos</span>'+
-      '<span class="cv">'+(fs.fotoHod?'✓ Horímetro ':'')+''+(fs.fotoBomba?'✓ Bomba':'')+((!fs.fotoHod&&!fs.fotoBomba)?'—':'')+'</span></div>'+
+      '<span class="cv">'+(fs.fotoHod?'✓ Horímetro':'—')+'</span></div>'+
     '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
+
+  var btnConfirmar = errosCriticos.length>0
+    ? '<button class="btn" disabled style="width:100%;padding:16px;background:var(--br);color:var(--t3);'+
+        'border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:not-allowed;display:flex;align-items:center;justify-content:center;gap:8px">'+
+        '<i class="ti ti-lock"></i> Corrija os erros acima para confirmar</button>'
+    : '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>';
 
   return '<div class="seg-label">Confirme os dados</div>'+
     '<div class="card" style="margin-bottom:12px">'+rows+'</div>'+
-    alertasHtml4+
-    '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>'+
-    '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+    errosHtml+infoHtml+btnConfirmar+
+    '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar e corrigir</button>';
 }
 
 function renderFS5(){
