@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783220000">
+<meta name="app-version" content="1783260000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -348,17 +348,6 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
         <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
         <button class="btn bd" onclick="toggleModalApagar()"><i class="ti ti-trash"></i> Apagar dados</button>
-      </div>
-
-      <!-- Backups automáticos Firebase -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="ct" style="margin-bottom:0">Backups automáticos</div>
-          <button class="btn bs bsm" onclick="renderBackupPanel()"><i class="ti ti-refresh"></i> Atualizar</button>
-        </div>
-        <p class="note" style="margin-bottom:12px">Backup diário salvo automaticamente no Firebase. Mantém os últimos 7 dias.</p>
-        <div id="backup-panel"><div class="note">Clique em Atualizar para ver os backups disponíveis.</div></div>
-      </div>
 
 <!-- Modal apagar individual -->
 <div id="modal-apagar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;align-items:flex-end;justify-content:center;padding:0">
@@ -387,6 +376,7 @@ input,select,textarea,button{font-family:inherit}
     </div>
   </div>
 </div>
+      </div>
 
       <button class="btn bs" onclick="logout()"><i class="ti ti-logout"></i> Sair da área administrativa</button>
     </div>
@@ -394,15 +384,14 @@ input,select,textarea,button{font-family:inherit}
   </div>
 
 
-  <!-- AVISOS / NOTIFICAÇÕES -->
+  <!-- AVISOS -->
   <div id="screen-notif" class="screen">
-    <div class="topbar">
-      <div class="tb">
-        <div style="flex:1"><h1>Avisos</h1></div>
-        <button class="btn bs bsm" onclick="avisosMarcarTodos()" style="padding:6px 12px;font-size:12px"><i class="ti ti-checks"></i> Lidas</button>
-        <button class="btn bd bsm" onclick="avisosApagarLidos()" style="padding:6px 12px;font-size:12px;margin-left:6px"><i class="ti ti-trash"></i> Apagar lidas</button>
-      </div>
-    </div>
+    <div class="topbar"><div class="tb">
+      <div style="flex:1"><h1>Avisos</h1></div>
+      <span id="notif-badge-top" class="pill p-adm" style="display:none"></span>
+      <button class="btn bs bsm" onclick="avisosMarcarTodos()" style="padding:6px 12px;font-size:12px;margin-left:8px"><i class="ti ti-checks"></i> Lidas</button>
+      <button class="btn bd bsm" onclick="avisosApagarLidos()" style="padding:6px 12px;font-size:12px;margin-left:6px"><i class="ti ti-trash"></i> Apagar lidas</button>
+    </div></div>
     <div class="sb" id="avisos-body"></div>
     <nav class="bnav" id="nav-notif"></nav>
   </div>
@@ -482,7 +471,7 @@ var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos her
 var fs = {step:1, equip:null, hod:null, litros:null,
           fotoHod:false, fotoBomba:false,
           imgHod:null, imgBomba:null, imgId:null,
-          analisando:false, hodAlerta:false};
+          analisando:false};
 
 // ─────────────────────────────────────────────
 //  DB
@@ -490,157 +479,1296 @@ var fs = {step:1, equip:null, hod:null, litros:null,
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){
-      var p=JSON.parse(s);
-      ['equipamentos','operadores','entradas','comboios','abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
-      if(p.admin&&p.admin.usuario) db.admin=p.admin;
-      if(p._localTs) db._localTs=p._localTs;
-    }
-    var ts=localStorage.getItem('comboio_localTs');
-    if(ts && Number(ts) > (db._localTs||0)) db._localTs=Number(ts);
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
 }
 function updateSaldo(){
-  // Abastecimentos não aprovados (aprovado===false) não entram no saldo
-  var abastAprovados=db.abastecimentos.filter(function(a){return a.aprovado!==false;});
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
        - db.comboios.reduce(function(s,c){return s+Number(c.vol);},0),
     com: db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
-       - abastAprovados.reduce(function(s,a){return s+Number(a.vol);},0)
+       - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0)
   };
 }
-function getSaldoCom(){
-  var abastAprovados=db.abastecimentos.filter(function(a){return a.aprovado!==false;});
-  return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:
-    db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
-    -abastAprovados.reduce(function(s,a){return s+Number(a.vol);},0);
-}
-function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
 function saveDB(){
   updateSaldo();
-  db._localTs = Date.now() + 1;
-  try{
-    localStorage.setItem(DB_KEY,JSON.stringify(db));
-    localStorage.setItem('comboio_localTs', String(db._localTs));
-  }catch(e){alert('Erro ao salvar dados.');}
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
   fbPush();
 }
+function today(){return new Date().toISOString().slice(0,10);}
+function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
+function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
+
 // ─────────────────────────────────────────────
-//  AVISOS — sistema limpo, independente do db e do Firebase
-//  Armazenamento: localStorage['comboio_avisos_v1'] (array JSON)
-//  Nunca sincronizado pelo Firebase — local em cada dispositivo admin
+//  FIREBASE
+// ─────────────────────────────────────────────
+function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
+function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
+
+// Central auto-connect — used everywhere, safe to call multiple times
+var _fbConnecting=false;
+function _fbAutoConectar(){
+  if(_fbConnecting||fbActive) return; // already connecting or connected
+  var url=getFbUrl(); if(!url) return;
+  var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+  _fbConnecting=true;
+  _fbStarted=false;
+  window._fbLastError=null;
+  iniciarFirebase(url,false,_isM?'admin':'campo');
+  if(_isM) setTimeout(function(){if(fbActive)fbPush();},800);
+  setTimeout(function(){_fbConnecting=false;},5000); // reset flag after 5s
+}
+function ativarFirebase(){
+  ativarComoMestre(); // legacy — defaults to master
+}
+function _getUrlFromField(){
+  var url=(document.getElementById('fb-url').value||'').trim();
+  if(!url){alert('Informe a URL do Firebase Realtime Database.');return null;}
+  if(!url.startsWith('https://')){url='https://'+url.replace('http://','');}
+  setFbUrl(url);
+  return url;
+}
+function ativarComoMestre(){
+  var url=_getUrlFromField(); if(!url)return;
+  try{localStorage.setItem('comboio_is_master','true');}catch(e){}
+  _fbConnecting=false; _fbStarted=false;
+  iniciarFirebase(url,false,'admin');
+  setTimeout(function(){if(fbActive)fbPush();},800);
+  alert('Mac configurado como MESTRE. A partir de agora conecta automaticamente.');
+}
+function ativarComoReceptor(){
+  var url=_getUrlFromField(); if(!url)return;
+  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  _fbConnecting=false; _fbStarted=false;
+  iniciarFirebase(url,false,'campo');
+  alert('iPhone configurado como RECEPTOR. A partir de agora conecta automaticamente.');
+}
+
+var _fbIgnoreNext = false;
+
+// Named handler for campo abastecimentos — allows detach/reattach
+function onCampoAbastUpdate(snap){
+  var arr=snap.val();
+  if(!arr||!Array.isArray(arr)) return;
+  var lids=db.abastecimentos.map(function(a){return a.id;});
+  var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+  if(novos.length){
+    db.abastecimentos=db.abastecimentos.concat(novos);
+    try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+    updateSaldo();
+    if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
+    updateNotifBadge();
+    var ae=document.querySelector('.screen.active');
+    if(ae){
+      var sid=ae.id.replace('screen-','');
+      if(sid==='resumo') renderResumo();
+      else if(sid==='historico') renderHistorico();
+      else if(sid==='notif') renderNotif();
+    }
+  }
+}
+
+function iniciarFirebase(url, showAlert, role){
+  fbRole = role||'campo';
+  // Always off existing listeners first
+  try{if(fbRefMaster) fbRefMaster.off();}catch(e){}
+  try{if(fbRefCampo)  fbRefCampo.off(); }catch(e){}
+  fbRefMaster=null; fbRefCampo=null; fbActive=false;
+
+  try{
+    // Use timestamp name — avoids "already exists" error completely
+    var appName='cb_'+Date.now();
+    fbApp = firebase.initializeApp({databaseURL:url}, appName);
+    var db2 = fbApp.database();
+    fbRefMaster = db2.ref('comboio_master');
+    fbRefCampo  = db2.ref('comboio_campo');
+    fbActive = true;
+
+    // UNIFIED listener — works for Mac AND iPhone
+    // deviceId determines who is master, not login role
+    fbRefMaster.on('value', function(snap){
+      var r = snap.val();
+      if(!r){ renderSyncStatus(); return; }
+
+      var incomingId = r._masterId||null;
+      masterDeviceId = incomingId;
+      var iAmMaster  = (incomingId && incomingId===myDeviceId);
+
+      if(!iAmMaster){
+        // I am NOT the master → apply ALL Mac data
+        var keys=['equipamentos','operadores','entradas','comboios',
+                  'abastecimentos','ciclos','cicloAtivo','saldo'];
+        keys.forEach(function(k){
+          if(r[k]!==undefined) db[k]=r[k];
+        });
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        updateSaldo();
+        var ae=document.querySelector('.screen.active');
+        if(ae){
+          var sid=ae.id.replace('screen-','');
+          if(sid==='resumo')  renderResumo();
+          else if(sid==='field')  renderField();
+          else if(sid==='entrada'){renderHistEnt();renderHistCom();}
+          else if(sid==='admin')  renderAdmin();
+          else if(sid==='fotos')  renderFotos();
+          else if(sid==='notif')  renderNotif();
+          else if(sid==='historico') renderHistorico();
+        }
+      }
+      renderSyncStatus();
+    }, function(err){
+      console.error('FB master error:',err.message||err);
+      fbActive=false;
+      window._fbLastError=err.message||String(err);
+      _fbConnecting=false;
+      renderSyncStatus();
+      // Silent retry after 10s
+      setTimeout(_fbAutoConectar, 10000);
+    });
+
+    // Campo listener — receive field abastecimentos on ALL devices
+    fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
+
+    renderSyncStatus();
+    // If master, push local data immediately
+    setTimeout(function(){ if(fbActive) fbPush(); }, 600);
+    if(showAlert) alert('Sincronização ativada!');
+  }catch(e){
+    fbActive=false;
+    console.error('FB init error:',e.message||e);
+    if(showAlert) alert('Erro ao conectar: '+e.message);
+  }
+}
+
+
+function fbPush(){
+  // Only master device pushes
+  if(!fbRefMaster||!fbActive) return;
+  try{if(localStorage.getItem('comboio_is_master')!=='true')return;}catch(e){return;}
+  try{
+    fbRefMaster.set({
+      equipamentos:db.equipamentos||[],
+      operadores:db.operadores||[],
+      entradas:db.entradas||[],
+      comboios:db.comboios||[],
+      abastecimentos:db.abastecimentos||[],
+      ciclos:db.ciclos||[],
+      cicloAtivo:db.cicloAtivo||null,
+      saldo:db.saldo||{res:0,com:0},
+      _masterId:myDeviceId,
+      _masterTs:Date.now()
+    });
+  }catch(e){console.error('fbPush:',e);}
+}
+
+
+function renderSyncStatus(){
+  var el=document.getElementById('sync-status'); if(!el) return;
+  var url=getFbUrl();
+  if(fbActive&&url){
+    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
+    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
+  } else if(url){
+    // Disconnected — trigger silent reconnect and show minimal status
+    _fbAutoConectar();
+    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando ao Firebase...</span></div>';
+    var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
+  } else {
+    el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
+  }
+}
+
+// ─────────────────────────────────────────────
+//  SPLASH / LOGIN
+// ─────────────────────────────────────────────
+function entrarCampo(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('main-app').style.display='';
+  navigate('field');
+  // Always mark this device as receptor
+  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  // Auto-connect silently
+  setTimeout(_fbAutoConectar, 500);
+}
+function mostrarLoginAdmin(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-admin').style.display='flex';
+  setTimeout(function(){document.getElementById('login-user').focus();},100);
+}
+function voltarSplash(){
+  document.getElementById('login-admin').style.display='none';
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('login-err').style.display='none';
+  document.getElementById('login-user').value='';
+  document.getElementById('login-pass').value='';
+  document.getElementById('splash').style.display='flex';
+}
+function doLogin(){
+  var u=document.getElementById('login-user').value.trim();
+  var p=document.getElementById('login-pass').value;
+  if(u===db.admin.usuario && p===db.admin.senha){
+    adminLogado=true;
+    document.getElementById('login-err').style.display='none';
+    document.getElementById('login-admin').style.display='none';
+    document.getElementById('main-app').style.display='';
+    navigate('resumo');
+    // Auto-connect using saved role (set once via Mac/iPhone buttons)
+    setTimeout(_fbAutoConectar, 500);
+  } else {
+    document.getElementById('login-err').style.display='block';
+  }
+}
+function logout(){
+  adminLogado=false;
+  _fbStarted=false; // allow reinit as campo if needed
+  document.getElementById('main-app').style.display='none';
+  document.getElementById('splash').style.display='flex';
+}
+
+// ─────────────────────────────────────────────
+//  NAVIGATION
+// ─────────────────────────────────────────────
+var ICONS_EQ={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Motoniveladora':'ti-tractor','Caminhão basculante':'ti-truck','Pá carregadeira':'ti-forklift','Rolo compactador':'ti-cylinder','Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery','Outro':'ti-settings'};
+function iconFor(t){return ICONS_EQ[t]||'ti-tractor';}
+
+function buildNav(active){
+  var items=[
+    {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
+    {id:'field',icon:'ti-gas-station',label:'Abastecer'},
+    {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
+    
+    {id:'admin',icon:'ti-settings',label:'Config'}
+  ];
+  if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
+  if(adminLogado) items.push({id:'notif',icon:'ti-bell',label:'Avisos'});
+  if(adminLogado) items.push({id:'historico',icon:'ti-history',label:'Histórico'});
+  return items.map(function(it){
+    return '<button class="nb'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';
+  }).join('');
+}
+
+function navigate(id){
+  history.pushState({nav:id},'','#'+id);
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('screen-'+id).classList.add('active');
+  document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(id);});
+  if(id==='resumo') renderResumo();
+  if(id==='field')  renderField();
+  if(id==='entrada'){
+    document.getElementById('e-data').value=today();
+    document.getElementById('c-data').value=today();
+    var _sel=document.getElementById('c-op');
+    if(_sel){
+      _sel.innerHTML='<option value="">— selecione —</option>'+
+        db.operadores.map(function(o){
+          return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';
+        }).join('');
+    }
+    renderHistEnt();
+    renderHistCom();
+  }
+
+  if(id==='admin')  renderAdmin();
+  if(id==='fotos')  renderFotos();
+  if(id==='notif')  renderNotif();
+  if(id==='historico') renderHistorico();
+  if(adminLogado) setTimeout(updateNotifBadge,100);
+}
+
+// Back button
+window.addEventListener('popstate',function(e){
+  if(e.state&&e.state.nav){
+    document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+    document.getElementById('screen-'+e.state.nav).classList.add('active');
+    document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(e.state.nav);});
+    if(e.state.nav==='resumo') renderResumo();
+    if(e.state.nav==='field')  renderField();
+    if(e.state.nav==='admin')  renderAdmin();
+    if(e.state.nav==='fotos')  renderFotos();
+    if(e.state.nav==='notif')  renderNotif();
+  } else if(e.state&&e.state.step!==undefined){
+    fs.step=e.state.step;
+    renderField();
+  }
+});
+
+// ─────────────────────────────────────────────
+//  RESUMO
+// ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════
+//  CICLO DE CONTROLE
+//  Fluxo: Entrada → Tanque → Comboio → Equipamentos
+//  Tolerância de divergência: 2%
+// ═══════════════════════════════════════════════
+var TOL = 0.02; // 2% tolerance
+
+function iniciarCiclo(volEntrada, entradaId){
+  if(!db.ciclos) db.ciclos=[];
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado){
+    // Active cycle exists — add new entrada to it (cumulative)
+    db.cicloAtivo.volEntrada=(db.cicloAtivo.volEntrada||0)+Number(volEntrada);
+  } else {
+    // No active cycle — create new one
+    db.cicloAtivo={
+      id:uid(),
+      inicio:today(),
+      volEntrada:Number(volEntrada),
+      volComboio:0,
+      volEquip:0,
+      encerrado:false,
+      resultado:null
+    };
+  }
+  saveDB();
+  atualizarCiclo();
+}
+
+function atualizarCiclo(){
+  if(!db.cicloAtivo||db.cicloAtivo.encerrado) return;
+  var ca=db.cicloAtivo;
+
+  // Recalculate ALL volumes from actual records since cycle start
+  ca.volEntrada=db.entradas.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
+  ca.volComboio=db.comboios.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
+  ca.volEquip=db.abastecimentos.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
+
+  var ve=ca.volEntrada;
+  var vc=ca.volComboio;
+  var vq=ca.volEquip;
+
+  // Alert: comboio loaded more than tank
+  if(ve>0&&vc>ve*(1+TOL)){
+    _notifCiclo('ciclo_comboio_excede',
+      'Comboio carregou mais que a entrada',
+      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Excesso: '+(vc-ve).toFixed(0)+' L');
+  }
+
+  // Alert: equipment received more than comboio
+  if(vc>0&&vq>vc*(1+TOL)){
+    _notifCiclo('ciclo_equip_excede',
+      'Equipamentos receberam mais que o comboio',
+      'Comboio: '+vc.toFixed(0)+' L | Equipamentos: '+vq.toFixed(0)+' L | Excesso: '+(vq-vc).toFixed(0)+' L');
+  }
+
+  // Cycle is ONGOING — never auto-close on volume match
+  // Admin manually resets via "Reiniciar controle"
+  saveDB();
+}
+
+function _notifCiclo(tipo, titulo, desc){
+  if(!db.notificacoes) db.notificacoes=[];
+  var jaExiste=db.notificacoes.filter(function(n){return n.tipo===tipo&&n.data===today()&&!n.lida;}).length>0;
+  if(!jaExiste) criarNotif(tipo,titulo,desc,{cicloId:db.cicloAtivo?db.cicloAtivo.id:null});
+}
+
+function encerrarCiclo(resultado){
+  if(!db.cicloAtivo) return;
+  var ca=db.cicloAtivo;
+  ca.encerrado=true;
+  ca.resultado=resultado;
+  ca.fim=today();
+
+  // Archive to ciclos history
+  if(!db.ciclos) db.ciclos=[];
+  db.ciclos.unshift(JSON.parse(JSON.stringify(ca)));
+
+  // Notify admin
+  var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
+  var dif=vq-ve;
+  var pct=(Math.abs(dif)/ve*100).toFixed(1);
+  if(resultado==='ok'){
+    criarNotif('ciclo_encerrado_ok',
+      'Ciclo encerrado — volumes conferem',
+      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Equip: '+vq.toFixed(0)+' L | Diferença: '+dif.toFixed(0)+' L ('+pct+'%) — dentro da tolerância.',
+      {cicloId:ca.id});
+  } else {
+    criarNotif('ciclo_divergencia',
+      'Ciclo encerrado — DIVERGÊNCIA',
+      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Equip: '+vq.toFixed(0)+' L | Divergência: '+dif.toFixed(0)+' L ('+pct+'%) — acima de 2%.',
+      {cicloId:ca.id});
+  }
+
+  db.cicloAtivo=null;
+  saveDB();
+  renderResumo();
+}
+
+function reiniciarControle(){
+  if(!confirm('Zerar o quadro resumo?\n\nOs contadores e histórico de ciclos voltam a zero.\nOs registros de abastecimento são mantidos.'))return;
+  db.saldo={res:0,com:0};
+  db.cicloAtivo=null;
+  db.ciclos=[];
+  saveDB();
+  renderResumo();
+  alert('Resumo e ciclos zerados.');
+}
+
+function renderCicloAtivo(){
+  if(!db.cicloAtivo||db.cicloAtivo.encerrado) return '';
+  var ca=db.cicloAtivo;
+  var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
+  var saldoRes=Math.max(0,ve-vc);   // tanque principal restante
+  var saldoCom=Math.max(0,vc-vq);   // comboio restante
+  var pctRes=ve>0?Math.round(saldoRes/ve*100):100;
+  var pctCom=vc>0?Math.round(saldoCom/vc*100):100;
+  var pctEq =ve>0?Math.round(vq/ve*100):0;
+  var ok=ve>0&&Math.abs(vq-ve)/ve<=TOL;
+
+  function bar(pct,cor,bg){
+    bg=bg||'var(--br)';
+    var p=Math.min(100,Math.max(0,pct));
+    return '<div style="background:'+bg+';border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+      '<div style="background:'+cor+';width:'+p+'%;height:100%;border-radius:4px;transition:width .4s"></div></div>';
+  }
+
+  return '<div class="card" style="border:2px solid var(--green);margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+    '<div style="font-size:13px;font-weight:600;color:var(--green)">'+
+    '<i class="ti ti-refresh" style="margin-right:6px"></i>Ciclo ativo — desde '+fmtDate(ca.inicio)+'</div>'+
+    '<span class="badge bg">em andamento</span></div>'+
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
+
+    // TANQUE: saldo = entrada - carregado no comboio
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
+      bar(pctRes,'var(--green)')+
+      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Entrada: '+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
+    '</div>'+
+
+    // COMBOIO: saldo = carregado - distribuído equipamentos
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--tx)')+'">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
+      bar(pctCom,saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--bl)')+
+      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Carregado: '+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
+    '</div>'+
+
+    // EQUIPAMENTOS: total distribuído
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
+      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(ok?'var(--green)':pctEq>80?'var(--red)':'var(--tx)')+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
+      bar(pctEq,ok?'var(--green)':pctEq>90?'var(--red)':'var(--bl)')+
+    '</div>'+
+    '</div>'+
+    '</div>';
+}
+
+
+function renderUltimoCiclo(){
+  if(!db.ciclos||!db.ciclos.length) return '';
+  var ci=db.ciclos[0];
+  var ok=ci.resultado==='ok';
+  var ve=Number(ci.volEntrada||0), vc=Number(ci.volComboio||0), vq=Number(ci.volEquip||0);
+  var saldoRes=Math.max(0,ve-vc);
+  var saldoCom=Math.max(0,vc-vq);
+  var dif=vq-ve;
+  var pct=ve>0?(Math.abs(dif)/ve*100).toFixed(1):'0';
+  var cor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
+  var bdColor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
+
+  function bar(pct2,cor2){
+    var p=Math.min(100,Math.max(0,pct2));
+    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+      '<div style="background:'+cor2+';width:'+p+'%;height:100%;border-radius:4px"></div></div>';
+  }
+
+  return '<div class="card" style="border:2px solid '+bdColor+';margin-bottom:12px;opacity:.85">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+    '<div style="font-size:13px;font-weight:600;color:'+cor+'">'+
+    '<i class="ti ti-history" style="margin-right:6px"></i>Último ciclo — '+
+    fmtDate(ci.inicio)+(ci.fim&&ci.fim!==ci.inicio?' a '+fmtDate(ci.fim):'')+
+    '</div>'+
+    '<span class="badge '+(ok?'bg':ci.resultado==='manual'?'bb':'ba')+'">'+(ok?'OK':ci.resultado==='manual'?'manual':'divergência')+'</span></div>'+
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
+      bar(ve>0?Math.round(saldoRes/ve*100):0,'var(--green)')+
+    '</div>'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
+      bar(vc>0?Math.round(saldoCom/vc*100):0,'var(--bl)')+
+    '</div>'+
+    '<div>'+
+      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
+      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
+      '<div style="font-size:10px;color:var(--t3)">distribuídos</div>'+
+      bar(ve>0?Math.round(vq/ve*100):0,cor)+
+    '</div>'+
+    '</div>'+
+    '</div>';
+}
+
+
+function renderCicloPanel(){
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) return renderCicloAtivo();
+  return renderUltimoCiclo();
+}
+
+
+function renderResumo(){
+  var sr=getSaldoRes(),sc=getSaldoCom();
+  var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
+  var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
+  var dif=te-ta-Math.max(0,sr)-Math.max(0,sc);
+  var d=new Date();
+  document.getElementById('res-date').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+  var pill=document.getElementById('res-pill');
+  pill.textContent=navigator.onLine?'online':'offline';
+  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
+  // metrics remove// metrics display removed
+  // Inject ciclo panel — active or last closed
+  var cicloPanel=document.getElementById('res-ciclo');
+  if(cicloPanel) cicloPanel.innerHTML=renderCicloPanel();
+
+  // Reiniciar button (admin only)
+  var btnRei=document.getElementById('btn-reiniciar');
+  if(btnRei) btnRei.style.display=(adminLogado&&(db.cicloAtivo||( db.ciclos&&db.ciclos.length)))?'flex':'none';
+  // Alerts moved to notificações tab
+  // Show only current week (Mon-Sun)
+  var now=new Date(), dow=now.getDay(), diff=dow===0?6:dow-1;
+  var semIni=new Date(now); semIni.setDate(now.getDate()-diff); semIni.setHours(0,0,0,0);
+  var semFim=new Date(semIni); semFim.setDate(semIni.getDate()+6);
+  var semIniStr=semIni.toISOString().slice(0,10);
+  var semFimStr=semFim.toISOString().slice(0,10);
+  var todos=[];
+  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
+  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
+  db.abastecimentos.forEach(function(a){if(a.data>=semIniStr&&a.data<=semFimStr)todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L'});});
+  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('res-hist');
+  var semLabel=fmtDate(semIniStr)+' a '+fmtDate(semFimStr);
+  if(!todos.length){
+    el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Semana: '+semLabel+'</div><div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento esta semana</div>';
+    return;
+  }
+  el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Semana: '+semLabel+'</div>'+
+  todos.map(function(r){
+    var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
+    return'<div class="hi"><div class="hic '+r.tipo+'"><i class="ti '+ic+'"></i></div><div class="hb"><div class="hn">'+r.nome+'</div><div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div><div class="hv">'+r.vol+'</div></div>';
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  FIELD WIZARD
+//  KEY PRINCIPLE: oninput NEVER calls renderField()
+//  Only dedicated update functions touch the DOM
+// ─────────────────────────────────────────────
+function fsGo(n){
+  history.pushState({step:n},'','#field-'+n);
+  fs.step=n;
+  renderField();
+}
+
+function renderField(){
+  var d=new Date();
+  document.getElementById('fld-sub').textContent=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+  var pill=document.getElementById('fld-pill');
+  pill.textContent=navigator.onLine?'online':'offline';
+  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
+  document.getElementById('fld-steps').style.display=fs.step===5?'none':'';
+  renderSteps();
+  var body=document.getElementById('fld-body');
+  if(fs.step===1) body.innerHTML=renderFS1();
+  else if(fs.step===2) body.innerHTML=renderFS2();
+  else if(fs.step===3) body.innerHTML=renderFS3();
+  else if(fs.step===4) body.innerHTML=renderFS4();
+  else body.innerHTML=renderFS5();
+  var nw=document.getElementById('fld-nav');
+  nw.innerHTML=adminLogado?'<nav class="bnav">'+buildNav('field')+'</nav>':'';
+}
+
+function renderSteps(){
+  var labels=['Equipamento','Horímetro','Litros','Confirmar'];
+  document.getElementById('fld-steps').innerHTML=labels.map(function(l,i){
+    var n=i+1, cls=n<fs.step?'done':n===fs.step?'active':'', lbl=n<fs.step?'✓':n;
+    return'<div class="step"><div class="sd '+cls+'">'+lbl+'</div><div class="sl">'+l+'</div></div>'+(n<4?'<div class="sline'+(n<fs.step?' done':'')+'"></div>':'');
+  }).join('');
+}
+
+function renderFS1(){
+  if(!db.equipamentos.length) return '<div class="alert ai"><i class="ti ti-info-circle"></i><span>Nenhum equipamento cadastrado. Solicite ao administrador.</span></div>';
+  var cards=db.equipamentos.map(function(e){
+    var sel=fs.equip&&fs.equip.cod===e.cod?' sel':'';
+    return'<div class="eq-card'+sel+'" onclick="fsSelEq(\''+e.cod.replace(/'/g,"\\'")+'\')" ><i class="ti '+iconFor(e.tipo)+'"></i><div class="en">'+e.cod+'</div><div class="et">'+e.tipo+'</div></div>';
+  }).join('');
+  return'<div class="seg-label">Selecione o equipamento</div><div class="eq-grid">'+cards+'</div>'+
+    '<button class="btn bp" '+(fs.equip?'':'disabled')+' onclick="fsGo(2)"><i class="ti ti-arrow-right"></i> Próximo</button>';
+}
+
+function renderFS2(){
+  var e=fs.equip, isKm=(e.unidade==='km');
+  var unit=isKm?'km':'horas';
+  var placeholder=isKm?'Ex: 125400':'Ex: 4820';
+
+  // Photo area horímetro
+  var hodPhotoHtml='';
+  if(fs.analisando){
+    hodPhotoHtml='<div class="analyzing"><div class="spin"></div> Lendo '+unit+'...</div>';
+  } else if(fs.fotoHod&&fs.hod){
+    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Toque para tirar outra</div></div>'+
+      '<div class="rbox"><div style="flex:1"><div style="font-size:11px;color:var(--gd);font-weight:600;margin-bottom:2px">Leitura detectada</div><span class="rnum">'+fs.hod+'</span><span style="font-size:12px;color:var(--gd)"> '+unit+'</span></div><span class="redit" onclick="fsEditHod()">editar</span></div>';
+  } else if(fs.fotoHod&&!fs.hod){
+    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Não lida — digite abaixo</div></div>';
+  } else {
+    hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
+  }
+
+  // Photo area bomba
+  var bombaHtml='';
+  if(fs.fotoHod||fs.hod){
+    if(fs.fotoBomba){
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
+    } else {
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
+    }
+  }
+
+  return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
+    '<div style="margin-bottom:14px">'+
+    '<div class="seg-label">Horímetro</div>'+
+    hodPhotoHtml+
+    '</div>'+
+    // CRITICAL: input has NO oninput that calls renderField
+    // uses onHodChange which only updates button state
+    '<div class="field">'+
+    '<label>Digitar '+unit+' manualmente</label>'+
+    '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
+    ' oninput="onHodChange(this.value)"'+
+    ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
+    '</div>'+
+    bombaHtml+
+    '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
+    '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)">'+
+    '<button id="btn-hod" class="btn bp" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>'+
+    '<button class="btn bs" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS3(){
+  var sc=getSaldoCom();
+  var l=Number(fs.litros)||0;
+  var cap=fs.equip&&fs.equip.tank?Number(fs.equip.tank):9999;
+  var warns='';
+  if(l>0&&l>sc&&sc>0) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo do comboio ('+sc.toFixed(0)+' L).</span></div>';
+  if(l>0&&l>cap*1.05&&cap<9999) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que a capacidade ('+cap+' L).</span></div>';
+
+  // Photo area bomba (also available on this step)
+  var bombaStep='';
+  if(!fs.fotoBomba){
+    bombaStep='<div style="margin-bottom:14px"><div class="seg-label">Foto da bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+      '<div class="pha" onclick="abrirCamBomba()" style="padding:16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div>'+
+      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
+  } else {
+    bombaStep='<div style="margin-bottom:14px"><div class="pha has" onclick="abrirCamBomba()" style="padding:14px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto da bomba capturada</div></div>'+
+      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
+  }
+
+  return '<div class="sbar"><span class="sbarlabel"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="sbarval">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div>'+
+    bombaStep+
+    '<div class="seg-label">Quantidade abastecida</div>'+
+    // CRITICAL: input uses onLitrosChange — NOT renderField
+    '<div class="lrow">'+
+    '<button class="ladj" onclick="fsAdj(-50)">−</button>'+
+    '<input class="linp" type="number" id="lit-inp" inputmode="numeric"'+
+    ' value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1"'+
+    ' oninput="onLitrosChange(this.value)">'+
+    '<button class="ladj" onclick="fsAdj(50)">+</button>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--t3);text-align:center;margin-bottom:14px">Use − / + para ajustar de 50 em 50 L</div>'+
+    warns+
+    '<button id="btn-lit" class="btn bp" '+(fs.litros&&Number(fs.litros)>0?'':'disabled')+' onclick="fsGo(4)"><i class="ti ti-arrow-right"></i> Revisar</button>'+
+    '<button class="btn bs" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS4(){
+  var e=fs.equip, isKm=(e.unidade==='km');
+  var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
+    '<div class="crow"><span class="cl">Tipo</span><span class="cv">'+e.tipo+'</span></div>'+
+    (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
+    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
+    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div>'+
+    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
+    '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
+  return '<div class="seg-label">Confirme os dados</div>'+
+    '<div class="card" style="margin-bottom:14px">'+rows+'</div>'+
+    '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>'+
+    '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';
+}
+
+function renderFS5(){
+  return '<div class="ok-screen"><div class="ok-icon"><i class="ti ti-circle-check"></i></div>'+
+    '<div class="ok-title">Registrado!</div>'+
+    '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br>'+
+    '<br><span class="tag-off"><i class="ti ti-device-floppy" style="font-size:12px"></i> Salvo</span></div>'+
+    '<button class="btn bp" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button></div>';
+}
+
+// ─── Input handlers — ONLY update button state, never rebuild DOM ───
+function onHodChange(val){
+  fs.hod = val.trim() || null;
+  var btn=document.getElementById('btn-hod');
+  if(btn) btn.disabled=!fs.hod;
+}
+
+function onLitrosChange(val){
+  fs.litros = val || null;
+  var btn=document.getElementById('btn-lit');
+  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+}
+
+// ±50 buttons — update input field directly, no DOM rebuild
+function fsAdj(d){
+  var cur=Number(fs.litros)||0;
+  fs.litros=String(Math.max(0,cur+d)||'');
+  var inp=document.getElementById('lit-inp');
+  if(inp) inp.value=fs.litros;
+  var btn=document.getElementById('btn-lit');
+  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+}
+
+function fsSelEq(cod){
+  fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
+  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
+  fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
+  renderField();
+}
+function fsEditHod(){
+  fs.hod=null;fs.fotoHod=false;fs.analisando=false;
+  renderField();
+  setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
+}
+function fsNovo(){
+  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
+  renderField();
+}
+
+// ─── Camera ───
+function abrirCamHod(){var i=document.getElementById('cam-hod');if(i)i.click();}
+function abrirCamBomba(){var i=document.getElementById('cam-bomba');if(i)i.click();}
+
+function onFotoHod(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    fs.fotoHod=true; fs.analisando=true; fs.hod=null;
+    fs.imgHod=e.target.result; fs.imgId=uid();
+    renderField();
+    runOCR(e.target.result);
+  };
+  r.readAsDataURL(file);
+  input.value='';
+}
+
+function onFotoBomba(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    fs.fotoBomba=true; fs.imgBomba=e.target.result;
+    renderField();
+  };
+  r.readAsDataURL(file);
+  input.value='';
+}
+
+// Compress image synchronously using canvas
+function comprimirImg(dataUrl, qualidade, callback){
+  try{
+    var img=new Image();
+    img.onload=function(){
+      var MAX=600;
+      var scale=Math.min(1,MAX/Math.max(img.width||1,img.height||1));
+      var cv=document.createElement('canvas');
+      cv.width=Math.max(1,Math.floor(img.width*scale));
+      cv.height=Math.max(1,Math.floor(img.height*scale));
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      callback(cv.toDataURL('image/jpeg',qualidade||0.4));
+    };
+    img.onerror=function(){callback(dataUrl);};
+    img.src=dataUrl;
+  }catch(e){callback(dataUrl);}
+}
+
+function preprocessImagem(dataUrl, callback){
+  try{
+    var img=new Image();
+    img.onload=function(){
+      var canvas=document.createElement('canvas');
+      var ctx=canvas.getContext('2d');
+      // Crop to central 80% width, 50% height — removes borders, focuses on the number display
+      var cx=Math.floor(img.width*0.10), cy=Math.floor(img.height*0.25);
+      var cw=Math.floor(img.width*0.80), ch=Math.floor(img.height*0.50);
+      var scale=Math.min(5,1400/Math.max(cw,ch));
+      canvas.width=Math.floor(cw*scale); canvas.height=Math.floor(ch*scale);
+      ctx.drawImage(img,cx,cy,cw,ch,0,0,canvas.width,canvas.height);
+      // Adaptive threshold: measure average brightness then binarize
+      var id=ctx.getImageData(0,0,canvas.width,canvas.height);
+      var d=id.data, tot=0;
+      for(var i=0;i<d.length;i+=4) tot+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+      var avg=tot/(d.length/4);
+      var thr=Math.max(80,Math.min(200,avg*0.85));
+      for(var j=0;j<d.length;j+=4){
+        var g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2];
+        var v=g>thr?255:0; d[j]=d[j+1]=d[j+2]=v;
+      }
+      ctx.putImageData(id,0,0);
+      callback(canvas.toDataURL('image/png'));
+    };
+    img.onerror=function(){callback(dataUrl);};
+    img.src=dataUrl;
+  }catch(e){callback(dataUrl);}
+}
+
+function runOCR(dataUrl){
+  preprocessImagem(dataUrl, function(processedUrl){
+    try{
+      // Try with digits-optimized config first
+      Tesseract.recognize(processedUrl,'eng',{
+        logger:function(){},
+        tessedit_char_whitelist:'0123456789',
+        tessedit_pageseg_mode:'7'
+      })
+      .then(function(res){
+        var _rt=(res.data.text||'').trim();
+        var _rm=_rt.match(/[0-9]+/g)||[];
+        var num=_rm.reduce(function(a,b){return b.length>=a.length?b:a;},'');
+        if(num&&num.length>=1){
+          fs.analisando=false; fs.hod=num; renderField();
+        } else {
+          // Retry without whitelist (catches digits written oddly)
+          return Tesseract.recognize(processedUrl,'eng',{logger:function(){}}).then(function(res2){
+            var _t2=(res2.data.text||'').trim();
+            var _m2=_t2.match(/[0-9]+/g)||[];
+            var num2=_m2.reduce(function(a,b){return b.length>=a.length?b:a;},'');
+            fs.analisando=false;
+            fs.hod=(num2&&num2.length>=1)?num2:null;
+            renderField();
+            if(!fs.hod) setTimeout(function(){alert('Foto não legível.\nDica: boa iluminação e fundo contrastante ajudam.\nDigite manualmente abaixo.');},200);
+          });
+        }
+      })
+      .catch(function(){
+        fs.analisando=false; fs.hod=null; renderField();
+        setTimeout(function(){alert('Erro na leitura. Digite manualmente.');},200);
+      });
+    }catch(e){
+      fs.analisando=false; fs.hod=null; renderField();
+    }
+  });
+}
+
+// Same OCR for entrada patio
+function runOCREntrada(dataUrl, callback){
+  preprocessImagem(dataUrl, function(processedUrl){
+    try{
+      Tesseract.recognize(processedUrl,'eng',{
+        logger:function(){},
+        tessedit_char_whitelist:'0123456789',
+        tessedit_pageseg_mode:'7'
+      }).then(function(res){
+        var num=(res.data.text||'').replace(/[^0-9]/g,'').trim();
+        if(num&&num.length>=1){ callback(num); return; }
+        return Tesseract.recognize(processedUrl,'eng',{logger:function(){}}).then(function(res2){
+          var num2=(res2.data.text||'').replace(/[^0-9]/g,'').trim();
+          callback(num2||null);
+        });
+      }).catch(function(){ callback(null); });
+    }catch(e){ callback(null); }
+  });
+}
+
+function fsConfirmar(){
+  var id=uid();
+  var hodAtual=Number(fs.hod);
+  var equip=fs.equip;
+
+  // Check hod against last recorded value for this equipment
+  var historico=db.abastecimentos.filter(function(a){return a.equip===equip.cod;});
+  var ultimoHod=null;
+  if(historico.length){
+    var ultimo=historico.reduce(function(prev,cur){return Number(cur.hod)>Number(prev.hod)?cur:prev;});
+    ultimoHod=Number(ultimo.hod);
+  }
+
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
+  db.abastecimentos.push(abast);
+
+  if(fs.fotoHod||fs.fotoBomba){
+    var fid=fs.imgId||uid();
+    abast.fotoId=fid;
+    // Save foto record with compressed images asynchronously
+    var _fid=fid, _equip=equip.cod, _hod=hodAtual, _vol=Number(fs.litros);
+    var _imgHod=fs.imgHod||null, _imgBomba=fs.imgBomba||null;
+    function salvarFotoRecord(hImg, bImg){
+      var fRec={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+        equip:_equip,hod:_hod,vol:_vol,conferido:false};
+      if(hImg) fRec.imgHod=hImg;
+      if(bImg) fRec.imgBomba=bImg;
+      try{
+        localStorage.setItem('foto_'+_fid,JSON.stringify(fRec));
+      }catch(e){
+        // Storage full — save without images
+        var fr2={id:_fid,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+          equip:_equip,hod:_hod,vol:_vol,conferido:false,semFoto:true};
+        try{localStorage.setItem('foto_'+_fid,JSON.stringify(fr2));}catch(e2){}
+      }
+    }
+    if(_imgHod){
+      comprimirImg(_imgHod,0.4,function(h){
+        if(_imgBomba){
+          comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(h,b);});
+        } else {
+          salvarFotoRecord(h,null);
+        }
+      });
+    } else if(_imgBomba){
+      comprimirImg(_imgBomba,0.4,function(b){salvarFotoRecord(null,b);});
+    } else {
+      salvarFotoRecord(null,null);
+    }
+  }
+  saveDB();
+
+  // Notificação: horímetro inferior ao último registro
+  if(ultimoHod!==null && hodAtual<ultimoHod){
+    abast.aprovado=false;
+    criarNotif(
+      'hod_inferior',
+      'Horímetro inferior ao registro anterior',
+      equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+' '+(equip.unidade==='km'?'km':'h')+', mas o último registro era '+ultimoHod.toLocaleString('pt-BR')+'. Verifique e aprove ou rejeite este lançamento.',
+      {abastId:id, equip:equip.cod, hodLancado:hodAtual, hodAnterior:ultimoHod}
+    );
+    saveDB();
+  }
+
+  // Item 7: consumo médio divergente ±20%
+  if(fs.equip.consumo&&fs.equip.consumo>0){
+    var historico2=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.aprovado!==false;});
+    if(historico2.length>=2){
+      var ultimo2=historico2[historico2.length-1];
+      var penult=historico2[historico2.length-2];
+      var dh2=Number(ultimo2.hod)-Number(penult.hod);
+      if(dh2>0){
+        var isKm2=equip.unidade==='km';
+        var consReal=isKm2?(Number(ultimo2.vol)/dh2*100):(Number(ultimo2.vol)/dh2);
+        var consEsp=Number(equip.consumo);
+        var desvio=Math.abs(consReal-consEsp)/consEsp;
+        if(desvio>0.2){
+          var dir=consReal>consEsp?'acima':'abaixo';
+          criarNotif('consumo_divergente',
+            'Consumo fora do esperado — '+equip.cod,
+            'Consumo registrado: '+consReal.toFixed(2)+' '+(isKm2?'L/100km':'L/h')+
+            ' (esperado: '+consEsp+' '+(isKm2?'L/100km':'L/h')+') — '+
+            Math.round(desvio*100)+'% '+dir+' do esperado.',
+            {equip:equip.cod,consReal:consReal,consEsp:consEsp});
+        }
+      }
+    }
+  }
+
+  // Item 8: volume > 10% da capacidade do tanque
+  if(equip.tank&&equip.tank>0){
+    var capTank=Number(equip.tank);
+    var volAb=Number(fs.litros);
+    if(volAb>capTank*1.10){
+      criarNotif('volume_excessivo',
+        'Volume superior à capacidade — '+equip.cod,
+        'Abastecimento de '+volAb.toFixed(0)+' L registrado, mas a capacidade do tanque é '+capTank+' L ('+Math.round(volAb/capTank*100)+'%).',
+        {equip:equip.cod,vol:volAb,cap:capTank});
+    }
+  }
+
+  // Item 9: saldo comboio < 300 L
+  var saldoCom=getSaldoCom();
+  if(saldoCom<300&&saldoCom>=0){
+    var jaNotifCom=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;
+    if(!jaNotifCom){
+      criarNotif('comboio_baixo',
+        'Comboio com menos de 300 litros',
+        'Saldo atual do comboio: '+Math.max(0,saldoCom).toFixed(0)+' L. Faça o carregamento.',
+        {saldo:saldoCom});
+    }
+  }
+
+  // Notificação: reservatório abaixo de 500 L
+  var saldoRes=getSaldoRes();
+  if(saldoRes<500&&saldoRes>=0){
+    var jaNotif=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;
+    if(!jaNotif){
+      criarNotif('reservatorio_baixo',
+        'Reservatório abaixo de 500 litros',
+        'Saldo atual do reservatório principal: '+Math.max(0,saldoRes).toFixed(0)+' L. Solicite reabastecimento.',
+        {saldo:saldoRes});
+    }
+  }
+
+  // Update cycle after equipment fill
+  // Option B: check consumption vs min/max + store history for Option C
+  if(hodAtual>0){
+    var _ph=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&a.id!==id;}).sort(function(a,b){return Number(b.hod)-Number(a.hod);});
+    if(_ph.length>0){
+      var _dh=hodAtual-Number(_ph[0].hod);
+      if(_dh>0){
+        var _isKm=equip.unidade==='km';
+        var _cr=Number(fs.litros)/_dh*(_isKm?100:1);
+        var _abR=db.abastecimentos.filter(function(a){return a.id===id;})[0];
+        if(_abR) _abR.consumoCalc=Math.round(_cr*100)/100;
+        var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
+        if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
+          var _u=_isKm?'L/100km':'L/h';
+          criarNotif('consumo_fora_faixa','Consumo fora da faixa esperada',equip.cod+': '+_cr.toFixed(1)+' '+_u+' (faixa: '+_cMin+'-'+_cMax+' '+_u+')',{abastId:id});
+        }
+      }
+    }
+  }
+  // Volume maior que capacidade do tanque
+  if(equip.tank>0&&Number(fs.litros)>equip.tank){
+    criarNotif('volume_excede_tank','Volume supera capacidade do tanque',equip.cod+': lançado '+Number(fs.litros).toFixed(0)+' L, capacidade '+equip.tank+' L',{abastId:id});
+  }
+  // Operador de campo: envia abastecimentos via Firebase
+  if(fbRefCampo&&fbActive){
+    try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
+  }
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
+  fs.step=5; renderField();
+}
+
+// ─────────────────────────────────────────────
+//  ENTRADA
+// ─────────────────────────────────────────────
+var _eHodImg=null, _eHodVal=null;
+
+function abrirCamEntrada(){document.getElementById('cam-entrada').click();}
+
+function onFotoEntrada(input){
+  var file=input.files[0]; if(!file) return;
+  var r=new FileReader();
+  r.onload=function(e){
+    _eHodImg=e.target.result; _eHodVal=null;
+    var fa=document.getElementById('e-foto-area');
+    var fi=document.getElementById('e-foto-icon');
+    var fl=document.getElementById('e-foto-label');
+    var fs=document.getElementById('e-foto-sub');
+    fa.classList.add('has');
+    fi.className='ti ti-check'; fi.style.color='var(--green)';
+    fl.textContent='Foto capturada';
+    fs.textContent='Toque para tirar outra';
+    document.getElementById('e-hod-box').style.display='block';
+    document.getElementById('e-ocr-status').innerHTML='<div class="analyzing"><div class="spin"></div> Lendo bomba...</div>';
+    runOCREntrada(e.target.result, function(num){
+      _eHodVal=num||null;
+      document.getElementById('e-ocr-status').innerHTML='';
+      if(num){document.getElementById('e-hod').value=num;}
+      else{setTimeout(function(){alert('Não foi possível ler automaticamente. Digite manualmente.');},200);}
+    });
+  };
+  r.readAsDataURL(file);
+  input.value='';
+}
+
+function salvarEntrada(){
+  var vol=parseFloat(document.getElementById('e-vol').value);
+  if(!vol||vol<=0){alert('Informe o volume.');return;}
+  var hodVal=document.getElementById('e-hod').value;
+  var entrada={id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:(document.getElementById('e-nf').value||'').toUpperCase(),forn:document.getElementById('e-forn').value,hod:hodVal||null,fotoId:null};
+  if(_eHodImg){
+    var fid=uid();
+    entrada.fotoId=fid;
+    try{localStorage.setItem('foto_entrada_'+fid,JSON.stringify({id:fid,tipo:'entrada',data:entrada.data,vol:vol,hod:hodVal,img:_eHodImg,conferido:false}));}catch(e){}
+  }
+  db.entradas.push(entrada);
+  saveDB();
+  // Start new cycle for this entry volume
+  iniciarCiclo(vol, entrada.id);
+  ['e-vol','e-nf','e-forn','e-hod'].forEach(function(id){document.getElementById(id).value='';});
+  _eHodImg=null; _eHodVal=null;
+  // Reset foto area
+  var fa=document.getElementById('e-foto-area');
+  var fi=document.getElementById('e-foto-icon');
+  var fl=document.getElementById('e-foto-label');
+  var fs2=document.getElementById('e-foto-sub');
+  if(fa){fa.classList.remove('has');fi.className='ti ti-camera';fi.style.color='var(--t3)';fl.textContent='Fotografar bomba do pátio';fs2.textContent='Visor do horímetro ou bomba';}
+  document.getElementById('e-hod-box').style.display='none';
+  renderHistEnt();
+  // Check reservatório after entry
+  var _sr=getSaldoRes();
+  if(_sr<500&&_sr>=0){var _jn=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr});}
+  alert('Entrada registrada!');
+}
+function renderHistEnt(){
+  var rows=db.entradas.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('hist-ent');
+  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhuma entrada ainda</div>';return;}
+  el.innerHTML=rows.map(function(r){
+    return'<div class="hi"><div class="hic entry"><i class="ti ti-truck-delivery"></i></div><div class="hb"><div class="hn">'+(r.forn||'Distribuidora')+'</div><div class="hs">'+fmtDate(r.data)+' • NF '+(r.nf||'—')+'</div></div><div class="hv">+'+Number(r.vol).toFixed(0)+' L</div></div>';
+  }).join('');
+}
+
+// ─────────────────────────────────────────────
+//  COMBOIO
+// ─────────────────────────────────────────────
+function salvarComboio(){
+  var vol=parseFloat(document.getElementById('c-vol').value);
+  if(!vol||vol<=0){alert('Informe o volume.');return;}
+  if(!_editComId){
+    var sr=getSaldoRes();
+    if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar?'))return;}
+  }
+  if(_editComId){
+    db.comboios=db.comboios.map(function(r){
+      return r.id===_editComId?{id:r.id,data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value}:r;
+    });
+    _editComId=null;
+    alert('Carregamento atualizado!');
+  } else {
+    db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});
+  }
+  saveDB();
+  // Update active cycle
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) atualizarCiclo();
+  ['c-vol','c-hod'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  var cop=document.getElementById('c-op');if(cop)cop.value='';
+  renderHistCom();
+  var _sr2=getSaldoRes();
+  if(_sr2<500&&_sr2>=0){var _jn2=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn2)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr2).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr2});}
+  var _sc2=getSaldoCom();
+  if(_sc2<300&&_sc2>=0){var _jnc=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jnc)criarNotif('comboio_baixo','Comboio com menos de 300 litros','Saldo atual do comboio: '+Math.max(0,_sc2).toFixed(0)+' L. Faça o carregamento.',{saldo:_sc2});}
+  alert('Carregamento registrado!');
+}
+var _editComId=null;
+function renderHistCom(){
+  // Always keep operador dropdown in sync
+  var _cop=document.getElementById('c-op');
+  if(_cop&&db.operadores.length&&_cop.options.length<=1){
+    _cop.innerHTML='<option value="">— selecione —</option>'+
+      db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+  }
+  var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var el=document.getElementById('hist-com');
+  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
+  el.innerHTML=rows.map(function(r){
+    var html='<div class="hi" id="com-'+r.id+'">';
+    html+='<div class="hic transfer"><i class="ti ti-flame"></i></div>';
+    html+='<div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div>';
+    html+='<div class="hs">'+fmtDate(r.data)+' • '+Number(r.vol).toFixed(0)+' L'+(r.hod?' • '+r.hod:'')+'</div></div>';
+    html+='<div style="display:flex;gap:6px">';
+    html+='<button class="del" data-id="'+r.id+'" onclick="editarComboio(this.dataset.id)" title="Editar" style="color:var(--bl)"><i class="ti ti-pencil"></i></button>';
+    html+='<button class="del" data-id="'+r.id+'" onclick="excluirComboio(this.dataset.id)" title="Excluir"><i class="ti ti-trash"></i></button>';
+    html+='</div></div>';
+    return html;
+  }).join('');
+}
+function editarComboio(id){
+  var r=db.comboios.filter(function(x){return x.id===id;})[0]; if(!r)return;
+  _editComId=id;
+  document.getElementById('c-data').value=r.data||today();
+  document.getElementById('c-vol').value=r.vol||'';
+  document.getElementById('c-hod').value=r.hod||'';
+  // Repopulate and select operator
+  var sel=document.getElementById('c-op');
+  if(sel) sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'"'+(o.nome===r.op?' selected':'')+'>'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
+  // Scroll to comboio form
+  var comCard=document.querySelector('.card:has(#c-vol)');
+  var comCardAlt=document.getElementById('c-vol');
+  if(comCardAlt) comCardAlt.closest('.card').scrollIntoView({behavior:'smooth'});
+}
+function excluirComboio(id){
+  if(!confirm('Excluir este carregamento?'))return;
+  db.comboios=db.comboios.filter(function(x){return x.id!==id;});
+  saveDB(); renderHistCom();
+}
+
+// ─────────────────────────────────────────────
+//  AVISOS — armazenamento local independente
+//  localStorage['comboio_avisos_v1'] — nunca toca em db ou Firebase
 // ─────────────────────────────────────────────
 var AVISOS_KEY = 'comboio_avisos_v1';
 
-// Lê avisos do localStorage
 function avisosList(){
-  try{
-    var s=localStorage.getItem(AVISOS_KEY);
-    return s ? JSON.parse(s) : [];
-  }catch(e){ return []; }
+  try{ var s=localStorage.getItem(AVISOS_KEY); return s?JSON.parse(s):[]; }catch(e){ return []; }
 }
-
-// Salva avisos no localStorage
 function avisosSave(arr){
   try{ localStorage.setItem(AVISOS_KEY, JSON.stringify(arr)); }catch(e){}
 }
-
-// Adiciona um aviso — chamado sempre que ocorre um evento notificável
 function avisosAdd(tipo, titulo, descricao, dados){
   var avisos=avisosList();
-  var n={
-    id: uid(),
-    tipo: tipo,
-    titulo: titulo,
-    descricao: descricao,
-    dados: dados||{},
-    data: today(),
-    hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-    lida: false
-  };
+  var n={id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{},
+    data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), lida:false};
   avisos.unshift(n);
   avisosSave(avisos);
   avisosUpdateBadge();
   return n.id;
 }
-
-// Atualiza badge do ícone de avisos na nav
 function avisosUpdateBadge(){
   var avisos=avisosList();
-  var nLidas=avisos.filter(function(a){return !a.lida;}).length;
-  // Badge nos botões de nav
-  document.querySelectorAll('.nb').forEach(function(el){
-    var onclick=el.getAttribute('onclick')||'';
-    if(onclick.indexOf('notif')!==-1 || (el.querySelector&&el.querySelector('.ti-bell'))){
-      var b=el.querySelector('.aviso-badge');
-      if(!b){
-        b=document.createElement('span');
-        b.className='aviso-badge';
-        b.style.cssText='position:absolute;top:2px;right:2px;background:var(--red);color:#fff;'+
-          'font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;min-width:14px;text-align:center';
-        el.style.position='relative';
-        el.appendChild(b);
-      }
-      b.textContent=nLidas>0?nLidas:'';
-      b.style.display=nLidas>0?'':'none';
-    }
-  });
-  // Badge no topo da tela de avisos
+  var n=avisos.filter(function(a){return !a.lida;}).length;
   var top=document.getElementById('notif-badge-top');
-  if(top){top.textContent=nLidas>0?nLidas+' pendente'+(nLidas>1?'s':''):'';top.style.display=nLidas>0?'':'none';}
+  if(top){top.textContent=n>0?n+' pendente'+(n>1?'s':''):''; top.style.display=n>0?'':'none';}
+  // Badge no botão de nav
+  var navBtns=document.querySelectorAll('.nb');
+  navBtns.forEach(function(el){
+    var oc=el.getAttribute('onclick')||'';
+    if(oc.indexOf('notif')===-1) return;
+    var b=el.querySelector('.aviso-badge');
+    if(!b){
+      b=document.createElement('span'); b.className='aviso-badge';
+      b.style.cssText='position:absolute;top:0;right:0;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px;min-width:13px;text-align:center';
+      el.style.position='relative'; el.appendChild(b);
+    }
+    b.textContent=n>0?n:''; b.style.display=n>0?'':'none';
+  });
 }
-
-// Alias para compatibilidade com código existente que chama updateNotifBadge
 function updateNotifBadge(){ avisosUpdateBadge(); }
 
-// Renderiza a aba de Avisos
 function renderNotif(){
   var el=document.getElementById('avisos-body'); if(!el) return;
   var avisos=avisosList();
   if(!avisos.length){
-    el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhuma notificação</div>';
+    el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhum aviso</div>';
     avisosUpdateBadge(); return;
   }
-
-  var ICONES={
-    hod_inferior:      {i:'ti-alert-triangle', c:'var(--red)'},
-    volume_excede_tank:{i:'ti-alert-triangle', c:'var(--red)'},
-    consumo_fora_faixa:{i:'ti-chart-line',     c:'var(--am)'},
-    abast_corrigido:   {i:'ti-edit',           c:'var(--green)'}
+  var ICON={
+    hod_inferior:      {i:'ti-alert-triangle',c:'var(--red)',bg:'var(--rl)'},
+    volume_excede_tank:{i:'ti-alert-triangle',c:'var(--red)',bg:'var(--rl)'},
+    consumo_fora_faixa:{i:'ti-chart-line',    c:'var(--am)', bg:'var(--al)'},
+    abast_corrigido:   {i:'ti-edit',          c:'var(--green)',bg:'var(--gl)'}
   };
   var CORRIGIVEIS=['hod_inferior','volume_excede_tank','consumo_fora_faixa'];
-
   el.innerHTML=avisos.map(function(n){
-    var ic=ICONES[n.tipo]||{i:'ti-bell',c:'var(--t2)'};
-    var bg=n.lida?'var(--bg2)':'var(--bg)';
-    var border=n.lida?'var(--br)':'2px solid '+ic.c;
-    var html='<div style="background:'+bg+';border:'+border+';border-radius:var(--r);padding:14px;margin-bottom:10px">'+
-      '<div style="display:flex;align-items:flex-start;gap:10px">'+
-        '<i class="ti '+ic.i+'" style="font-size:22px;color:'+ic.c+';flex-shrink:0;margin-top:1px"></i>'+
-        '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:13px;font-weight:700;color:'+ic.c+';margin-bottom:3px">'+n.titulo+'</div>'+
-          '<div style="font-size:12px;color:var(--t2);margin-bottom:6px;line-height:1.5;white-space:pre-line">'+n.descricao+'</div>'+
-          '<div style="font-size:11px;color:var(--t3)">'+fmtDate(n.data)+(n.hora?' • '+n.hora:'')+'</div>';
-
+    var ic=ICON[n.tipo]||{i:'ti-bell',c:'var(--t2)',bg:'var(--bg2)'};
+    var border=n.lida?'var(--br)':ic.c;
+    var html='<div style="border:2px solid '+border+';border-radius:var(--r);padding:14px;margin-bottom:10px;background:var(--bg)">'+
+      '<div style="display:flex;gap:10px;align-items:flex-start">'+
+      '<div style="background:'+ic.bg+';border-radius:8px;padding:8px;flex-shrink:0">'+
+        '<i class="ti '+ic.i+'" style="font-size:20px;color:'+ic.c+'"></i></div>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13px;font-weight:700;color:'+ic.c+';margin-bottom:2px">'+n.titulo+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:6px">'+n.descricao+'</div>'+
+        '<div style="font-size:11px;color:var(--t3)">'+fmtDate(n.data)+(n.hora?' • '+n.hora:'')+'</div>';
     if(!n.lida && CORRIGIVEIS.indexOf(n.tipo)!==-1 && n.dados && n.dados.abastId){
       html+='<div style="display:flex;gap:8px;margin-top:10px">'+
-        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="avisosAprovar(\''+n.id+'\')">'+
-          '<i class="ti ti-check"></i> Aprovar</button>'+
-        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="avisosCorrigir(\''+n.id+'\')">'+
-          '<i class="ti ti-pencil"></i> Corrigir</button>'+
-        '</div>';
+        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="avisosAprovar(\''+n.id+'\')"><i class="ti ti-check"></i> Aprovar</button>'+
+        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="avisosCorrigir(\''+n.id+'\')"><i class="ti ti-pencil"></i> Corrigir</button></div>';
     } else if(!n.lida){
       html+='<div style="margin-top:8px">'+
-        '<button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="avisosMarcarLida(\''+n.id+'\')">'+
-          '<i class="ti ti-check"></i> Marcar como lida</button>'+
-        '</div>';
+        '<button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="avisosMarcarLida(\''+n.id+'\')"><i class="ti ti-check"></i> Marcar como lida</button></div>';
     } else {
-      html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">'+
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">'+
         '<span style="font-size:11px;color:var(--t3)">✓ Lida</span>'+
-        '<button onclick="avisosApagar(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);cursor:pointer;padding:2px 6px">'+
-          '<i class="ti ti-trash" style="font-size:14px"></i></button>'+
-        '</div>';
+        '<button onclick="avisosApagar(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);cursor:pointer;padding:2px 6px"><i class="ti ti-trash" style="font-size:14px"></i></button></div>';
     }
     html+='</div></div></div>';
     return html;
@@ -648,89 +1776,60 @@ function renderNotif(){
   avisosUpdateBadge();
 }
 
-function avisosMarcarLida(id){
-  var avisos=avisosList();
-  avisos.forEach(function(a){if(a.id===id) a.lida=true;});
-  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
-}
-function avisosMarcarTodos(){
-  var avisos=avisosList();
-  avisos.forEach(function(a){a.lida=true;});
-  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
-}
-function avisosApagar(id){
-  var avisos=avisosList().filter(function(a){return a.id!==id;});
-  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
-}
+function avisosMarcarLida(id){ var a=avisosList(); a.forEach(function(x){if(x.id===id)x.lida=true;}); avisosSave(a); avisosUpdateBadge(); renderNotif(); }
+function avisosMarcarTodos(){ var a=avisosList(); a.forEach(function(x){x.lida=true;}); avisosSave(a); avisosUpdateBadge(); renderNotif(); }
+function avisosApagar(id){ avisosSave(avisosList().filter(function(x){return x.id!==id;})); avisosUpdateBadge(); renderNotif(); }
 function avisosApagarLidos(){
-  var avisos=avisosList();
-  var lidas=avisos.filter(function(a){return a.lida;}).length;
-  if(!lidas){alert('Nenhum aviso lido.');return;}
-  if(!confirm('Apagar '+lidas+' aviso'+(lidas>1?'s lidos':' lido')+'?'))return;
-  avisosSave(avisos.filter(function(a){return !a.lida;}));
-  avisosUpdateBadge(); renderNotif();
+  var a=avisosList(), n=a.filter(function(x){return x.lida;}).length;
+  if(!n){alert('Nenhum aviso lido.');return;}
+  if(!confirm('Apagar '+n+' aviso'+(n>1?'s lidos':' lido')+'?'))return;
+  avisosSave(a.filter(function(x){return !x.lida;})); avisosUpdateBadge(); renderNotif();
 }
 function avisosAprovar(id){
-  var avisos=avisosList();
-  var n=avisos.filter(function(a){return a.id===id;})[0]; if(!n) return;
-  // Aprova o abastecimento relacionado
+  var a=avisosList(), n=a.filter(function(x){return x.id===id;})[0]; if(!n) return;
   if(n.dados&&n.dados.abastId){
-    var ab=db.abastecimentos.filter(function(a){return a.id===n.dados.abastId;})[0];
-    if(ab){ ab.aprovado=true; saveDB(); }
+    var ab=db.abastecimentos.filter(function(x){return x.id===n.dados.abastId;})[0];
+    if(ab){ab.aprovado=true; saveDB();}
   }
-  n.lida=true;
-  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
+  n.lida=true; avisosSave(a); avisosUpdateBadge(); renderNotif();
 }
 function avisosCorrigir(id){
-  var avisos=avisosList();
-  var n=avisos.filter(function(a){return a.id===id;})[0]; if(!n) return;
-  n.lida=true;
-  avisosSave(avisos); avisosUpdateBadge();
-  if(n.dados&&n.dados.abastId) setTimeout(function(){ abrirModalCorrigir(n.dados.abastId, id); },100);
+  var a=avisosList(), n=a.filter(function(x){return x.id===id;})[0]; if(!n) return;
+  n.lida=true; avisosSave(a); avisosUpdateBadge();
+  if(n.dados&&n.dados.abastId) setTimeout(function(){abrirModalCorrigir(n.dados.abastId,id);},100);
 }
-
-// Alias para compatibilidade com código existente
-function criarNotif(tipo, titulo, descricao, dados){
-  var permitidos=['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
-  if(permitidos.indexOf(tipo)===-1) return null;
-  return avisosAdd(tipo, titulo, descricao, dados);
+// Aliases para compatibilidade
+function criarNotif(tipo,titulo,descricao,dados){
+  var ok=['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
+  if(ok.indexOf(tipo)===-1) return null;
+  return avisosAdd(tipo,titulo,descricao,dados);
 }
-function marcarLida(id){ avisosMarcarLida(id); }
-function marcarTodasLidas(){ avisosMarcarTodos(); }
-function apagarNotif(id){ avisosApagar(id); }
-function apagarNotifLidas(){ avisosApagarLidos(); }
-function aprovarNotif(id){ avisosAprovar(id); }
-function rejeitarNotif(id){ avisosCorrigir(id); }
+function marcarLida(id){avisosMarcarLida(id);}
+function marcarTodasLidas(){avisosMarcarTodos();}
+function apagarNotif(id){avisosApagar(id);}
+function apagarNotifLidas(){avisosApagarLidos();}
+function aprovarNotif(id){avisosAprovar(id);}
+function rejeitarNotif(id){avisosCorrigir(id);}
 
-// ─────────────────────────────────────────────
-//  MODAL DE CORREÇÃO
-// ─────────────────────────────────────────────
 var _corrigirAbastId=null;
-var _corrigirNotifId=null;
-
-function abrirModalCorrigir(abastId, notifId){
+function abrirModalCorrigir(abastId,notifId){
   var ab=db.abastecimentos.filter(function(a){return a.id===abastId;})[0];
-  if(!ab){ renderNotif(); return; }
+  if(!ab){renderNotif();return;}
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km';
-  var unid=isKm?'km':'h';
+  var isKm=eq&&eq.unidade==='km', unid=isKm?'km':'h';
   var hodAnt=null;
   var hist=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==ab.id&&Number(a.hod)>0;});
   if(hist.length){var ant=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodAnt=Number(ant.hod);}
-  _corrigirAbastId=abastId; _corrigirNotifId=notifId||null;
-  var m=document.getElementById('modal-corrigir');
-  if(!m){alert('Modal não encontrado.');return;}
+  _corrigirAbastId=abastId;
+  var m=document.getElementById('modal-corrigir'); if(!m){alert('Modal não encontrado.');return;}
   document.getElementById('mc-desc').textContent='Equipamento: '+ab.equip+' • '+fmtDate(ab.data);
-  document.getElementById('mc-info').innerHTML=
-    '<strong>'+(isKm?'Odômetro':'Horímetro')+' lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
-    (hodAnt!==null?' | <strong>Mínimo aceito:</strong> <span style="color:var(--am)">'+hodAnt.toLocaleString('pt-BR')+' '+unid+' + 1</span>':'')+
-    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
-  document.getElementById('mc-hod-label').textContent=(isKm?'Odômetro (km)':'Horímetro (h)');
+  document.getElementById('mc-info').innerHTML='<strong>'+(isKm?'Odômetro':'Horímetro')+':</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
+    (hodAnt!==null?' | <strong>Mínimo:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
+  document.getElementById('mc-hod-label').textContent=isKm?'Odômetro (km)':'Horímetro (h)';
   document.getElementById('mc-hod').value=ab.hod;
   document.getElementById('mc-vol').value=ab.vol;
   m.style.display='flex';
 }
-
 function salvarCorrecao(){
   if(!_corrigirAbastId) return;
   var newHod=parseFloat(document.getElementById('mc-hod').value);
@@ -740,28 +1839,24 @@ function salvarCorrecao(){
   var ab=db.abastecimentos.filter(function(a){return a.id===_corrigirAbastId;})[0];
   if(!ab){fecharModalCorrigir();return;}
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km'; var unid=isKm?'km':'h';
-  // Valida horímetro mínimo
+  var isKm=eq&&eq.unidade==='km', unid=isKm?'km':'h';
   var histAnt=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==_corrigirAbastId&&Number(a.hod)>0;});
   var hodMin=0;
   if(histAnt.length){var ar=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodMin=Number(ar.hod);}
   if(hodMin>0&&newHod<=hodMin){alert('O '+unid+' deve ser maior que '+hodMin.toLocaleString('pt-BR')+' '+unid+'.');return;}
   var hodAnt=ab.hod, volAnt=ab.vol;
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
-  // Registra correção na aba Avisos
   avisosAdd('abast_corrigido','Abastecimento corrigido — '+ab.equip,
-    'Registro de '+fmtDate(ab.data)+' corrigido\n'+
-    (isKm?'Odômetro':'Horímetro')+': '+Number(hodAnt).toLocaleString('pt-BR')+' → '+Number(newHod).toLocaleString('pt-BR')+' '+unid+
-    ' | Volume: '+Number(volAnt).toFixed(0)+' → '+newVol+' L',
+    'Registro de '+fmtDate(ab.data)+' corrigido. '+(isKm?'Odômetro':'Horímetro')+': '+
+    Number(hodAnt).toLocaleString('pt-BR')+' -> '+Number(newHod).toLocaleString('pt-BR')+' '+unid+
+    ' | Volume: '+Number(volAnt).toFixed(0)+' -> '+newVol+' L',
     {abastId:_corrigirAbastId,equip:ab.equip});
   saveDB(); fecharModalCorrigir(); renderNotif(); atualizarCiclo();
   alert('Abastecimento corrigido com sucesso!');
 }
-
 function fecharModalCorrigir(){
   _corrigirAbastId=null;
-  var m=document.getElementById('modal-corrigir');
-  if(m) m.style.display='none';
+  var m=document.getElementById('modal-corrigir'); if(m) m.style.display='none';
 }
 
 // ─────────────────────────────────────────────
@@ -990,7 +2085,7 @@ function toggleModalApagar(){
     var el=document.getElementById('del-entradas-ct'); if(el)el.textContent=db.entradas.length+' registro'+(db.entradas.length!==1?'s':'');
     el=document.getElementById('del-comboios-ct'); if(el)el.textContent=db.comboios.length+' registro'+(db.comboios.length!==1?'s':'');
     el=document.getElementById('del-abast-ct'); if(el)el.textContent=db.abastecimentos.length+' registro'+(db.abastecimentos.length!==1?'s':'');
-    el=document.getElementById('del-notif-ct'); if(el)el.textContent=avisosList().length+' aviso'+(avisosList().length!==1?'s':'');
+    el=document.getElementById('del-notif-ct'); if(el)el.textContent=(db.notificacoes||[]).length+' notificaç'+(db.notificacoes&&db.notificacoes.length!==1?'ões':'ão');
     // Uncheck all
     ['del-entradas','del-comboios','del-abast','del-notif'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=false;});
   }
@@ -1007,40 +2102,23 @@ function confirmarApagar(){
   if(delCom)lista.push('Carregamentos do comboio');
   if(delAb)lista.push('Abastecimentos de campo');
   if(delNot)lista.push('Notificações');
-  if(!confirm('Apagar selecionados:\n• '+lista.join('\n• ')+'\n\nEsta ação não tem volta.'))return;
+  if(!confirm('Apagar selecionados:\n\u2022 '+lista.join('\n\u2022 ')+'\n\nEsta a\u00e7\u00e3o n\u00e3o tem volta.'))return;
 
-  if(delEnt) db.entradas=[];
-  if(delCom) db.comboios=[];
-  if(delAb)  db.abastecimentos=[];
-  if(delNot){ avisosSave([]); avisosUpdateBadge(); }
 
-  _fbSetLocalTs(Date.now());
+
+
+  var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
+  if(delEnt)db.entradas=[];
+  if(delCom)db.comboios=[];
+  if(delAb)db.abastecimentos=[];
+  if(delNot)db.notificacoes=[];
   saveDB();
-
-  // Envia direto — bypass de _fbPodeEscrever para garantir que sai mesmo em edge cases
-  setTimeout(function(){
-    if(!fbRefMaster||!fbActive) return;
-    var ts = _fbGetLocalTs();
-    fbRefMaster.set({
-      equipamentos  : db.equipamentos||[],
-      operadores    : db.operadores||[],
-      entradas      : db.entradas||[],
-      comboios      : db.comboios||[],
-      abastecimentos: db.abastecimentos||[],
-      ciclos        : db.ciclos||[],
-      cicloAtivo    : db.cicloAtivo||null,
-      saldo         : db.saldo||{res:0,com:0},
-      _masterId     : myDeviceId,
-      _masterTs     : ts
-    });
-    console.log('[Sync] Reset enviado ts='+new Date(ts).toLocaleTimeString());
-  }, 200);
-
+  db.saldo=savedSaldo;
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  fbPush();
   toggleModalApagar();
   renderAdmin();
-  renderResumo();
-  updateNotifBadge();
-  alert('Dados apagados e sincronizados.');
+  alert('Dados apagados com sucesso.');
 }
 
 // ─────────────────────────────────────────────
@@ -1126,21 +2204,11 @@ function renderHistorico(){
   if(!filtTipo||filtTipo==='fuel')
     db.abastecimentos.forEach(function(a){
       if(filtEq&&a.equip!==filtEq) return;
-      var pendente=a.aprovado===false;
-      todos.push({
-        data:a.data,ts:a.ts||a.id||0,tipo:'fuel',
-        nome:a.equip||'—',
-        sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo')+(pendente?' • <span style="color:var(--am);font-weight:600">⏳ Aguardando aprovação</span>':''),
-        vol:'<span style="'+(pendente?'color:var(--am)':'')+'">'+(pendente?'(':'')+Number(a.vol).toFixed(0)+' L'+(pendente?')':'')+'</span>',
-        raw:a
-      });
+      todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:(a.hod?'Hor: '+a.hod+' • ':'')+(a.operador||'Campo'),vol:Number(a.vol).toFixed(0)+' L',raw:a});
     });
   if(filtDe) todos=todos.filter(function(r){return r.data>=filtDe;});
   if(filtAte) todos=todos.filter(function(r){return r.data<=filtAte;});
-  todos.sort(function(a,b){
-    if(b.data!==a.data) return b.data.localeCompare(a.data);
-    return String(b.ts).localeCompare(String(a.ts));
-  });
+  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
   var el=document.getElementById('hist-lista');
   if(!todos.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento no período</div>';return;}
   el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+todos.length+' lançamento'+(todos.length>1?'s':'')+'</div>'+
@@ -1261,7 +2329,7 @@ function exportBackup(){
 function limparDados(){
   if(!confirm('Apagar lan\u00e7amentos?\n\nSer\u00e3o removidos:\n\u2022 Entradas de diesel\n\u2022 Carregamentos do comboio\n\u2022 Abastecimentos\n\u2022 Notifica\u00e7\u00f5es\n\nEquipamentos e operadores s\u00e3o mantidos.'))return;
   if(!confirm('Confirma? Esta a\u00e7\u00e3o n\u00e3o tem volta.'))return;
-  db.entradas=[];db.comboios=[];db.abastecimentos=[];avisosSave([]);
+  db.entradas=[];db.comboios=[];db.abastecimentos=[];db.notificacoes=[];
   saveDB(); renderAdmin(); alert('Lan\u00e7amentos apagados. Equipamentos e operadores mantidos.');
 }
 
@@ -1296,11 +2364,15 @@ loadDB();
   }catch(ex){}
 })();
 
-// Firebase conecta automaticamente após login/campo
-var _fbStarted = false; // mantido para compatibilidade
+// Firebase starts only AFTER role is chosen (entrarCampo or doLogin)
+// This prevents iPhone data from overwriting Mac before login
+var _fbStarted = false;
 function startFirebaseForRole(role){
-  fbRole = role||'campo';
-  _fbConectar();
+  if(_fbStarted) return;
+  var url=getFbUrl();
+  if(!url) return;
+  _fbStarted=true;
+  try{iniciarFirebase(url, false, role);}catch(e){console.error('FB start:',e);}
 }
 
 // Init nav
@@ -1330,10 +2402,15 @@ if('serviceWorker' in navigator){
       reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
       // Periodic check every 5 minutes
       setInterval(function(){ reg.update(); }, 300000);
-      // Reconexão silenciosa a cada 30s se desconectado
+      // Periodic Firebase reconnect check every 30 seconds
       setInterval(function(){
-        if(getFbUrl() && !fbActive) _fbConectar();
-      }, 30000);
+        var url=getFbUrl();
+        if(url&&!fbActive){
+          var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+          _fbStarted=false;
+          iniciarFirebase(url,false,_isM?'admin':'campo');
+        }
+      },30000);
     }).catch(function(){});
   });
 }
