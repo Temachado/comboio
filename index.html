@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783060000">
+<meta name="app-version" content="1783120000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2205,6 +2205,8 @@ function excluirComboio(id){
 //  NOTIFICAÇÕES — renderização e badge
 // ─────────────────────────────────────────────
 function updateNotifBadge(){
+  // Sempre restaura da chave dedicada para ter o count correto
+  _notifCarregar();
   var nao_lidas=(db.notificacoes||[]).filter(function(n){return !n.lida;}).length;
   // Badge na nav
   document.querySelectorAll('.nav-notif-badge').forEach(function(el){
@@ -2234,6 +2236,8 @@ function updateNotifBadge(){
 }
 
 function renderNotif(){
+  // Sempre restaura da chave dedicada antes de exibir — garante que Firebase não apagou
+  _notifCarregar();
   var el=document.getElementById('notif-body'); if(!el) return;
   var lista=(db.notificacoes||[]).slice().sort(function(a,b){
     return (b.data+b.hora).localeCompare(a.data+a.hora);
