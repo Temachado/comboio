@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1782960000">
+<meta name="app-version" content="1783060000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -493,8 +493,9 @@ function loadDB(){
     var ts=localStorage.getItem('comboio_localTs');
     if(ts && Number(ts) > (db._localTs||0)) db._localTs=Number(ts);
   }catch(e){}
-  // Restaura notificações da chave dedicada — tem prioridade sobre o payload principal
+  // Notificações: chave dedicada tem prioridade sobre o payload principal
   _notifCarregar();
+  console.log('[loadDB] notificacoes='+db.notificacoes.length);
 }
 function updateSaldo(){
   // Abastecimentos não aprovados (aprovado===false) não entram no saldo
@@ -530,11 +531,10 @@ function saveDB(){
   try{
     localStorage.setItem(DB_KEY,JSON.stringify(db));
     localStorage.setItem('comboio_localTs', String(db._localTs));
+    _notifSalvar(); // salva notificações em chave dedicada IMEDIATAMENTE
   }catch(e){alert('Erro ao salvar dados.');}
-  // Salva notificacoes em chave dedicada — imune a qualquer sobrescrita do payload principal
-  _notifSalvar();
   fbPush();
-  setTimeout(_fbSyncNotif, 200);
+  setTimeout(_fbSyncNotif, 300);
 }
 
 function _fbSyncNotif(){
@@ -629,13 +629,6 @@ function _fbRegistrarListeners(){
     // Echo: ignorar dados que eu mesmo enviei
     if(remoteId === myDeviceId) return;
 
-    // Janela de proteção pós-save: ignorar dados do Firebase por 3s após qualquer saveDB
-    // Evita que o Firebase devolva uma versão antiga e sobrescreva notificações recém-criadas
-    if(Date.now() < _fbIgnoreUntil){
-      console.log('[Sync] Dentro da janela de proteção pós-save → ignorando dado remoto');
-      return;
-    }
-
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
     var isReceptorPuro = !_isM && !adminLogado;
 
@@ -659,14 +652,17 @@ function _fbRegistrarListeners(){
       }
     }
 
-    // Aplica dados remotos
+    // Aplica dados remotos — NÃO inclui notificacoes (gerenciadas pela chave dedicada)
     console.log('[Sync] Aplicando dados remotos');
     ['equipamentos','operadores','entradas','comboios',
      'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
       if(r[k]!==undefined) db[k]=r[k];
     });
+    // Restaura notificações da chave dedicada após aplicar dados remotos
+    _notifCarregar();
     _fbSetLocalTs(remoteTs);
     try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
+    _notifSalvar(); // garante que chave dedicada continua consistente
     updateSaldo();
     _fbAtualizarTela();
 
@@ -1431,16 +1427,21 @@ function fsToast(msg, tipo, duracao){
 
 // ─── fsGo com validação antes de avançar ───
 function fsGo(n){
-  // Valida AO SAIR do step atual (só ao avançar, não ao voltar)
   var atual=fs.step;
   if(n > atual){
     var erro=_fsValidarStep(atual);
     if(erro){
-      fsToast(erro.msg, erro.tipo, 0); // 0 = não fecha sozinho
-      return; // bloqueia navegação
+      fsToast(erro.msg, erro.tipo, 0);
+      // Foca no campo para corrigir
+      if(erro.foco){
+        setTimeout(function(){
+          var el=document.getElementById(erro.foco);
+          if(el){ el.focus(); el.select(); }
+        }, 100);
+      }
+      return;
     }
   }
-  // Fecha toast se houver
   var old=document.getElementById('fs-toast'); if(old) old.remove();
   history.pushState({step:n},'','#field-'+n);
   fs.step=n;
@@ -1450,25 +1451,23 @@ function fsGo(n){
 // Valida o step atual ao tentar avançar — retorna {msg, tipo} ou null
 function _fsValidarStep(step){
   if(step===2){
-    if(!fs.hod) return {msg:'Informe o horímetro antes de continuar.', tipo:'red'};
+    if(!fs.hod) return {msg:'Informe o horímetro antes de continuar.', tipo:'red', foco:'hod-inp'};
     var hodAtual=Number(fs.hod);
-    var hist=db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod&&Number(a.hod)>0;});
+    var hist=db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod&&Number(a.hod)>0&&a.aprovado!==false;});
     if(hist.length){
       var ult=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
       var ultHod=Number(ult.hod);
       if(hodAtual<=ultHod){
-        // Segunda tentativa com mesmo valor — deixa passar, admin será notificado
-        if(fs._hodAlertaPendente&&fs._hodAlertaPendente.hodAtual===hodAtual){
-          fs._hodAlertaPendente=null;
-          return null;
-        }
+        // BLOQUEIO TOTAL — operador deve corrigir, não há segunda tentativa
         fs._hodAlertaPendente={hodAtual:hodAtual, ultHod:ultHod};
-        var _igualOuMenor = hodAtual===ultHod ? 'igual' : 'inferior';
+        var _ig=hodAtual===ultHod?'igual':'inferior';
         return {
-          msg:'Horímetro '+_igualOuMenor+' ao anterior!\n\nLançado: '+hodAtual.toLocaleString('pt-BR')+
-            ' | Último: '+ultHod.toLocaleString('pt-BR')+
-            '\n\nSe o valor estiver correto, toque em Próximo novamente para confirmar.\nO admin será notificado.',
-          tipo:'red'
+          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+_ig+' ao anterior!\n\n'+
+            'Lançado: '+hodAtual.toLocaleString('pt-BR')+
+            ' | Último: '+ultHod.toLocaleString('pt-BR')+'\n\n'+
+            'Corrija o valor para continuar.',
+          tipo:'red',
+          foco:'hod-inp'
         };
       }
     }
@@ -1476,47 +1475,45 @@ function _fsValidarStep(step){
   }
 
   if(step===3){
-    if(!fs.litros||Number(fs.litros)<=0) return {msg:'Informe a quantidade abastecida.', tipo:'red'};
+    if(!fs.litros||Number(fs.litros)<=0) return {msg:'Informe a quantidade abastecida.', tipo:'red', foco:'lit-inp'};
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
     var sc=getSaldoCom();
 
+    // Volume > capacidade: BLOQUEIO TOTAL — deve corrigir
     if(cap>0&&l>cap){
-      if(fs._litrosAlertaPendente==='cap'){
-        fs._litrosAlertaPendente=null;
-        return null;
-      }
-      fs._litrosAlertaPendente='cap';
       return {
-        msg:'Volume maior que a capacidade do tanque!\n\nLançado: '+l.toFixed(0)+
-          ' L | Capacidade: '+cap.toLocaleString('pt-BR')+
-          ' L\n\nSe o valor estiver correto, toque em Revisar novamente para confirmar.',
-        tipo:'red'
+        msg:'Volume maior que a capacidade do tanque!\n\n'+
+          'Lançado: '+l.toFixed(0)+' L | Capacidade: '+cap.toLocaleString('pt-BR')+' L\n\n'+
+          'Corrija o volume para continuar.',
+        tipo:'red',
+        foco:'lit-inp'
       };
     }
+
+    // Volume > saldo comboio: aviso amarelo, permite avançar na segunda tentativa
     if(sc>0&&l>sc){
       if(fs._litrosAlertaPendente==='saldo'){
         fs._litrosAlertaPendente=null;
-        return null;
+        return null; // segunda tentativa — avança
       }
       fs._litrosAlertaPendente='saldo';
       return {
-        msg:'Volume maior que o saldo do comboio!\n\nLançado: '+l.toFixed(0)+
-          ' L | Saldo: '+sc.toFixed(0)+
-          ' L\n\nSe o valor estiver correto, toque em Revisar novamente para confirmar.',
+        msg:'Volume ('+l.toFixed(0)+' L) maior que o saldo do comboio ('+sc.toFixed(0)+' L).\n\n'+
+          'Se correto, toque em Revisar novamente para confirmar.',
         tipo:'warn'
       };
     }
 
-    // Ponto 4: verificar consumo estimado vs desvio padrão antes de avançar
+    // Consumo fora da faixa: aviso amarelo, permite avançar na segunda tentativa
     var equip=fs.equip;
     var cMin=equip.consumoMin||0, cMax=equip.consumoMax||0;
     if(cMin>0&&cMax>0&&fs.hod){
-      var hodAtual=Number(fs.hod);
+      var hodAtual2=Number(fs.hod);
       var hist3=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&Number(a.hod)>0&&a.aprovado!==false;});
       if(hist3.length){
         var antH=hist3.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-        var dh3=hodAtual-Number(antH.hod);
+        var dh3=hodAtual2-Number(antH.hod);
         if(dh3>0){
           var isKm3=equip.unidade==='km';
           var cr3=l/dh3*(isKm3?100:1);
@@ -1524,13 +1521,14 @@ function _fsValidarStep(step){
           if(cr3<cMin*0.7||cr3>cMax*1.3){
             if(fs._litrosAlertaPendente==='consumo'){
               fs._litrosAlertaPendente=null;
-              return null;
+              return null; // segunda tentativa — avança, admin será notificado
             }
             fs._litrosAlertaPendente='consumo';
             return {
-              msg:'Consumo estimado fora da faixa!\n\nCalculado: '+cr3.toFixed(1)+' '+u3+
-                '\nFaixa esperada: '+cMin+'–'+cMax+' '+u3+
-                '\n\nVerifique o horímetro e o volume. Se correto, toque em Revisar novamente.',
+              msg:'Consumo estimado fora da faixa!\n\n'+
+                'Calculado: '+cr3.toFixed(1)+' '+u3+
+                ' | Faixa: '+cMin+'–'+cMax+' '+u3+'\n\n'+
+                'Verifique os valores. Se correto, toque em Revisar novamente.\nO admin será notificado.',
               tipo:'warn'
             };
           }
@@ -1543,7 +1541,6 @@ function _fsValidarStep(step){
 
   return null;
 }
-
 
 function renderField(){
   var d=new Date();
@@ -1758,7 +1755,9 @@ function renderFS5(){
 function onHodChange(val){
   fs.hod = val.trim() || null;
   fs.hodAlerta = false;
-  fs._hodAlertaPendente = null; // reseta — nova digitação requer nova validação
+  fs._hodAlertaPendente = null;
+  // Fecha toast ao começar a corrigir
+  var old=document.getElementById('fs-toast'); if(old) old.remove();
   var btn=document.getElementById('btn-hod');
   if(btn) btn.disabled=!fs.hod;
 }
@@ -1806,7 +1805,9 @@ function fsCorrigirHod(){
 
 function onLitrosChange(val){
   fs.litros = val || null;
-  fs._litrosAlertaPendente = null; // reseta — nova digitação requer nova validação
+  fs._litrosAlertaPendente = null;
+  // Fecha toast ao começar a corrigir
+  var old=document.getElementById('fs-toast'); if(old) old.remove();
   var btn=document.getElementById('btn-lit');
   if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
 }
@@ -2336,8 +2337,10 @@ function criarNotif(tipo, titulo, descricao, dados){
     lida:false, aprovada:null};
   if(!db.notificacoes) db.notificacoes=[];
   db.notificacoes.unshift(n);
-  // Salva imediatamente na chave dedicada — não depende do saveDB
+  // Persiste IMEDIATAMENTE em chave dedicada — imune a qualquer sobrescrita posterior
   _notifSalvar();
+  // Também persiste no payload principal para consistência
+  try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
   updateNotifBadge();
   return n.id;
 }
