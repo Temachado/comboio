@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783380000">
+<meta name="app-version" content="1783420000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1086,13 +1086,20 @@ function fsToast(msg, tipo, duracao){
   var bg=tipo==='red'?'#ffebee':'#fff3e0';
   var t=document.createElement('div');
   t.id='fs-toast';
-  t.style.cssText='position:fixed;top:calc(env(safe-area-inset-top,0px)+60px);left:50%;'+
-    'transform:translateX(-50%);z-index:9999;background:'+bg+';border:2px solid '+cor+';'+
-    'border-radius:12px;padding:14px 16px;max-width:340px;width:90%;'+
-    'box-shadow:0 4px 20px rgba(0,0,0,.2);display:flex;align-items:flex-start;gap:10px';
+  t.style.cssText='position:fixed;top:16px;left:50%;'+
+    'transform:translateX(-50%);z-index:99999;background:'+bg+';border:2px solid '+cor+';'+
+    'border-radius:12px;padding:14px 16px;max-width:340px;width:calc(100% - 32px);'+
+    'box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;align-items:flex-start;gap:10px;'+
+    'animation:toastSlide .2s ease';
   t.innerHTML='<i class="ti ti-alert-triangle" style="font-size:22px;color:'+cor+';flex-shrink:0;margin-top:1px"></i>'+
-    '<div style="font-size:13px;font-weight:600;color:'+cor+';line-height:1.5;flex:1">'+msg+'</div>'+
-    '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:'+cor+';font-size:20px;cursor:pointer;padding:0;flex-shrink:0;line-height:1">×</button>';
+    '<div style="font-size:13px;font-weight:600;color:'+cor+';line-height:1.5;flex:1;white-space:pre-line">'+msg+'</div>'+
+    '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:'+cor+';font-size:22px;cursor:pointer;padding:0;flex-shrink:0;line-height:1;margin-top:-2px">×</button>';
+  // Garantir que o estilo de animação existe
+  if(!document.getElementById('toast-anim')){
+    var s=document.createElement('style'); s.id='toast-anim';
+    s.textContent='@keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+    document.head.appendChild(s);
+  }
   document.body.appendChild(t);
   if(duracao!==0) setTimeout(function(){if(t.parentElement)t.remove();},duracao||5000);
 }
@@ -1192,6 +1199,17 @@ function renderFS2(){
   var unit=isKm?'km':'horas';
   var placeholder=isKm?'Ex: 125400':'Ex: 4820';
 
+  // Busca último horímetro registrado para orientação
+  var ultimoHod=null;
+  var histRef=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
+  if(histRef.length){
+    var ultRef=histRef.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    ultimoHod=Number(ultRef.hod);
+  }
+  var hodRefHtml=ultimoHod!==null
+    ? '<div style="font-size:12px;color:var(--t3);margin-top:6px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>'
+    : '';
+
   // Photo area horímetro
   var hodPhotoHtml='';
   if(fs.analisando){
@@ -1222,13 +1240,12 @@ function renderFS2(){
     '<div class="seg-label">Horímetro</div>'+
     hodPhotoHtml+
     '</div>'+
-    // CRITICAL: input has NO oninput that calls renderField
-    // uses onHodChange which only updates button state
     '<div class="field">'+
     '<label>Digitar '+unit+' manualmente</label>'+
     '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
     ' oninput="onHodChange(this.value)"'+
     ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
+    hodRefHtml+
     '</div>'+
     bombaHtml+
     '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
@@ -2510,24 +2527,31 @@ document.getElementById('c-data').value=today();
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
-      reg.update(); // Force check on every load
-      var handleUpdate=function(worker){
-        worker.addEventListener('statechange',function(){
-          if(this.state==='activated'){
-            // Show banner and auto-reload after 3s
-            var b=document.createElement('div');
-            b.id='update-banner';
-            b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600';
-            b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
-            document.body.appendChild(b);
-          }
+      reg.update();
+      function mostrarBanner(worker){
+        // Instrui o novo SW a assumir controle imediatamente
+        worker.postMessage({type:'SKIP_WAITING'});
+        var b=document.getElementById('update-banner');
+        if(b) return; // já está mostrando
+        b=document.createElement('div');
+        b.id='update-banner';
+        b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+        document.body.appendChild(b);
+      }
+      if(reg.waiting) mostrarBanner(reg.waiting);
+      reg.addEventListener('updatefound',function(){
+        var w=reg.installing;
+        w.addEventListener('statechange',function(){
+          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
         });
-      };
-      if(reg.waiting) handleUpdate(reg.waiting);
-      reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
-      // Periodic check every 5 minutes
+      });
+      // Detecta quando SW assume controle — recarrega automaticamente
+      var refreshing=false;
+      navigator.serviceWorker.addEventListener('controllerchange',function(){
+        if(!refreshing){refreshing=true; window.location.reload();}
+      });
       setInterval(function(){ reg.update(); }, 300000);
-      // Periodic Firebase reconnect check every 30 seconds
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
