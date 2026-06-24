@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783180000">
+<meta name="app-version" content="1783220000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -571,7 +571,8 @@ function avisosUpdateBadge(){
   var nLidas=avisos.filter(function(a){return !a.lida;}).length;
   // Badge nos botões de nav
   document.querySelectorAll('.nb').forEach(function(el){
-    if(el.getAttribute('onclick')||'').indexOf('notif')!==-1 || (el.querySelector&&el.querySelector('.ti-bell')){
+    var onclick=el.getAttribute('onclick')||'';
+    if(onclick.indexOf('notif')!==-1 || (el.querySelector&&el.querySelector('.ti-bell'))){
       var b=el.querySelector('.aviso-badge');
       if(!b){
         b=document.createElement('span');
@@ -749,8 +750,7 @@ function salvarCorrecao(){
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
   // Registra correção na aba Avisos
   avisosAdd('abast_corrigido','Abastecimento corrigido — '+ab.equip,
-    'Registro de '+fmtDate(ab.data)+' corrigido
-'+
+    'Registro de '+fmtDate(ab.data)+' corrigido\n'+
     (isKm?'Odômetro':'Horímetro')+': '+Number(hodAnt).toLocaleString('pt-BR')+' → '+Number(newHod).toLocaleString('pt-BR')+' '+unid+
     ' | Volume: '+Number(volAnt).toFixed(0)+' → '+newVol+' L',
     {abastId:_corrigirAbastId,equip:ab.equip});
