@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783120000">
+<meta name="app-version" content="1783180000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -394,10 +394,16 @@ input,select,textarea,button{font-family:inherit}
   </div>
 
 
-  <!-- NOTIFICAÇÕES -->
+  <!-- AVISOS / NOTIFICAÇÕES -->
   <div id="screen-notif" class="screen">
-    <div class="topbar"><div class="tb"><div style="flex:1"><h1>Notificações</h1></div><span id="notif-badge-top" class="pill p-adm" style="display:none"></span><button class="btn bs bsm" onclick="marcarTodasLidas()" style="margin-left:8px;padding:6px 10px;font-size:12px"><i class="ti ti-checks"></i> Lidas</button><button class="btn bd bsm" onclick="apagarNotifLidas()" style="margin-left:6px;padding:6px 10px;font-size:12px"><i class="ti ti-trash"></i> Apagar lidas</button></div></div>
-    <div class="sb" id="notif-body"></div>
+    <div class="topbar">
+      <div class="tb">
+        <div style="flex:1"><h1>Avisos</h1></div>
+        <button class="btn bs bsm" onclick="avisosMarcarTodos()" style="padding:6px 12px;font-size:12px"><i class="ti ti-checks"></i> Lidas</button>
+        <button class="btn bd bsm" onclick="avisosApagarLidos()" style="padding:6px 12px;font-size:12px;margin-left:6px"><i class="ti ti-trash"></i> Apagar lidas</button>
+      </div>
+    </div>
+    <div class="sb" id="avisos-body"></div>
     <nav class="bnav" id="nav-notif"></nav>
   </div>
 
@@ -486,16 +492,13 @@ function loadDB(){
     var s=localStorage.getItem(DB_KEY);
     if(s){
       var p=JSON.parse(s);
-      ['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
+      ['equipamentos','operadores','entradas','comboios','abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
       if(p.admin&&p.admin.usuario) db.admin=p.admin;
       if(p._localTs) db._localTs=p._localTs;
     }
     var ts=localStorage.getItem('comboio_localTs');
     if(ts && Number(ts) > (db._localTs||0)) db._localTs=Number(ts);
   }catch(e){}
-  // Notificações: chave dedicada tem prioridade sobre o payload principal
-  _notifCarregar();
-  console.log('[loadDB] notificacoes='+db.notificacoes.length);
 }
 function updateSaldo(){
   // Abastecimentos não aprovados (aprovado===false) não entram no saldo
@@ -513,1888 +516,194 @@ function getSaldoCom(){
     db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
     -abastAprovados.reduce(function(s,a){return s+Number(a.vol);},0);
 }
-var NOTIF_LS_KEY = 'comboio_notif_v1';
-
-function _notifSalvar(){
-  try{ localStorage.setItem(NOTIF_LS_KEY, JSON.stringify(db.notificacoes||[])); }catch(e){}
-}
-function _notifCarregar(){
-  try{
-    var s=localStorage.getItem(NOTIF_LS_KEY);
-    if(s){ var arr=JSON.parse(s); if(Array.isArray(arr)&&arr.length>0) db.notificacoes=arr; }
-  }catch(e){}
-}
-
+function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
 function saveDB(){
   updateSaldo();
   db._localTs = Date.now() + 1;
   try{
     localStorage.setItem(DB_KEY,JSON.stringify(db));
     localStorage.setItem('comboio_localTs', String(db._localTs));
-    _notifSalvar(); // salva notificações em chave dedicada IMEDIATAMENTE
   }catch(e){alert('Erro ao salvar dados.');}
   fbPush();
-  setTimeout(_fbSyncNotif, 300);
 }
+// ─────────────────────────────────────────────
+//  AVISOS — sistema limpo, independente do db e do Firebase
+//  Armazenamento: localStorage['comboio_avisos_v1'] (array JSON)
+//  Nunca sincronizado pelo Firebase — local em cada dispositivo admin
+// ─────────────────────────────────────────────
+var AVISOS_KEY = 'comboio_avisos_v1';
 
-function _fbSyncNotif(){
-  if(!fbActive||!_fbDb) return;
+// Lê avisos do localStorage
+function avisosList(){
   try{
-    _fbDb.ref('comboio_notif').set({
-      notificacoes: db.notificacoes||[],
-      _ts: db._localTs||Date.now(),
-      _device: myDeviceId
-    });
-  }catch(e){ console.error('[Notif] sync erro:',e); }
+    var s=localStorage.getItem(AVISOS_KEY);
+    return s ? JSON.parse(s) : [];
+  }catch(e){ return []; }
 }
 
-function _fbRegistrarListenerNotif(){
-  if(!_fbDb) return;
-  _fbDb.ref('comboio_notif').on('value', function(snap){
-    var r=snap.val();
-    if(!r||!r.notificacoes) return;
-    if(r._device===myDeviceId) return;
-    var remoteTs=r._ts||0;
-    var localTs=_fbGetLocalTs();
-    if(remoteTs>=localTs){
-      db.notificacoes=r.notificacoes;
-      _notifSalvar();
-      try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-      updateNotifBadge();
-      if(document.querySelector('#screen-notif.active')) renderNotif();
-    }
-  });
-}
-function today(){return new Date().toISOString().slice(0,10);}
-function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
-function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
-
-
-// ─────────────────────────────────────────────
-//  FIREBASE — arquitetura limpa
-//  • Um único app Firebase por sessão
-//  • Listeners registrados uma única vez
-//  • Sync bidirecional: vence o timestamp mais recente
-//  • Admin em qualquer dispositivo pode escrever
-// ─────────────────────────────────────────────
-function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
-function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
-
-var _fbApp      = null;   // instância única do Firebase
-var _fbDb       = null;   // database único
-var _fbIniting  = false;  // trava contra init paralelo
-var _fbListenersOk = false; // listeners já registrados nesta sessão
-
-function _fbGetLocalTs(){
-  var t = db._localTs||0;
-  try{ var s=localStorage.getItem('comboio_localTs'); if(s&&Number(s)>t) t=Number(s); }catch(e){}
-  return t;
+// Salva avisos no localStorage
+function avisosSave(arr){
+  try{ localStorage.setItem(AVISOS_KEY, JSON.stringify(arr)); }catch(e){}
 }
 
-function _fbSetLocalTs(ts){
-  db._localTs = ts;
-  try{ localStorage.setItem('comboio_localTs', String(ts)); }catch(e){}
-}
-
-// Inicializa o Firebase UMA VEZ por sessão
-function _fbInit(url){
-  if(_fbApp) return true; // já inicializado
-  try{
-    _fbApp = firebase.initializeApp({databaseURL: url}, 'comboio_app');
-    _fbDb  = _fbApp.database();
-    fbRefMaster = _fbDb.ref('comboio_master');
-    fbRefCampo  = _fbDb.ref('comboio_campo');
-    return true;
-  }catch(e){
-    console.error('[FB] init erro:', e);
-    _fbApp = null; _fbDb = null;
-    return false;
-  }
-}
-
-// Registra os listeners UMA VEZ
-function _fbRegistrarListeners(){
-  if(_fbListenersOk) return;
-  _fbListenersOk = true;
-
-  // ── MASTER listener: recebe dados do outro dispositivo ──
-  fbRefMaster.on('value', function(snap){
-    var r = snap.val();
-    if(!r) return;
-
-    var remoteId = r._masterId||null;
-    var remoteTs = r._masterTs||0;
-
-    // Echo: ignorar dados que eu mesmo enviei
-    if(remoteId === myDeviceId) return;
-
-    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var isReceptorPuro = !_isM && !adminLogado;
-
-    console.log('[Sync] remoto='+ new Date(remoteTs).toLocaleTimeString() +
-                ' local='+ new Date(_fbGetLocalTs()).toLocaleTimeString() +
-                ' receptor='+ isReceptorPuro + ' de='+remoteId);
-
-    // Receptor puro (iPhone campo sem admin) SEMPRE aplica dados do Firebase master
-    if(!isReceptorPuro){
-      var localTs = _fbGetLocalTs();
-      if(remoteTs < localTs){
-        // Dado remoto é mais antigo — reenvio meus dados mais recentes
-        console.log('[Sync] Sou master/admin e meu dado é mais recente → reenviando');
-        setTimeout(_fbEnviar, 400);
-        return;
-      }
-      if(remoteTs === localTs){
-        // Timestamps iguais = echo do meu próprio envio — ignorar
-        console.log('[Sync] Timestamps iguais = echo próprio → ignorando');
-        return;
-      }
-    }
-
-    // Aplica dados remotos — NÃO inclui notificacoes (gerenciadas pela chave dedicada)
-    console.log('[Sync] Aplicando dados remotos');
-    ['equipamentos','operadores','entradas','comboios',
-     'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
-      if(r[k]!==undefined) db[k]=r[k];
-    });
-    // Restaura notificações da chave dedicada após aplicar dados remotos
-    _notifCarregar();
-    _fbSetLocalTs(remoteTs);
-    try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
-    _notifSalvar(); // garante que chave dedicada continua consistente
-    updateSaldo();
-    _fbAtualizarTela();
-
-  }, function(err){
-    console.error('[FB] listener erro:', err.message||err);
-    fbActive = false;
-    renderSyncStatus();
-    setTimeout(_fbConectar, 15000);
-  });
-
-  // ── CAMPO listener: recebe abastecimentos do iPhone campo ──
-  fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
-}
-
-// Conecta ao Firebase (seguro chamar múltiplas vezes)
-function _fbConectar(){
-  if(fbActive || _fbIniting) return;
-  var url = getFbUrl(); if(!url) return;
-
-  _fbIniting = true;
-  var ok = _fbInit(url);
-  if(!ok){ _fbIniting=false; return; }
-
-  fbActive = true;
-  _fbIniting = false;
-  _fbRegistrarListeners();
-  _fbRegistrarListenerNotif(); // listener separado para notificações
-  renderSyncStatus();
-
-  if(_fbPodeEscrever()){
-    setTimeout(_fbEnviar, 600);
-    setTimeout(_fbBackupDiario, 3000);
-  }
-}
-
-// Verifica se este dispositivo pode escrever no Firebase
-function _fbPodeEscrever(){
-  if(!fbActive || !fbRefMaster) return false;
-  var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-  return _isM || adminLogado;
-}
-
-// Envia dados locais para o Firebase (substitui fbPush)
-function _fbEnviar(){
-  if(!_fbPodeEscrever()) return;
-  var ts = _fbGetLocalTs() || Date.now();
-  try{
-    fbRefMaster.set({
-      equipamentos  : db.equipamentos||[],
-      operadores    : db.operadores||[],
-      entradas      : db.entradas||[],
-      comboios      : db.comboios||[],
-      abastecimentos: db.abastecimentos||[],
-      ciclos        : db.ciclos||[],
-      cicloAtivo    : db.cicloAtivo||null,
-      saldo         : db.saldo||{res:0,com:0},
-      _masterId     : myDeviceId,
-      _masterTs     : ts
-    });
-    console.log('[Sync] Enviado ts='+ new Date(ts).toLocaleTimeString());
-  }catch(e){ console.error('[FB] enviar erro:', e); }
-}
-
-// ─────────────────────────────────────────────
-//  BACKUP DIÁRIO AUTOMÁTICO
-//  • Caminho: /comboio_backup/YYYY-MM-DD
-//  • Executa uma vez por dia (controle via localStorage)
-//  • Mantém últimos 7 dias, exclui os anteriores
-//  • Só o dispositivo mestre ou admin executa
-// ─────────────────────────────────────────────
-var BACKUP_KEY = 'comboio_ultimo_backup';
-var BACKUP_DIAS = 90;
-
-function _fbBackupDiario(){
-  if(!_fbPodeEscrever()) return;
-  if(!_fbDb) return;
-
-  var hoje = today();
-
-  // Verifica se já fez backup hoje
-  try{
-    var ultimo = localStorage.getItem(BACKUP_KEY);
-    if(ultimo === hoje){
-      console.log('[Backup] Já realizado hoje: '+hoje);
-      return;
-    }
-  }catch(e){}
-
-  var refBackup = _fbDb.ref('comboio_backup');
-
-  // Salva backup de hoje
-  refBackup.child(hoje).set({
-    abastecimentos : db.abastecimentos||[],
-    entradas       : db.entradas||[],
-    comboios       : db.comboios||[],
-    ciclos         : db.ciclos||[],
-    cicloAtivo     : db.cicloAtivo||null,
-    saldo          : db.saldo||{res:0,com:0},
-    _ts            : Date.now(),
-    _total         : (db.abastecimentos||[]).length
-  }).then(function(){
-    console.log('[Backup] Salvo: '+hoje+' ('+( db.abastecimentos||[]).length+' abastecimentos)');
-    try{ localStorage.setItem(BACKUP_KEY, hoje); }catch(e){}
-
-    // Limpa backups com mais de 7 dias
-    refBackup.once('value', function(snap){
-      var dados = snap.val();
-      if(!dados) return;
-      var datas = Object.keys(dados).sort(); // ordem crescente
-      var limite = datas.length - BACKUP_DIAS;
-      if(limite > 0){
-        var paraExcluir = datas.slice(0, limite);
-        paraExcluir.forEach(function(dt){
-          refBackup.child(dt).remove();
-          console.log('[Backup] Excluído backup antigo: '+dt);
-        });
-      }
-    });
-  }).catch(function(e){
-    console.error('[Backup] Erro ao salvar:', e);
-  });
-}
-
-// Restaurar backup de uma data específica (chamado pelo modal admin)
-function _fbRestaurarBackup(data){
-  if(!_fbDb) return;
-  if(!confirm('Restaurar backup de '+fmtDate(data)+'?\n\nOs dados atuais serão substituídos pelos do backup desta data.\n\nEsta ação não tem volta.')) return;
-  _fbDb.ref('comboio_backup/'+data).once('value', function(snap){
-    var r = snap.val();
-    if(!r){ alert('Backup não encontrado para '+fmtDate(data)+'.'); return; }
-    ['abastecimentos','entradas','comboios','ciclos','cicloAtivo','saldo'].forEach(function(k){
-      if(r[k]!==undefined) db[k]=r[k];
-    });
-    saveDB();
-    _fbAtualizarTela();
-    alert('Backup de '+fmtDate(data)+' restaurado com sucesso!\n'+
-          (r._total||0)+' abastecimentos recuperados.');
-  });
-}
-
-// Renderiza painel de backups disponíveis na tela admin
-function renderBackupPanel(){
-  var el = document.getElementById('backup-panel'); if(!el) return;
-  if(!_fbDb){ el.innerHTML='<div class="note">Firebase não conectado.</div>'; return; }
-  el.innerHTML='<div style="font-size:11px;color:var(--t3)">Carregando...</div>';
-  _fbDb.ref('comboio_backup').once('value', function(snap){
-    var dados = snap.val();
-    if(!dados || !Object.keys(dados).length){
-      el.innerHTML='<div class="note">Nenhum backup disponível ainda. O primeiro será criado automaticamente hoje.</div>';
-      return;
-    }
-    var datas = Object.keys(dados).sort().reverse(); // mais recente primeiro
-    el.innerHTML = datas.map(function(dt){
-      var b = dados[dt];
-      var total = b._total||0;
-      var hora = b._ts ? new Date(b._ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : '—';
-      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br)">' +
-        '<div>' +
-          '<div style="font-size:13px;font-weight:600">'+fmtDate(dt)+'</div>' +
-          '<div style="font-size:11px;color:var(--t3)">'+total+' abastecimento'+(total!==1?'s':'')+' • salvo às '+hora+'</div>' +
-        '</div>' +
-        '<button class="btn bs bsm" onclick="_fbRestaurarBackup(\''+dt+'\')">'+
-          '<i class="ti ti-restore"></i> Restaurar' +
-        '</button>' +
-      '</div>';
-    }).join('');
-  });
-}
-
-// Atualiza a tela após receber dados remotos
-function _fbAtualizarTela(){
-  updateSaldo(); // sempre recalcula antes de renderizar
-  var ae = document.querySelector('.screen.active');
-  if(!ae) return;
-  var sid = ae.id.replace('screen-','');
-  if(sid==='resumo')    renderResumo();
-  else if(sid==='field')     renderField();
-  else if(sid==='entrada')   { renderHistEnt(); renderHistCom(); }
-  else if(sid==='admin')     renderAdmin();
-  else if(sid==='fotos')     renderFotos();
-  else if(sid==='notif')     renderNotif();
-  else if(sid==='historico') renderHistorico();
-  updateNotifBadge();
-  renderSyncStatus();
-}
-
-// ── Aliases para compatibilidade com código existente ──
-function fbPush(){ _fbEnviar(); }
-function iniciarFirebase(url, showAlert, role){
-  setFbUrl(url);
-  fbRole = role||'campo';
-  _fbConectar();
-  if(showAlert) setTimeout(function(){ alert('Sincronização ativada!'); }, 800);
-}
-function _fbAutoConectar(){ _fbConectar(); }
-
-function renderSyncStatus(){
-  var el=document.getElementById('sync-status'); if(!el) return;
-  var url=getFbUrl();
-  if(fbActive&&url){
-    var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode;
-    if(_isM)           mode='<strong>Mac (mestre)</strong> — envio e recebimento ativos';
-    else if(adminLogado) mode='<strong>Admin bidirecional</strong> — envio e recebimento ativos';
-    else               mode='<strong>Campo (receptor)</strong> — recebendo dados em tempo real';
-    el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
-  } else if(url){
-    el.innerHTML='<div class="alert aw"><i class="ti ti-cloud-off"></i><span>Reconectando...</span></div>';
-    var fi=document.getElementById('fb-url'); if(fi&&!fi.value) fi.value=url;
-  } else {
-    el.innerHTML='<div class="alert ai"><i class="ti ti-cloud"></i><span>Sincronização não configurada. Cole a URL do Firebase abaixo.</span></div>';
-  }
-}
-
-function ativarComoMestre(){
-  var url=_getUrlFromField(); if(!url) return;
-  try{localStorage.setItem('comboio_is_master','true');}catch(e){}
-  _fbConectar();
-  setTimeout(function(){ _fbEnviar(); renderSyncStatus(); },800);
-  alert('Mac configurado como MESTRE. Conecta automaticamente daqui em diante.');
-}
-function ativarComoReceptor(){
-  var url=_getUrlFromField(); if(!url) return;
-  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  _fbConectar();
-  renderSyncStatus();
-  alert('iPhone configurado como RECEPTOR. Conecta automaticamente daqui em diante.');
-}
-function ativarFirebase(){ ativarComoMestre(); }
-
-function _getUrlFromField(){
-  var url=(document.getElementById('fb-url').value||'').trim();
-  if(!url){alert('Informe a URL do Firebase Realtime Database.');return null;}
-  if(!url.startsWith('https://')){url='https://'+url.replace('http://','');}
-  setFbUrl(url);
-  return url;
-}
-
-// Named handler para campo — mantém para compatibilidade
-function onCampoAbastUpdate(snap){
-  var arr=snap.val();
-  if(!arr||!Array.isArray(arr)) return;
-  var lids=db.abastecimentos.map(function(a){return a.id;});
-  var novos=arr.filter(function(a){
-    return lids.indexOf(a.id)===-1 && a._device!==myDeviceId;
-  });
-  if(!novos.length) return;
-
-  novos.forEach(function(abast){
-    db.abastecimentos.push(abast);
-    // Gera notificações no Mac para abastecimentos vindos do campo
-    _gerarNotificacoesAbast(abast);
-  });
-
-  updateSaldo();
-  saveDB();
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
-  updateNotifBadge();
-  var ae=document.querySelector('.screen.active');
-  if(ae){
-    var sid=ae.id.replace('screen-','');
-    if(sid==='resumo')    renderResumo();
-    else if(sid==='historico') renderHistorico();
-    else if(sid==='notif')     renderNotif();
-  }
-}
-
-// Gera notificações para um abastecimento — usado tanto no fsConfirmar quanto no onCampoAbastUpdate
-function _gerarNotificacoesAbast(abast){
-  var equip=db.equipamentos.filter(function(e){return e.cod===abast.equip;})[0];
-  if(!equip) return;
-
-  var hodAtual=Number(abast.hod);
-  var volAtual=Number(abast.vol);
-  var id=abast.id;
-
-  // Busca último horímetro anterior aprovado
-  var hist=db.abastecimentos.filter(function(a){
-    return a.equip===abast.equip && a.id!==id && Number(a.hod)>0 && a.aprovado!==false;
-  });
-  var ultimoHod=null;
-  if(hist.length){
-    var ult=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultimoHod=Number(ult.hod);
-  }
-
-  // Horímetro igual ou inferior
-  if(ultimoHod!==null && hodAtual<=ultimoHod){
-    abast.aprovado=false;
-    var _igualOuMenor=hodAtual===ultimoHod?'igual':'inferior';
-    criarNotif('hod_inferior',
-      'Horímetro '+_igualOuMenor+' ao registro anterior',
-      equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
-        ' '+(equip.unidade==='km'?'km':'h')+
-        (hodAtual<ultimoHod?' — último registro era '+ultimoHod.toLocaleString('pt-BR'):' (mesmo valor)')+
-        '. Aguardando aprovação.',
-      {abastId:id,equip:equip.cod,hodLancado:hodAtual,hodAnterior:ultimoHod});
-  }
-
-  // Volume > capacidade
-  if(equip.tank>0&&volAtual>equip.tank){
-    abast.aprovado=false;
-    criarNotif('volume_excede_tank','Volume supera capacidade do tanque',
-      equip.cod+': lançado '+volAtual.toFixed(0)+' L, capacidade '+equip.tank+' L. Aguardando aprovação.',
-      {abastId:id,equip:equip.cod,volLancado:volAtual,capacidade:equip.tank});
-  }
-
-  // Consumo fora da faixa — apenas informativo
-  if(hodAtual>0&&ultimoHod!==null&&hodAtual>ultimoHod){
-    var _dh=hodAtual-ultimoHod;
-    if(_dh>0){
-      var _isKm=equip.unidade==='km';
-      var _cr=volAtual/_dh*(_isKm?100:1);
-      abast.consumoCalc=Math.round(_cr*100)/100;
-      var _cMin=equip.consumoMin||0,_cMax=equip.consumoMax||0;
-      if(_cMin>0&&_cMax>0&&(_cr<_cMin*0.7||_cr>_cMax*1.3)){
-        var _u=_isKm?'L/100km':'L/h';
-        criarNotif('consumo_fora_faixa','Consumo fora da faixa — '+equip.cod,
-          'Calculado: '+_cr.toFixed(1)+' '+_u+' | Faixa: '+_cMin+'–'+_cMax+' '+_u,
-          {abastId:id,equip:equip.cod,consReal:_cr,cMin:_cMin,cMax:_cMax});
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────
-//  SPLASH / LOGIN
-// ─────────────────────────────────────────────
-function entrarCampo(){
-  document.getElementById('splash').style.display='none';
-  document.getElementById('main-app').style.display='';
-  navigate('field');
-  try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  setTimeout(_fbConectar, 500);
-}
-function mostrarLoginAdmin(){
-  document.getElementById('splash').style.display='none';
-  document.getElementById('login-admin').style.display='flex';
-  setTimeout(function(){document.getElementById('login-user').focus();},100);
-}
-function voltarSplash(){
-  document.getElementById('login-admin').style.display='none';
-  document.getElementById('main-app').style.display='none';
-  document.getElementById('login-err').style.display='none';
-  document.getElementById('login-user').value='';
-  document.getElementById('login-pass').value='';
-  document.getElementById('splash').style.display='flex';
-}
-function doLogin(){
-  var u=document.getElementById('login-user').value.trim();
-  var p=document.getElementById('login-pass').value;
-  if(u===db.admin.usuario && p===db.admin.senha){
-    adminLogado=true;
-    document.getElementById('login-err').style.display='none';
-    document.getElementById('login-admin').style.display='none';
-    document.getElementById('main-app').style.display='';
-    navigate('resumo');
-    // Conecta (ou já está conectado) e envia dados locais
-    _fbConectar();
-    setTimeout(function(){ _fbEnviar(); renderSyncStatus(); }, 700);
-  } else {
-    document.getElementById('login-err').style.display='block';
-  }
-}
-function logout(){
-  adminLogado=false;
-  _fbStarted=false;
-  document.getElementById('main-app').style.display='none';
-  document.getElementById('splash').style.display='flex';
-}
-
-// ─────────────────────────────────────────────
-//  NAVIGATION
-// ─────────────────────────────────────────────
-var ICONS_EQ={'Escavadeira':'ti-backhoe','Trator de esteira':'ti-bulldozer','Motoniveladora':'ti-tractor','Caminhão basculante':'ti-truck','Pá carregadeira':'ti-forklift','Rolo compactador':'ti-cylinder','Retroescavadeira':'ti-backhoe','Caminhão pipa':'ti-truck-delivery','Outro':'ti-settings'};
-function iconFor(t){return ICONS_EQ[t]||'ti-tractor';}
-
-function buildNav(active){
-  var items=[
-    {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
-    {id:'field',icon:'ti-gas-station',label:'Abastecer'},
-    {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
-    
-    {id:'admin',icon:'ti-settings',label:'Config'}
-  ];
-  if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
-  if(adminLogado) items.push({id:'notif',icon:'ti-bell',label:'Avisos'});
-  if(adminLogado) items.push({id:'historico',icon:'ti-history',label:'Histórico'});
-  return items.map(function(it){
-    return '<button class="nb'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';
-  }).join('');
-}
-
-function navigate(id){
-  history.pushState({nav:id},'','#'+id);
-  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
-  document.getElementById('screen-'+id).classList.add('active');
-  document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(id);});
-  if(id==='resumo') renderResumo();
-  if(id==='field')  renderField();
-  if(id==='entrada'){
-    document.getElementById('e-data').value=today();
-    document.getElementById('c-data').value=today();
-    var _sel=document.getElementById('c-op');
-    if(_sel){
-      _sel.innerHTML='<option value="">— selecione —</option>'+
-        db.operadores.map(function(o){
-          return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';
-        }).join('');
-    }
-    renderHistEnt();
-    renderHistCom();
-  }
-
-  if(id==='admin')  renderAdmin();
-  if(id==='fotos')  renderFotos();
-  if(id==='notif')  renderNotif();
-  if(id==='historico') renderHistorico();
-  if(adminLogado) setTimeout(updateNotifBadge,100);
-}
-
-// Back button
-window.addEventListener('popstate',function(e){
-  if(e.state&&e.state.nav){
-    document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
-    document.getElementById('screen-'+e.state.nav).classList.add('active');
-    document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(e.state.nav);});
-    if(e.state.nav==='resumo') renderResumo();
-    if(e.state.nav==='field')  renderField();
-    if(e.state.nav==='admin')  renderAdmin();
-    if(e.state.nav==='fotos')  renderFotos();
-    if(e.state.nav==='notif')  renderNotif();
-  } else if(e.state&&e.state.step!==undefined){
-    fs.step=e.state.step;
-    renderField();
-  }
-});
-
-// ─────────────────────────────────────────────
-//  RESUMO
-// ─────────────────────────────────────────────
-// ═══════════════════════════════════════════════
-//  CICLO DE CONTROLE
-//  Fluxo: Entrada → Tanque → Comboio → Equipamentos
-//  Tolerância de divergência: 2%
-// ═══════════════════════════════════════════════
-var TOL = 0.02; // 2% tolerance
-
-function iniciarCiclo(volEntrada, entradaId){
-  if(!db.ciclos) db.ciclos=[];
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado){
-    // Active cycle exists — add new entrada to it (cumulative)
-    db.cicloAtivo.volEntrada=(db.cicloAtivo.volEntrada||0)+Number(volEntrada);
-  } else {
-    // No active cycle — create new one
-    db.cicloAtivo={
-      id:uid(),
-      inicio:today(),
-      volEntrada:Number(volEntrada),
-      volComboio:0,
-      volEquip:0,
-      encerrado:false,
-      resultado:null
-    };
-  }
-  saveDB();
-  atualizarCiclo();
-}
-
-function atualizarCiclo(){
-  if(!db.cicloAtivo||db.cicloAtivo.encerrado) return;
-  var ca=db.cicloAtivo;
-
-  // Recalculate ALL volumes from actual records since cycle start
-  ca.volEntrada=db.entradas.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
-  ca.volComboio=db.comboios.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
-  ca.volEquip=db.abastecimentos.filter(function(x){return x.data>=ca.inicio;}).reduce(function(s,x){return s+Number(x.vol);},0);
-
-  var ve=ca.volEntrada;
-  var vc=ca.volComboio;
-  var vq=ca.volEquip;
-
-  // Alert: comboio loaded more than tank
-  if(ve>0&&vc>ve*(1+TOL)){
-    _notifCiclo('ciclo_comboio_excede',
-      'Comboio carregou mais que a entrada',
-      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Excesso: '+(vc-ve).toFixed(0)+' L');
-  }
-
-  // Alert: equipment received more than comboio
-  if(vc>0&&vq>vc*(1+TOL)){
-    _notifCiclo('ciclo_equip_excede',
-      'Equipamentos receberam mais que o comboio',
-      'Comboio: '+vc.toFixed(0)+' L | Equipamentos: '+vq.toFixed(0)+' L | Excesso: '+(vq-vc).toFixed(0)+' L');
-  }
-
-  // Cycle is ONGOING — never auto-close on volume match
-  // Admin manually resets via "Reiniciar controle"
-  saveDB();
-}
-
-function _notifCiclo(tipo, titulo, desc){
-  if(!db.notificacoes) db.notificacoes=[];
-  var jaExiste=db.notificacoes.filter(function(n){return n.tipo===tipo&&n.data===today()&&!n.lida;}).length>0;
-  if(!jaExiste) criarNotif(tipo,titulo,desc,{cicloId:db.cicloAtivo?db.cicloAtivo.id:null});
-}
-
-function encerrarCiclo(resultado){
-  if(!db.cicloAtivo) return;
-  var ca=db.cicloAtivo;
-  ca.encerrado=true;
-  ca.resultado=resultado;
-  ca.fim=today();
-
-  // Archive to ciclos history
-  if(!db.ciclos) db.ciclos=[];
-  db.ciclos.unshift(JSON.parse(JSON.stringify(ca)));
-
-  // Notify admin
-  var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
-  var dif=vq-ve;
-  var pct=(Math.abs(dif)/ve*100).toFixed(1);
-  if(resultado==='ok'){
-    criarNotif('ciclo_encerrado_ok',
-      'Ciclo encerrado — volumes conferem',
-      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Equip: '+vq.toFixed(0)+' L | Diferença: '+dif.toFixed(0)+' L ('+pct+'%) — dentro da tolerância.',
-      {cicloId:ca.id});
-  } else {
-    criarNotif('ciclo_divergencia',
-      'Ciclo encerrado — DIVERGÊNCIA',
-      'Entrada: '+ve.toFixed(0)+' L | Comboio: '+vc.toFixed(0)+' L | Equip: '+vq.toFixed(0)+' L | Divergência: '+dif.toFixed(0)+' L ('+pct+'%) — acima de 2%.',
-      {cicloId:ca.id});
-  }
-
-  db.cicloAtivo=null;
-  saveDB();
-  renderResumo();
-}
-
-function reiniciarControle(){
-  if(!confirm('Zerar o quadro resumo?\n\nOs contadores e histórico de ciclos voltam a zero.\nOs registros de abastecimento são mantidos.'))return;
-  db.saldo={res:0,com:0};
-  db.cicloAtivo=null;
-  db.ciclos=[];
-  saveDB();
-  renderResumo();
-  alert('Resumo e ciclos zerados.');
-}
-
-function renderCicloAtivo(){
-  if(!db.cicloAtivo||db.cicloAtivo.encerrado) return '';
-  var ca=db.cicloAtivo;
-  var ve=ca.volEntrada, vc=ca.volComboio, vq=ca.volEquip;
-  var saldoRes=Math.max(0,ve-vc);   // tanque principal restante
-  var saldoCom=Math.max(0,vc-vq);   // comboio restante
-  var pctRes=ve>0?Math.round(saldoRes/ve*100):100;
-  var pctCom=vc>0?Math.round(saldoCom/vc*100):100;
-  var pctEq =ve>0?Math.round(vq/ve*100):0;
-  var ok=ve>0&&Math.abs(vq-ve)/ve<=TOL;
-
-  function bar(pct,cor,bg){
-    bg=bg||'var(--br)';
-    var p=Math.min(100,Math.max(0,pct));
-    return '<div style="background:'+bg+';border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
-      '<div style="background:'+cor+';width:'+p+'%;height:100%;border-radius:4px;transition:width .4s"></div></div>';
-  }
-
-  return '<div class="card" style="border:2px solid var(--green);margin-bottom:12px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-    '<div style="font-size:13px;font-weight:600;color:var(--green)">'+
-    '<i class="ti ti-refresh" style="margin-right:6px"></i>Ciclo ativo — desde '+fmtDate(ca.inicio)+'</div>'+
-    '<span class="badge bg">em andamento</span></div>'+
-
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
-
-    // TANQUE: saldo = entrada - carregado no comboio
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
-      bar(pctRes,'var(--green)')+
-      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Entrada: '+ve.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
-    '</div>'+
-
-    // COMBOIO: saldo = carregado - distribuído equipamentos
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--tx)')+'">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+
-      bar(pctCom,saldoCom<100?'var(--red)':saldoCom<300?'var(--am)':'var(--bl)')+
-      '<div style="font-size:10px;color:var(--t3);margin-top:3px">Carregado: '+vc.toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</div>'+
-    '</div>'+
-
-    // EQUIPAMENTOS: total distribuído
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
-      '<div style="font-size:22px;font-weight:600;font-family:monospace;color:'+(ok?'var(--green)':pctEq>80?'var(--red)':'var(--tx)')+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">'+pctEq+'% da entrada</div>'+
-      bar(pctEq,ok?'var(--green)':pctEq>90?'var(--red)':'var(--bl)')+
-    '</div>'+
-    '</div>'+
-    '</div>';
-}
-
-
-function renderUltimoCiclo(){
-  if(!db.ciclos||!db.ciclos.length) return '';
-  var ci=db.ciclos[0];
-  var ok=ci.resultado==='ok';
-  var ve=Number(ci.volEntrada||0), vc=Number(ci.volComboio||0), vq=Number(ci.volEquip||0);
-  var saldoRes=Math.max(0,ve-vc);
-  var saldoCom=Math.max(0,vc-vq);
-  var dif=vq-ve;
-  var pct=ve>0?(Math.abs(dif)/ve*100).toFixed(1):'0';
-  var cor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
-  var bdColor=ok?'var(--green)':ci.resultado==='manual'?'var(--bl)':'var(--red)';
-
-  function bar(pct2,cor2){
-    var p=Math.min(100,Math.max(0,pct2));
-    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
-      '<div style="background:'+cor2+';width:'+p+'%;height:100%;border-radius:4px"></div></div>';
-  }
-
-  return '<div class="card" style="border:2px solid '+bdColor+';margin-bottom:12px;opacity:.85">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-    '<div style="font-size:13px;font-weight:600;color:'+cor+'">'+
-    '<i class="ti ti-history" style="margin-right:6px"></i>Último ciclo — '+
-    fmtDate(ci.inicio)+(ci.fim&&ci.fim!==ci.inicio?' a '+fmtDate(ci.fim):'')+
-    '</div>'+
-    '<span class="badge '+(ok?'bg':ci.resultado==='manual'?'bb':'ba')+'">'+(ok?'OK':ci.resultado==='manual'?'manual':'divergência')+'</span></div>'+
-
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
-      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--green)">'+saldoRes.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
-      bar(ve>0?Math.round(saldoRes/ve*100):0,'var(--green)')+
-    '</div>'+
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
-      '<div style="font-size:20px;font-weight:600;font-family:monospace">'+saldoCom.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">saldo final</div>'+
-      bar(vc>0?Math.round(saldoCom/vc*100):0,'var(--bl)')+
-    '</div>'+
-    '<div>'+
-      '<div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
-      '<div style="font-size:20px;font-weight:600;font-family:monospace;color:'+cor+'">'+vq.toLocaleString('pt-BR',{maximumFractionDigits:0})+'</div>'+
-      '<div style="font-size:10px;color:var(--t3)">distribuídos</div>'+
-      bar(ve>0?Math.round(vq/ve*100):0,cor)+
-    '</div>'+
-    '</div>'+
-    '</div>';
-}
-
-
-function renderCicloPanel(){
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) return renderCicloAtivo();
-  return renderUltimoCiclo();
-}
-
-
-function renderResumo(){
-  var sr=getSaldoRes(),sc=getSaldoCom();
-  var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
-  var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
-  var dif=te-ta-Math.max(0,sr)-Math.max(0,sc);
-  var d=new Date();
-  document.getElementById('res-date').textContent=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
-  var pill=document.getElementById('res-pill');
-  pill.textContent=navigator.onLine?'online':'offline';
-  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
-  // metrics remove// metrics display removed
-  // Inject ciclo panel — active or last closed
-  var cicloPanel=document.getElementById('res-ciclo');
-  if(cicloPanel) cicloPanel.innerHTML=renderCicloPanel();
-
-  // Reiniciar button (admin only)
-  var btnRei=document.getElementById('btn-reiniciar');
-  if(btnRei) btnRei.style.display=(adminLogado&&(db.cicloAtivo||( db.ciclos&&db.ciclos.length)))?'flex':'none';
-  // Alerts moved to notificações tab
-  // Show only current week (Mon-Sun)
-  var now=new Date(), dow=now.getDay(), diff=dow===0?6:dow-1;
-  var semIni=new Date(now); semIni.setDate(now.getDate()-diff); semIni.setHours(0,0,0,0);
-  var semFim=new Date(semIni); semFim.setDate(semIni.getDate()+6);
-  var semIniStr=semIni.toISOString().slice(0,10);
-  var semFimStr=semFim.toISOString().slice(0,10);
-  var todos=[];
-  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,ts:e.ts||e.id||0,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
-  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,ts:c.ts||c.id||0,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
-  db.abastecimentos.forEach(function(a){
-    if(a.data>=semIniStr&&a.data<=semFimStr){
-      var pendente=a.aprovado===false;
-      todos.push({
-        data:a.data,ts:a.ts||a.id||0,tipo:'fuel',
-        nome:a.equip||'—',
-        sub:(a.operador||'Campo')+(pendente?' • ⏳ Pendente':''),
-        vol:(pendente?'(':'')+''+Number(a.vol).toFixed(0)+' L'+(pendente?')':''),
-        pendente:pendente
-      });
-    }
-  });
-  // Ordena: mais recente primeiro. Usa ts (timestamp) quando disponível; fallback por data
-  todos.sort(function(a,b){
-    var da=a.data, db2=b.data;
-    if(db2!==da) return db2.localeCompare(da); // data mais recente primeiro
-    // Mesma data: usa ts (string id começa com timestamp via uid())
-    var ta=String(a.ts), tb=String(b.ts);
-    return tb.localeCompare(ta);
-  });
-  var el=document.getElementById('res-hist');
-  var semLabel=fmtDate(semIniStr)+' a '+fmtDate(semFimStr);
-  if(!todos.length){
-    el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Semana: '+semLabel+'</div><div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento esta semana</div>';
-    return;
-  }
-  el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">Semana: '+semLabel+'</div>'+
-  todos.map(function(r){
-    var ic=r.tipo==='entry'?'ti-truck-delivery':r.tipo==='transfer'?'ti-flame':'ti-droplet';
-    var cor=r.pendente?'color:var(--am)':'';
-    return'<div class="hi"><div class="hic '+r.tipo+'" style="'+(r.pendente?'background:var(--al);color:var(--am)':'')+'"><i class="ti '+ic+'"></i></div>'+
-      '<div class="hb"><div class="hn" style="'+cor+'">'+r.nome+'</div>'+
-      '<div class="hs">'+fmtDate(r.data)+' • '+r.sub+'</div></div>'+
-      '<div class="hv" style="'+cor+'">'+r.vol+'</div></div>';
-  }).join('');
-}
-
-// ─────────────────────────────────────────────
-//  FIELD WIZARD
-//  KEY PRINCIPLE: oninput NEVER calls renderField()
-//  Only dedicated update functions touch the DOM
-// ─────────────────────────────────────────────
-// ─── Toast push — aparece na tela independente do step ───
-function fsToast(msg, tipo, duracao){
-  var old=document.getElementById('fs-toast');
-  if(old) old.remove();
-  var cor=tipo==='red'?'var(--red)':tipo==='warn'?'var(--am)':'var(--green)';
-  var bg=tipo==='red'?'var(--rl)':tipo==='warn'?'var(--al)':'var(--gl)';
-  var icon=tipo==='red'?'ti-alert-triangle':tipo==='warn'?'ti-alert-triangle':'ti-check';
-  var t=document.createElement('div');
-  t.id='fs-toast';
-  t.style.cssText='position:fixed;top:calc(env(safe-area-inset-top,0px) + 60px);left:50%;'+
-    'transform:translateX(-50%);z-index:9998;background:'+bg+';border:2px solid '+cor+';'+
-    'border-radius:var(--r);padding:14px 18px;max-width:340px;width:90%;'+
-    'box-shadow:0 4px 24px rgba(0,0,0,.18);display:flex;align-items:flex-start;gap:10px;'+
-    'animation:toastIn .2s ease';
-  t.innerHTML='<i class="ti '+icon+'" style="font-size:20px;color:'+cor+';flex-shrink:0;margin-top:1px"></i>'+
-    '<div style="font-size:13px;font-weight:500;color:'+cor+';line-height:1.5">'+msg+'</div>'+
-    '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:'+cor+
-    ';font-size:18px;cursor:pointer;padding:0;margin-left:auto;flex-shrink:0;line-height:1">×</button>';
-  document.body.appendChild(t);
-  if(duracao!==0) setTimeout(function(){if(t.parentElement)t.remove();},duracao||4000);
-}
-
-// Injeta animação do toast no <style> uma vez
-(function(){
-  if(document.getElementById('toast-style')) return;
-  var s=document.createElement('style');
-  s.id='toast-style';
-  s.textContent='@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
-  document.head.appendChild(s);
-})();
-
-// ─── fsGo com validação antes de avançar ───
-function fsGo(n){
-  var atual=fs.step;
-  if(n > atual){
-    var erro=_fsValidarStep(atual);
-    if(erro){
-      fsToast(erro.msg, erro.tipo, 0);
-      // Foca no campo para corrigir
-      if(erro.foco){
-        setTimeout(function(){
-          var el=document.getElementById(erro.foco);
-          if(el){ el.focus(); el.select(); }
-        }, 100);
-      }
-      return;
-    }
-  }
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  history.pushState({step:n},'','#field-'+n);
-  fs.step=n;
-  renderField();
-}
-
-// Valida o step atual ao tentar avançar — retorna {msg, tipo} ou null
-function _fsValidarStep(step){
-  if(step===2){
-    if(!fs.hod) return {msg:'Informe o horímetro antes de continuar.', tipo:'red', foco:'hod-inp'};
-    var hodAtual=Number(fs.hod);
-    var hist=db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-    if(hist.length){
-      var ult=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-      var ultHod=Number(ult.hod);
-      if(hodAtual<=ultHod){
-        // BLOQUEIO TOTAL — operador deve corrigir, não há segunda tentativa
-        fs._hodAlertaPendente={hodAtual:hodAtual, ultHod:ultHod};
-        var _ig=hodAtual===ultHod?'igual':'inferior';
-        return {
-          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+_ig+' ao anterior!\n\n'+
-            'Lançado: '+hodAtual.toLocaleString('pt-BR')+
-            ' | Último: '+ultHod.toLocaleString('pt-BR')+'\n\n'+
-            'Corrija o valor para continuar.',
-          tipo:'red',
-          foco:'hod-inp'
-        };
-      }
-    }
-    fs._hodAlertaPendente=null;
-  }
-
-  if(step===3){
-    if(!fs.litros||Number(fs.litros)<=0) return {msg:'Informe a quantidade abastecida.', tipo:'red', foco:'lit-inp'};
-    var l=Number(fs.litros);
-    var cap=fs.equip.tank?Number(fs.equip.tank):0;
-    var sc=getSaldoCom();
-
-    // Volume > capacidade: BLOQUEIO TOTAL — deve corrigir
-    if(cap>0&&l>cap){
-      return {
-        msg:'Volume maior que a capacidade do tanque!\n\n'+
-          'Lançado: '+l.toFixed(0)+' L | Capacidade: '+cap.toLocaleString('pt-BR')+' L\n\n'+
-          'Corrija o volume para continuar.',
-        tipo:'red',
-        foco:'lit-inp'
-      };
-    }
-
-    // Volume > saldo comboio: aviso amarelo, permite avançar na segunda tentativa
-    if(sc>0&&l>sc){
-      if(fs._litrosAlertaPendente==='saldo'){
-        fs._litrosAlertaPendente=null;
-        return null; // segunda tentativa — avança
-      }
-      fs._litrosAlertaPendente='saldo';
-      return {
-        msg:'Volume ('+l.toFixed(0)+' L) maior que o saldo do comboio ('+sc.toFixed(0)+' L).\n\n'+
-          'Se correto, toque em Revisar novamente para confirmar.',
-        tipo:'warn'
-      };
-    }
-
-    // Consumo fora da faixa: aviso amarelo, permite avançar na segunda tentativa
-    var equip=fs.equip;
-    var cMin=equip.consumoMin||0, cMax=equip.consumoMax||0;
-    if(cMin>0&&cMax>0&&fs.hod){
-      var hodAtual2=Number(fs.hod);
-      var hist3=db.abastecimentos.filter(function(a){return a.equip===equip.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-      if(hist3.length){
-        var antH=hist3.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-        var dh3=hodAtual2-Number(antH.hod);
-        if(dh3>0){
-          var isKm3=equip.unidade==='km';
-          var cr3=l/dh3*(isKm3?100:1);
-          var u3=isKm3?'L/100km':'L/h';
-          if(cr3<cMin*0.7||cr3>cMax*1.3){
-            if(fs._litrosAlertaPendente==='consumo'){
-              fs._litrosAlertaPendente=null;
-              return null; // segunda tentativa — avança, admin será notificado
-            }
-            fs._litrosAlertaPendente='consumo';
-            return {
-              msg:'Consumo estimado fora da faixa!\n\n'+
-                'Calculado: '+cr3.toFixed(1)+' '+u3+
-                ' | Faixa: '+cMin+'–'+cMax+' '+u3+'\n\n'+
-                'Verifique os valores. Se correto, toque em Revisar novamente.\nO admin será notificado.',
-              tipo:'warn'
-            };
-          }
-        }
-      }
-    }
-
-    fs._litrosAlertaPendente=null;
-  }
-
-  return null;
-}
-
-function renderField(){
-  var d=new Date();
-  document.getElementById('fld-sub').textContent=d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-  var pill=document.getElementById('fld-pill');
-  pill.textContent=navigator.onLine?'online':'offline';
-  pill.className='pill '+(navigator.onLine?'p-on':'p-off');
-  document.getElementById('fld-steps').style.display=fs.step===5?'none':'';
-  renderSteps();
-  var body=document.getElementById('fld-body');
-  if(fs.step===1) body.innerHTML=renderFS1();
-  else if(fs.step===2) body.innerHTML=renderFS2();
-  else if(fs.step===3) body.innerHTML=renderFS3();
-  else if(fs.step===4) body.innerHTML=renderFS4();
-  else body.innerHTML=renderFS5();
-  var nw=document.getElementById('fld-nav');
-  nw.innerHTML=adminLogado?'<nav class="bnav">'+buildNav('field')+'</nav>':'';
-}
-
-function renderSteps(){
-  var labels=['Equipamento','Horímetro','Litros','Confirmar'];
-  document.getElementById('fld-steps').innerHTML=labels.map(function(l,i){
-    var n=i+1, cls=n<fs.step?'done':n===fs.step?'active':'', lbl=n<fs.step?'✓':n;
-    return'<div class="step"><div class="sd '+cls+'">'+lbl+'</div><div class="sl">'+l+'</div></div>'+(n<4?'<div class="sline'+(n<fs.step?' done':'')+'"></div>':'');
-  }).join('');
-}
-
-function renderFS1(){
-  if(!db.equipamentos.length) return '<div class="alert ai"><i class="ti ti-info-circle"></i><span>Nenhum equipamento cadastrado. Solicite ao administrador.</span></div>';
-  var cards=db.equipamentos.map(function(e){
-    var sel=fs.equip&&fs.equip.cod===e.cod?' sel':'';
-    return'<div class="eq-card'+sel+'" onclick="fsSelEq(\''+e.cod.replace(/'/g,"\\'")+'\')" ><i class="ti '+iconFor(e.tipo)+'"></i><div class="en">'+e.cod+'</div><div class="et">'+e.tipo+'</div></div>';
-  }).join('');
-  return'<div class="seg-label">Selecione o equipamento</div><div class="eq-grid">'+cards+'</div>'+
-    '<button class="btn bp" '+(fs.equip?'':'disabled')+' onclick="fsGo(2)"><i class="ti ti-arrow-right"></i> Próximo</button>';
-}
-
-function renderFS2(){
-  var e=fs.equip, isKm=(e.unidade==='km');
-  var unit=isKm?'km':'horas';
-  var placeholder=isKm?'Ex: 125400':'Ex: 4820';
-
-  // Referência do último horímetro — orientação discreta
-  var ultimoHod=null;
-  var hist=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0;});
-  if(hist.length){
-    var ult=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultimoHod=Number(ult.hod);
-  }
-  var hodRefHtml=ultimoHod!==null
-    ?'<div style="font-size:11px;color:var(--t3);margin-top:5px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>'
-    :'';
-
-  // Photo area horímetro
-  var hodPhotoHtml='';
-  if(fs.analisando){
-    hodPhotoHtml='<div class="analyzing"><div class="spin"></div> Lendo '+unit+'...</div>';
-  } else if(fs.fotoHod&&fs.hod){
-    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Toque para tirar outra</div></div>'+
-      '<div class="rbox"><div style="flex:1"><div style="font-size:11px;color:var(--gd);font-weight:600;margin-bottom:2px">Leitura detectada</div><span class="rnum">'+fs.hod+'</span><span style="font-size:12px;color:var(--gd)"> '+unit+'</span></div><span class="redit" onclick="fsEditHod()">editar</span></div>';
-  } else if(fs.fotoHod&&!fs.hod){
-    hodPhotoHtml='<div class="pha has" onclick="abrirCamHod()"><i class="ti ti-check"></i><div class="pt">Foto capturada</div><div class="ps">Não lida — digite abaixo</div></div>';
-  } else {
-    hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
-  }
-
-  return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
-    '<div style="margin-bottom:14px"><div class="seg-label">Horímetro</div>'+hodPhotoHtml+'</div>'+
-    '<div class="field">'+
-    '<label>Digitar '+unit+' manualmente</label>'+
-    '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
-    ' oninput="onHodChange(this.value)"'+
-    ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
-    hodRefHtml+
-    '</div>'+
-    '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
-    '<button id="btn-hod" class="btn bp" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>'+
-    '<button class="btn bs" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';
-}
-
-function renderFS3(){
-  var sc=getSaldoCom();
-  var l=Number(fs.litros)||0;
-  var cap=fs.equip&&fs.equip.tank?Number(fs.equip.tank):0;
-
-  // Referências informativas discretas
-  var refsHtml='<div style="display:flex;gap:16px;font-size:11px;color:var(--t3);margin-bottom:12px;justify-content:center">'+
-    '<span>Saldo comboio: <strong style="color:var(--t2)">'+Math.max(0,sc).toFixed(0)+' L</strong></span>'+
-    (cap>0?'<span>Cap. tanque: <strong style="color:var(--t2)">'+cap.toLocaleString('pt-BR')+' L</strong></span>':'')+
-  '</div>';
-
-  return '<div class="sbar"><span class="sbarlabel"><i class="ti ti-droplet"></i> Saldo no comboio</span>'+
-    '<span class="sbarval">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div>'+
-    '<div class="seg-label">Quantidade abastecida</div>'+
-    '<div class="lrow">'+
-    '<button class="ladj" onclick="fsAdj(-50)">−</button>'+
-    '<input class="linp" type="number" id="lit-inp" inputmode="numeric"'+
-    ' value="'+(fs.litros||'')+'" placeholder="0" min="1" step="1"'+
-    ' oninput="onLitrosChange(this.value)">'+
-    '<button class="ladj" onclick="fsAdj(50)">+</button>'+
-    '</div>'+
-    refsHtml+
-    '<button id="btn-lit" class="btn bp" '+(l>0?'':'disabled')+' onclick="fsGo(4)">'+
-    '<i class="ti ti-arrow-right"></i> Revisar</button>'+
-    '<button class="btn bs" onclick="fsGo(2)"><i class="ti ti-arrow-left"></i> Voltar</button>';
-}
-
-function renderFS4(){
-  var e=fs.equip, isKm=(e.unidade==='km');
-  var hodAtual=Number(fs.hod);
-  var volAtual=Number(fs.litros);
-  var cap=e.tank?Number(e.tank):0;
-
-  // Busca último horímetro aprovado
-  var hist4=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-  var ultHod4=null;
-  if(hist4.length){
-    var _a4=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultHod4=Number(_a4.hod);
-  }
-
-  // Erros críticos — bloqueiam confirmação
-  var errosCriticos=[];
-  if(ultHod4!==null&&hodAtual<=ultHod4){
-    var _ig=hodAtual===ultHod4?'igual':'inferior';
-    errosCriticos.push((isKm?'Odômetro':'Horímetro')+' '+_ig+' ao anterior: lançado '+
-      hodAtual.toLocaleString('pt-BR')+' | último: '+ultHod4.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'. Volte e corrija.');
-  }
-  if(cap>0&&volAtual>cap){
-    errosCriticos.push('Volume ('+volAtual.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L). Volte e corrija.');
-  }
-
-  // Alertas informativos — não bloqueiam
-  var alertasInfo=[];
-  var sc4=getSaldoCom();
-  if(sc4>0&&volAtual>sc4){
-    alertasInfo.push('Volume ('+volAtual.toFixed(0)+' L) maior que saldo do comboio ('+sc4.toFixed(0)+' L). Será registrado assim mesmo.');
-  }
-  if(ultHod4!==null&&hodAtual>ultHod4){
-    var _dh4=hodAtual-ultHod4;
-    if(_dh4>0){
-      var _cr4=volAtual/_dh4*(isKm?100:1);
-      var _cMin4=e.consumoMin||0,_cMax4=e.consumoMax||0,_u4=isKm?'L/100km':'L/h';
-      if(_cMin4>0&&_cMax4>0&&(_cr4<_cMin4*0.7||_cr4>_cMax4*1.3)){
-        alertasInfo.push('Consumo estimado: '+_cr4.toFixed(1)+' '+_u4+' (faixa: '+_cMin4+'–'+_cMax4+' '+_u4+'). Admin será notificado.');
-      }
-    }
-  }
-
-  var errosHtml=errosCriticos.map(function(msg){
-    return '<div style="background:var(--rl);border:2px solid var(--red);border-radius:var(--rs);padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:flex-start">'+
-      '<i class="ti ti-alert-triangle" style="color:var(--red);font-size:20px;flex-shrink:0;margin-top:1px"></i>'+
-      '<div style="font-size:13px;font-weight:600;color:var(--red)">'+msg+'</div></div>';
-  }).join('');
-
-  var infoHtml=alertasInfo.map(function(msg){
-    return '<div style="background:var(--al);border:1.5px solid var(--am);border-radius:var(--rs);padding:10px 12px;margin-bottom:8px;display:flex;gap:8px;align-items:flex-start">'+
-      '<i class="ti ti-info-circle" style="color:var(--am);font-size:16px;flex-shrink:0;margin-top:1px"></i>'+
-      '<div style="font-size:12px;color:var(--am)">'+msg+'</div></div>';
-  }).join('');
-
-  var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
-    '<div class="crow"><span class="cl">Tipo</span><span class="cv">'+e.tipo+'</span></div>'+
-    (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
-    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span>'+
-      '<span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+hodAtual.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
-    '<div class="crow"><span class="cl">Volume</span>'+
-      '<span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+volAtual.toFixed(0)+' L</span></div>'+
-    '<div class="crow"><span class="cl">Fotos</span>'+
-      '<span class="cv">'+(fs.fotoHod?'✓ Horímetro':'—')+'</span></div>'+
-    '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
-
-  var btnConfirmar = errosCriticos.length>0
-    ? '<button class="btn" disabled style="width:100%;padding:16px;background:var(--br);color:var(--t3);'+
-        'border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:not-allowed;display:flex;align-items:center;justify-content:center;gap:8px">'+
-        '<i class="ti ti-lock"></i> Corrija os erros acima para confirmar</button>'
-    : '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>';
-
-  return '<div class="seg-label">Confirme os dados</div>'+
-    '<div class="card" style="margin-bottom:12px">'+rows+'</div>'+
-    errosHtml+infoHtml+btnConfirmar+
-    '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar e corrigir</button>';
-}
-
-function renderFS5(){
-  // Verifica se o último abastecimento registrado está pendente de aprovação
-  var ultimoAbast=db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod;});
-  ultimoAbast=ultimoAbast.length?ultimoAbast[ultimoAbast.length-1]:null;
-  var pendente=ultimoAbast&&ultimoAbast.aprovado===false;
-
-  if(pendente){
-    return '<div class="ok-screen">'+
-      '<div style="font-size:48px;color:var(--am);margin-bottom:12px"><i class="ti ti-clock-pause"></i></div>'+
-      '<div class="ok-title" style="color:var(--am)">Aguardando aprovação</div>'+
-      '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> registrados<br><br>'+
-      '<span style="font-size:12px;color:var(--am);line-height:1.6">'+
-        'O registro foi salvo mas <strong>não será contabilizado</strong> até o administrador aprovar ou corrigir.<br><br>'+
-        'O administrador foi notificado na aba Avisos.'+
-      '</span></div>'+
-      '<button class="btn bp" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button>'+
-    '</div>';
-  }
-
-  return '<div class="ok-screen"><div class="ok-icon"><i class="ti ti-circle-check"></i></div>'+
-    '<div class="ok-title">Registrado!</div>'+
-    '<div class="ok-sub">'+fs.equip.cod+'<br><strong>'+Number(fs.litros).toFixed(0)+' L</strong> abastecidos<br>'+
-    '<br><span class="tag-off"><i class="ti ti-device-floppy" style="font-size:12px"></i> Salvo</span></div>'+
-    '<button class="btn bp" onclick="fsNovo()"><i class="ti ti-plus"></i> Novo abastecimento</button></div>';
-}
-
-// ─── Input handlers — ONLY update button state, never rebuild DOM ───
-function onHodChange(val){
-  fs.hod = val.trim() || null;
-  fs.hodAlerta = false;
-  fs._hodAlertaPendente = null;
-  // Fecha toast ao começar a corrigir
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-hod');
-  if(btn) btn.disabled=!fs.hod;
-}
-
-// Chamado pelo botão Próximo — valida antes de avançar
-function fsValidarHod(){
-  if(!fs.hod) return;
-  var hodAtual = Number(fs.hod);
-  // Busca maior horímetro registrado para este equipamento
-  var hist = db.abastecimentos.filter(function(a){return a.equip===fs.equip.cod&&Number(a.hod)>0;});
-  var ultimoHod = null;
-  if(hist.length){
-    ultimoHod = hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultimoHod = Number(ultimoHod.hod);
-  }
-  if(ultimoHod!==null && hodAtual < ultimoHod){
-    // Mostra alerta inline — não avança
-    fs.hodAlerta = true;
-    renderField();
-    return;
-  }
-  // OK — avança normalmente
-  fs.hodAlerta = false;
-  fsGo(3);
-}
-
-// Operador decide avançar mesmo com horímetro inferior
-function fsAvancarComAlerta(){
-  fs.hodAlerta = false;
-  fsGo(3);
-}
-
-// Operador quer corrigir — limpa o valor e foca o campo
-function fsCorrigirHod(){
-  fs.hod = null;
-  fs.hodAlerta = false;
-  fs.fotoHod = false;
-  fs.analisando = false;
-  renderField();
-  setTimeout(function(){
-    var inp = document.getElementById('hod-inp');
-    if(inp){ inp.value=''; inp.focus(); }
-  }, 80);
-}
-
-function onLitrosChange(val){
-  fs.litros = val || null;
-  fs._litrosAlertaPendente = null;
-  // Fecha toast ao começar a corrigir
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-lit');
-  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
-}
-
-function _fsAtualizarAlertasStep3(){ /* toast cuida dos alertas */ }
-
-function fsLimparLitros(){
-  fs.litros=null; fs._litrosAlertaPendente=null;
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var inp=document.getElementById('lit-inp');
-  if(inp){ inp.value=''; inp.focus(); }
-}
-
-function fsAdj(d){
-  var cur=Number(fs.litros)||0;
-  fs.litros=String(Math.max(0,cur+d)||'');
-  fs._litrosAlertaPendente=null;
-  var inp=document.getElementById('lit-inp');
-  if(inp) inp.value=fs.litros;
-  var btn=document.getElementById('btn-lit');
-  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
-}
-
-function fsSelEq(cod){
-  fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
-  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
-  fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
-  fs.hodAlerta=false;fs._hodAlertaPendente=null;fs._litrosAlertaPendente=null;
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  renderField();
-}
-function fsEditHod(){
-  fs.hod=null;fs.fotoHod=false;fs.analisando=false;
-  renderField();
-  setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
-}
-function fsNovo(){
-  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,
-      imgHod:null,imgBomba:null,imgId:null,analisando:false,hodAlerta:false,
-      _hodAlertaPendente:null,_litrosAlertaPendente:null};
-  var old=document.getElementById('fs-toast'); if(old) old.remove();
-  renderField();
-}
-// ─── Camera ───
-function abrirCamHod(){var i=document.getElementById('cam-hod');if(i)i.click();}
-function abrirCamBomba(){var i=document.getElementById('cam-bomba');if(i)i.click();}
-
-function onFotoHod(input){
-  var file=input.files[0]; if(!file) return;
-  var r=new FileReader();
-  r.onload=function(e){
-    fs.fotoHod=true; fs.analisando=true; fs.hod=null;
-    fs.imgHod=e.target.result; fs.imgId=uid();
-    renderField();
-    runOCR(e.target.result);
+// Adiciona um aviso — chamado sempre que ocorre um evento notificável
+function avisosAdd(tipo, titulo, descricao, dados){
+  var avisos=avisosList();
+  var n={
+    id: uid(),
+    tipo: tipo,
+    titulo: titulo,
+    descricao: descricao,
+    dados: dados||{},
+    data: today(),
+    hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
+    lida: false
   };
-  r.readAsDataURL(file);
-  input.value='';
+  avisos.unshift(n);
+  avisosSave(avisos);
+  avisosUpdateBadge();
+  return n.id;
 }
 
-function onFotoBomba(input){
-  var file=input.files[0]; if(!file) return;
-  var r=new FileReader();
-  r.onload=function(e){
-    fs.fotoBomba=true; fs.imgBomba=e.target.result;
-    renderField();
-  };
-  r.readAsDataURL(file);
-  input.value='';
-}
-
-// Compress image synchronously using canvas
-function comprimirImg(dataUrl, qualidade, callback){
-  try{
-    var img=new Image();
-    img.onload=function(){
-      var MAX=600;
-      var scale=Math.min(1,MAX/Math.max(img.width||1,img.height||1));
-      var cv=document.createElement('canvas');
-      cv.width=Math.max(1,Math.floor(img.width*scale));
-      cv.height=Math.max(1,Math.floor(img.height*scale));
-      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-      callback(cv.toDataURL('image/jpeg',qualidade||0.4));
-    };
-    img.onerror=function(){callback(dataUrl);};
-    img.src=dataUrl;
-  }catch(e){callback(dataUrl);}
-}
-
-function preprocessImagem(dataUrl, callback){
-  try{
-    var img=new Image();
-    img.onload=function(){
-      var canvas=document.createElement('canvas');
-      var ctx=canvas.getContext('2d');
-      // Crop to central 80% width, 50% height — removes borders, focuses on the number display
-      var cx=Math.floor(img.width*0.10), cy=Math.floor(img.height*0.25);
-      var cw=Math.floor(img.width*0.80), ch=Math.floor(img.height*0.50);
-      var scale=Math.min(5,1400/Math.max(cw,ch));
-      canvas.width=Math.floor(cw*scale); canvas.height=Math.floor(ch*scale);
-      ctx.drawImage(img,cx,cy,cw,ch,0,0,canvas.width,canvas.height);
-      // Adaptive threshold: measure average brightness then binarize
-      var id=ctx.getImageData(0,0,canvas.width,canvas.height);
-      var d=id.data, tot=0;
-      for(var i=0;i<d.length;i+=4) tot+=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
-      var avg=tot/(d.length/4);
-      var thr=Math.max(80,Math.min(200,avg*0.85));
-      for(var j=0;j<d.length;j+=4){
-        var g=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2];
-        var v=g>thr?255:0; d[j]=d[j+1]=d[j+2]=v;
+// Atualiza badge do ícone de avisos na nav
+function avisosUpdateBadge(){
+  var avisos=avisosList();
+  var nLidas=avisos.filter(function(a){return !a.lida;}).length;
+  // Badge nos botões de nav
+  document.querySelectorAll('.nb').forEach(function(el){
+    if(el.getAttribute('onclick')||'').indexOf('notif')!==-1 || (el.querySelector&&el.querySelector('.ti-bell')){
+      var b=el.querySelector('.aviso-badge');
+      if(!b){
+        b=document.createElement('span');
+        b.className='aviso-badge';
+        b.style.cssText='position:absolute;top:2px;right:2px;background:var(--red);color:#fff;'+
+          'font-size:9px;font-weight:700;border-radius:99px;padding:1px 5px;min-width:14px;text-align:center';
+        el.style.position='relative';
+        el.appendChild(b);
       }
-      ctx.putImageData(id,0,0);
-      callback(canvas.toDataURL('image/png'));
-    };
-    img.onerror=function(){callback(dataUrl);};
-    img.src=dataUrl;
-  }catch(e){callback(dataUrl);}
-}
-
-function runOCR(dataUrl){
-  preprocessImagem(dataUrl, function(processedUrl){
-    try{
-      // Try with digits-optimized config first
-      Tesseract.recognize(processedUrl,'eng',{
-        logger:function(){},
-        tessedit_char_whitelist:'0123456789',
-        tessedit_pageseg_mode:'7'
-      })
-      .then(function(res){
-        var _rt=(res.data.text||'').trim();
-        var _rm=_rt.match(/[0-9]+/g)||[];
-        var num=_rm.reduce(function(a,b){return b.length>=a.length?b:a;},'');
-        if(num&&num.length>=1){
-          fs.analisando=false; fs.hod=num; renderField();
-        } else {
-          // Retry without whitelist (catches digits written oddly)
-          return Tesseract.recognize(processedUrl,'eng',{logger:function(){}}).then(function(res2){
-            var _t2=(res2.data.text||'').trim();
-            var _m2=_t2.match(/[0-9]+/g)||[];
-            var num2=_m2.reduce(function(a,b){return b.length>=a.length?b:a;},'');
-            fs.analisando=false;
-            fs.hod=(num2&&num2.length>=1)?num2:null;
-            renderField();
-            if(!fs.hod) setTimeout(function(){alert('Foto não legível.\nDica: boa iluminação e fundo contrastante ajudam.\nDigite manualmente abaixo.');},200);
-          });
-        }
-      })
-      .catch(function(){
-        fs.analisando=false; fs.hod=null; renderField();
-        setTimeout(function(){alert('Erro na leitura. Digite manualmente.');},200);
-      });
-    }catch(e){
-      fs.analisando=false; fs.hod=null; renderField();
+      b.textContent=nLidas>0?nLidas:'';
+      b.style.display=nLidas>0?'':'none';
     }
   });
-}
-
-// Same OCR for entrada patio
-function runOCREntrada(dataUrl, callback){
-  preprocessImagem(dataUrl, function(processedUrl){
-    try{
-      Tesseract.recognize(processedUrl,'eng',{
-        logger:function(){},
-        tessedit_char_whitelist:'0123456789',
-        tessedit_pageseg_mode:'7'
-      }).then(function(res){
-        var num=(res.data.text||'').replace(/[^0-9]/g,'').trim();
-        if(num&&num.length>=1){ callback(num); return; }
-        return Tesseract.recognize(processedUrl,'eng',{logger:function(){}}).then(function(res2){
-          var num2=(res2.data.text||'').replace(/[^0-9]/g,'').trim();
-          callback(num2||null);
-        });
-      }).catch(function(){ callback(null); });
-    }catch(e){ callback(null); }
-  });
-}
-
-var _fsConfirmando=false;
-function fsConfirmar(){
-  if(_fsConfirmando) return;
-  _fsConfirmando=true;
-
-  try{
-    var id=uid();
-    var hodAtual=Number(fs.hod);
-    var equip=fs.equip;
-    var volAtual=Number(fs.litros);
-
-    // Monta o registro
-    var abast={id:id,data:today(),equip:equip.cod,vol:volAtual,hod:hodAtual,
-               operador:'',fotoId:fs.imgId||null,aprovado:true,_device:myDeviceId};
-
-    // Salva foto do horímetro
-    if(fs.fotoHod&&fs.imgHod){
-      var fid=fs.imgId||uid();
-      abast.fotoId=fid;
-      var _fid=fid,_equip=equip.cod,_hod=hodAtual,_vol=volAtual;
-      var _imgHod=fs.imgHod;
-      function salvarFotoRecord(hImg){
-        var fRec={id:_fid,data:today(),
-          hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-          equip:_equip,hod:_hod,vol:_vol,conferido:false};
-        if(hImg) fRec.imgHod=hImg;
-        try{
-          localStorage.setItem('foto_'+_fid,JSON.stringify(fRec));
-        }catch(e){
-          var fr2={id:_fid,data:today(),
-            hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-            equip:_equip,hod:_hod,vol:_vol,conferido:false,semFoto:true};
-          try{localStorage.setItem('foto_'+_fid,JSON.stringify(fr2));}catch(e2){}
-        }
-      }
-      comprimirImg(_imgHod,0.4,function(h){ salvarFotoRecord(h); });
-    }
-
-    // Adiciona ao banco
-    db.abastecimentos.push(abast);
-
-    // Gera notificações (horímetro, volume, consumo) — mesma lógica do Mac ao receber do campo
-    _gerarNotificacoesAbast(abast);
-
-    // Persiste tudo — abastecimento + notificações de uma vez
-    saveDB();
-
-    // Atualiza aba avisos se houver notificações novas
-    updateNotifBadge();
-    if(document.querySelector('#screen-notif.active')) renderNotif();
-
-    // Envia para Firebase campo (iPhone campo → Mac)
-    if(fbRefCampo&&fbActive){
-      try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){console.error('Campo push:',e);}
-    }
-
-    // Atualiza ciclo
-    if(db.cicloAtivo&&!db.cicloAtivo.encerrado) setTimeout(atualizarCiclo,100);
-
-    // Só chega aqui se tudo correu bem — avança para tela de sucesso
-    _fsConfirmando=false;
-    fs.step=5;
-    renderField();
-
-  }catch(e){
-    console.error('[fsConfirmar] erro:', e);
-    _fsConfirmando=false;
-    fsToast('Erro ao registrar abastecimento. Tente novamente.','red',5000);
-  }
-}
-
-// ─────────────────────────────────────────────
-//  ENTRADA
-// ─────────────────────────────────────────────
-var _eHodImg=null, _eHodVal=null;
-
-function abrirCamEntrada(){document.getElementById('cam-entrada').click();}
-
-function onFotoEntrada(input){
-  var file=input.files[0]; if(!file) return;
-  var r=new FileReader();
-  r.onload=function(e){
-    _eHodImg=e.target.result; _eHodVal=null;
-    var fa=document.getElementById('e-foto-area');
-    var fi=document.getElementById('e-foto-icon');
-    var fl=document.getElementById('e-foto-label');
-    var fs=document.getElementById('e-foto-sub');
-    fa.classList.add('has');
-    fi.className='ti ti-check'; fi.style.color='var(--green)';
-    fl.textContent='Foto capturada';
-    fs.textContent='Toque para tirar outra';
-    document.getElementById('e-hod-box').style.display='block';
-    document.getElementById('e-ocr-status').innerHTML='<div class="analyzing"><div class="spin"></div> Lendo bomba...</div>';
-    runOCREntrada(e.target.result, function(num){
-      _eHodVal=num||null;
-      document.getElementById('e-ocr-status').innerHTML='';
-      if(num){document.getElementById('e-hod').value=num;}
-      else{setTimeout(function(){alert('Não foi possível ler automaticamente. Digite manualmente.');},200);}
-    });
-  };
-  r.readAsDataURL(file);
-  input.value='';
-}
-
-function salvarEntrada(){
-  var vol=parseFloat(document.getElementById('e-vol').value);
-  if(!vol||vol<=0){alert('Informe o volume.');return;}
-  var hodVal=document.getElementById('e-hod').value;
-  var entrada={id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:(document.getElementById('e-nf').value||'').toUpperCase(),forn:document.getElementById('e-forn').value,hod:hodVal||null,fotoId:null};
-  if(_eHodImg){
-    var fid=uid();
-    entrada.fotoId=fid;
-    try{localStorage.setItem('foto_entrada_'+fid,JSON.stringify({id:fid,tipo:'entrada',data:entrada.data,vol:vol,hod:hodVal,img:_eHodImg,conferido:false}));}catch(e){}
-  }
-  db.entradas.push(entrada);
-  saveDB();
-  // Start new cycle for this entry volume
-  iniciarCiclo(vol, entrada.id);
-  ['e-vol','e-nf','e-forn','e-hod'].forEach(function(id){document.getElementById(id).value='';});
-  _eHodImg=null; _eHodVal=null;
-  // Reset foto area
-  var fa=document.getElementById('e-foto-area');
-  var fi=document.getElementById('e-foto-icon');
-  var fl=document.getElementById('e-foto-label');
-  var fs2=document.getElementById('e-foto-sub');
-  if(fa){fa.classList.remove('has');fi.className='ti ti-camera';fi.style.color='var(--t3)';fl.textContent='Fotografar bomba do pátio';fs2.textContent='Visor do horímetro ou bomba';}
-  document.getElementById('e-hod-box').style.display='none';
-  renderHistEnt();
-  // Check reservatório after entry
-  var _sr=getSaldoRes();
-  if(_sr<500&&_sr>=0){var _jn=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr});}
-  alert('Entrada registrada!');
-}
-function renderHistEnt(){
-  var rows=db.entradas.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
-  var el=document.getElementById('hist-ent');
-  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhuma entrada ainda</div>';return;}
-  el.innerHTML=rows.map(function(r){
-    return'<div class="hi"><div class="hic entry"><i class="ti ti-truck-delivery"></i></div><div class="hb"><div class="hn">'+(r.forn||'Distribuidora')+'</div><div class="hs">'+fmtDate(r.data)+' • NF '+(r.nf||'—')+'</div></div><div class="hv">+'+Number(r.vol).toFixed(0)+' L</div></div>';
-  }).join('');
-}
-
-// ─────────────────────────────────────────────
-//  COMBOIO
-// ─────────────────────────────────────────────
-function salvarComboio(){
-  var vol=parseFloat(document.getElementById('c-vol').value);
-  if(!vol||vol<=0){alert('Informe o volume.');return;}
-  if(!_editComId){
-    var sr=getSaldoRes();
-    if(vol>sr){if(!confirm('Saldo no reservatório: '+sr.toFixed(0)+' L. Confirmar?'))return;}
-  }
-  if(_editComId){
-    db.comboios=db.comboios.map(function(r){
-      return r.id===_editComId?{id:r.id,data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value}:r;
-    });
-    _editComId=null;
-    alert('Carregamento atualizado!');
-  } else {
-    db.comboios.push({id:uid(),data:document.getElementById('c-data').value||today(),vol:vol,op:document.getElementById('c-op').value,hod:document.getElementById('c-hod').value});
-  }
-  saveDB();
-  // Update active cycle
-  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) atualizarCiclo();
-  ['c-vol','c-hod'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
-  var cop=document.getElementById('c-op');if(cop)cop.value='';
-  renderHistCom();
-  var _sr2=getSaldoRes();
-  if(_sr2<500&&_sr2>=0){var _jn2=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn2)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr2).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr2});}
-  var _sc2=getSaldoCom();
-  if(_sc2<300&&_sc2>=0){var _jnc=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='comboio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jnc)criarNotif('comboio_baixo','Comboio com menos de 300 litros','Saldo atual do comboio: '+Math.max(0,_sc2).toFixed(0)+' L. Faça o carregamento.',{saldo:_sc2});}
-  alert('Carregamento registrado!');
-}
-var _editComId=null;
-function renderHistCom(){
-  // Always keep operador dropdown in sync
-  var _cop=document.getElementById('c-op');
-  if(_cop&&db.operadores.length&&_cop.options.length<=1){
-    _cop.innerHTML='<option value="">— selecione —</option>'+
-      db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
-  }
-  var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
-  var el=document.getElementById('hist-com');
-  if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
-  el.innerHTML=rows.map(function(r){
-    var html='<div class="hi" id="com-'+r.id+'">';
-    html+='<div class="hic transfer"><i class="ti ti-flame"></i></div>';
-    html+='<div class="hb"><div class="hn">Op: '+(r.op||'—')+'</div>';
-    html+='<div class="hs">'+fmtDate(r.data)+' • '+Number(r.vol).toFixed(0)+' L'+(r.hod?' • '+r.hod:'')+'</div></div>';
-    html+='<div style="display:flex;gap:6px">';
-    html+='<button class="del" data-id="'+r.id+'" onclick="editarComboio(this.dataset.id)" title="Editar" style="color:var(--bl)"><i class="ti ti-pencil"></i></button>';
-    html+='<button class="del" data-id="'+r.id+'" onclick="excluirComboio(this.dataset.id)" title="Excluir"><i class="ti ti-trash"></i></button>';
-    html+='</div></div>';
-    return html;
-  }).join('');
-}
-function editarComboio(id){
-  var r=db.comboios.filter(function(x){return x.id===id;})[0]; if(!r)return;
-  _editComId=id;
-  document.getElementById('c-data').value=r.data||today();
-  document.getElementById('c-vol').value=r.vol||'';
-  document.getElementById('c-hod').value=r.hod||'';
-  // Repopulate and select operator
-  var sel=document.getElementById('c-op');
-  if(sel) sel.innerHTML='<option value="">— selecione —</option>'+db.operadores.map(function(o){return'<option value="'+o.nome+'"'+(o.nome===r.op?' selected':'')+'>'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
-  // Scroll to comboio form
-  var comCard=document.querySelector('.card:has(#c-vol)');
-  var comCardAlt=document.getElementById('c-vol');
-  if(comCardAlt) comCardAlt.closest('.card').scrollIntoView({behavior:'smooth'});
-}
-function excluirComboio(id){
-  if(!confirm('Excluir este carregamento?'))return;
-  db.comboios=db.comboios.filter(function(x){return x.id!==id;});
-  saveDB(); renderHistCom();
-}
-
-// ─────────────────────────────────────────────
-//  NOTIFICAÇÕES — renderização e badge
-// ─────────────────────────────────────────────
-function updateNotifBadge(){
-  // Sempre restaura da chave dedicada para ter o count correto
-  _notifCarregar();
-  var nao_lidas=(db.notificacoes||[]).filter(function(n){return !n.lida;}).length;
-  // Badge na nav
-  document.querySelectorAll('.nav-notif-badge').forEach(function(el){
-    el.textContent=nao_lidas>0?nao_lidas:'';
-    el.style.display=nao_lidas>0?'':'none';
-  });
-  // Badge no topo da tela de notificações
+  // Badge no topo da tela de avisos
   var top=document.getElementById('notif-badge-top');
-  if(top){
-    top.textContent=nao_lidas>0?nao_lidas+' pendente'+(nao_lidas>1?'s':''):'';
-    top.style.display=nao_lidas>0?'':'none';
-  }
-  // Badge no botão de nav
-  document.querySelectorAll('[data-nav="notif"]').forEach(function(el){
-    var badge=el.querySelector('.nav-badge');
-    if(!badge&&nao_lidas>0){
-      badge=document.createElement('span');
-      badge.className='nav-badge';
-      badge.style.cssText='position:absolute;top:2px;right:2px;background:var(--red);color:#fff;'+
-        'font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px;min-width:14px;text-align:center';
-      el.style.position='relative';
-      el.appendChild(badge);
-    }
-    if(badge) badge.textContent=nao_lidas>0?nao_lidas:'';
-    if(badge) badge.style.display=nao_lidas>0?'':'none';
-  });
+  if(top){top.textContent=nLidas>0?nLidas+' pendente'+(nLidas>1?'s':''):'';top.style.display=nLidas>0?'':'none';}
 }
 
+// Alias para compatibilidade com código existente que chama updateNotifBadge
+function updateNotifBadge(){ avisosUpdateBadge(); }
+
+// Renderiza a aba de Avisos
 function renderNotif(){
-  // Sempre restaura da chave dedicada antes de exibir — garante que Firebase não apagou
-  _notifCarregar();
-  var el=document.getElementById('notif-body'); if(!el) return;
-  var lista=(db.notificacoes||[]).slice().sort(function(a,b){
-    return (b.data+b.hora).localeCompare(a.data+a.hora);
-  });
-  if(!lista.length){
+  var el=document.getElementById('avisos-body'); if(!el) return;
+  var avisos=avisosList();
+  if(!avisos.length){
     el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhuma notificação</div>';
-    updateNotifBadge(); return;
+    avisosUpdateBadge(); return;
   }
 
-  var ICON={
+  var ICONES={
     hod_inferior:      {i:'ti-alert-triangle', c:'var(--red)'},
     volume_excede_tank:{i:'ti-alert-triangle', c:'var(--red)'},
     consumo_fora_faixa:{i:'ti-chart-line',     c:'var(--am)'},
-    consumo_divergente:{i:'ti-chart-line',     c:'var(--am)'},
-    comboio_baixo:     {i:'ti-droplet-off',    c:'var(--am)'},
-    reservatorio_baixo:{i:'ti-tank',           c:'var(--am)'},
-    ciclo_comboio_excede:{i:'ti-scale',        c:'var(--red)'},
-    ciclo_equip_excede:{i:'ti-scale',          c:'var(--red)'},
-    ciclo_encerrado_ok:{i:'ti-circle-check',   c:'var(--green)'},
-    ciclo_divergencia: {i:'ti-alert-circle',   c:'var(--red)'},
-    volume_excede_tank:{i:'ti-alert-triangle', c:'var(--red)'}
+    abast_corrigido:   {i:'ti-edit',           c:'var(--green)'}
   };
+  var CORRIGIVEIS=['hod_inferior','volume_excede_tank','consumo_fora_faixa'];
 
-  el.innerHTML=lista.map(function(n){
-    var ic=ICON[n.tipo]||{i:'ti-bell',c:'var(--t2)'};
+  el.innerHTML=avisos.map(function(n){
+    var ic=ICONES[n.tipo]||{i:'ti-bell',c:'var(--t2)'};
     var bg=n.lida?'var(--bg2)':'var(--bg)';
-    var border=n.lida?'var(--br)':'var(--green)';
-    var html='<div style="background:'+bg+';border:1.5px solid '+border+';border-radius:var(--r);'+
-      'padding:14px;margin-bottom:10px">'+
+    var border=n.lida?'var(--br)':'2px solid '+ic.c;
+    var html='<div style="background:'+bg+';border:'+border+';border-radius:var(--r);padding:14px;margin-bottom:10px">'+
       '<div style="display:flex;align-items:flex-start;gap:10px">'+
-        '<i class="ti '+ic.i+'" style="font-size:20px;color:'+ic.c+';flex-shrink:0;margin-top:2px"></i>'+
+        '<i class="ti '+ic.i+'" style="font-size:22px;color:'+ic.c+';flex-shrink:0;margin-top:1px"></i>'+
         '<div style="flex:1;min-width:0">'+
-          '<div style="font-size:13px;font-weight:600;color:var(--t1);margin-bottom:2px">'+n.titulo+'</div>'+
-          '<div style="font-size:12px;color:var(--t2);margin-bottom:6px;line-height:1.5">'+n.descricao+'</div>'+
+          '<div style="font-size:13px;font-weight:700;color:'+ic.c+';margin-bottom:3px">'+n.titulo+'</div>'+
+          '<div style="font-size:12px;color:var(--t2);margin-bottom:6px;line-height:1.5;white-space:pre-line">'+n.descricao+'</div>'+
           '<div style="font-size:11px;color:var(--t3)">'+fmtDate(n.data)+(n.hora?' • '+n.hora:'')+'</div>';
 
-    // Ações por tipo de notificação
-    var TIPOS_CORRIGIR = ['hod_inferior','volume_excede_tank','consumo_fora_faixa'];
-    if(!n.lida && TIPOS_CORRIGIR.indexOf(n.tipo)!==-1){
+    if(!n.lida && CORRIGIVEIS.indexOf(n.tipo)!==-1 && n.dados && n.dados.abastId){
       html+='<div style="display:flex;gap:8px;margin-top:10px">'+
-        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="aprovarNotif(\''+n.id+'\')">'+
+        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="avisosAprovar(\''+n.id+'\')">'+
           '<i class="ti ti-check"></i> Aprovar</button>'+
-        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="rejeitarNotif(\''+n.id+'\')">'+
+        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="avisosCorrigir(\''+n.id+'\')">'+
           '<i class="ti ti-pencil"></i> Corrigir</button>'+
         '</div>';
     } else if(!n.lida){
       html+='<div style="margin-top:8px">'+
-        '<button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="marcarLida(\''+n.id+'\')">'+
+        '<button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="avisosMarcarLida(\''+n.id+'\')">'+
           '<i class="ti ti-check"></i> Marcar como lida</button>'+
         '</div>';
     } else {
-      var status=n.aprovada===true?'<span style="color:var(--green)">✓ Aprovado</span>':
-                 n.aprovada===false?'<span style="color:var(--red)">✗ Rejeitado</span>':
-                 '<span style="color:var(--t3)">Lida</span>';
       html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">'+
-        '<div style="font-size:11px">'+status+'</div>'+
-        '<button onclick="apagarNotif(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);'+
-          'font-size:12px;cursor:pointer;padding:2px 6px;display:flex;align-items:center;gap:4px">'+
+        '<span style="font-size:11px;color:var(--t3)">✓ Lida</span>'+
+        '<button onclick="avisosApagar(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);cursor:pointer;padding:2px 6px">'+
           '<i class="ti ti-trash" style="font-size:14px"></i></button>'+
-      '</div>';
+        '</div>';
     }
-
     html+='</div></div></div>';
     return html;
   }).join('');
-  updateNotifBadge();
+  avisosUpdateBadge();
 }
 
-function marcarLida(id){
-  var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0];
-  if(!n) return;
-  n.lida=true;
-  saveDB(); updateNotifBadge(); renderNotif();
+function avisosMarcarLida(id){
+  var avisos=avisosList();
+  avisos.forEach(function(a){if(a.id===id) a.lida=true;});
+  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
 }
-
-function marcarTodasLidas(){
-  (db.notificacoes||[]).forEach(function(n){n.lida=true;});
-  saveDB(); updateNotifBadge(); renderNotif();
+function avisosMarcarTodos(){
+  var avisos=avisosList();
+  avisos.forEach(function(a){a.lida=true;});
+  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
 }
-
-function apagarNotif(id){
-  db.notificacoes=(db.notificacoes||[]).filter(function(n){return n.id!==id;});
-  saveDB(); updateNotifBadge(); renderNotif();
+function avisosApagar(id){
+  var avisos=avisosList().filter(function(a){return a.id!==id;});
+  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
 }
-
-function apagarNotifLidas(){
-  var lidas=(db.notificacoes||[]).filter(function(n){return n.lida;}).length;
-  if(!lidas){alert('Nenhuma notificação lida para apagar.');return;}
-  if(!confirm('Apagar '+lidas+' notificação'+(lidas>1?'s lidas':' lida')+'?'))return;
-  db.notificacoes=(db.notificacoes||[]).filter(function(n){return !n.lida;});
-  saveDB(); updateNotifBadge(); renderNotif();
+function avisosApagarLidos(){
+  var avisos=avisosList();
+  var lidas=avisos.filter(function(a){return a.lida;}).length;
+  if(!lidas){alert('Nenhum aviso lido.');return;}
+  if(!confirm('Apagar '+lidas+' aviso'+(lidas>1?'s lidos':' lido')+'?'))return;
+  avisosSave(avisos.filter(function(a){return !a.lida;}));
+  avisosUpdateBadge(); renderNotif();
 }
-
-// Tipos de notificação permitidos na aba Avisos
-var NOTIF_TIPOS_PERMITIDOS = ['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
-
-function criarNotif(tipo, titulo, descricao, dados){
-  if(NOTIF_TIPOS_PERMITIDOS.indexOf(tipo)===-1) return null;
-  var n = {id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{},
-    data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),
-    lida:false, aprovada:null};
-  if(!db.notificacoes) db.notificacoes=[];
-  db.notificacoes.unshift(n);
-  // Persiste IMEDIATAMENTE em chave dedicada — imune a qualquer sobrescrita posterior
-  _notifSalvar();
-  // Também persiste no payload principal para consistência
-  try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
-  updateNotifBadge();
-  return n.id;
-}
-
-function aprovarNotif(id){
-  var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
-  if(!n) return;
-  n.lida=true; n.aprovada=true;
-  // If it was a hod approval — release the abastecimento
-  if(n.tipo==='hod_inferior' && n.dados.abastId){
-    // abastecimento already saved, just mark approved
+function avisosAprovar(id){
+  var avisos=avisosList();
+  var n=avisos.filter(function(a){return a.id===id;})[0]; if(!n) return;
+  // Aprova o abastecimento relacionado
+  if(n.dados&&n.dados.abastId){
     var ab=db.abastecimentos.filter(function(a){return a.id===n.dados.abastId;})[0];
-    if(ab) ab.aprovado=true;
+    if(ab){ ab.aprovado=true; saveDB(); }
   }
-  saveDB(); updateNotifBadge(); renderNotif();
+  n.lida=true;
+  avisosSave(avisos); avisosUpdateBadge(); renderNotif();
+}
+function avisosCorrigir(id){
+  var avisos=avisosList();
+  var n=avisos.filter(function(a){return a.id===id;})[0]; if(!n) return;
+  n.lida=true;
+  avisosSave(avisos); avisosUpdateBadge();
+  if(n.dados&&n.dados.abastId) setTimeout(function(){ abrirModalCorrigir(n.dados.abastId, id); },100);
 }
 
-function rejeitarNotif(id){
-  var n=db.notificacoes.filter(function(x){return x.id===id;})[0];
-  if(!n) return;
-
-  if(n.tipo==='hod_inferior' && n.dados && n.dados.abastId){
-    // Direciona para modal de correção do horímetro
-    n.lida=true; n.aprovada=false;
-    saveDB(); updateNotifBadge();
-    navigate('notif'); // mantém na aba
-    setTimeout(function(){ abrirModalCorrigir(n.dados.abastId, n.id); }, 100);
-    return;
-  }
-
-  if(n.tipo==='volume_excede_tank' && n.dados && n.dados.abastId){
-    // Direciona para modal de correção do volume
-    n.lida=true; n.aprovada=false;
-    saveDB(); updateNotifBadge();
-    setTimeout(function(){ abrirModalCorrigir(n.dados.abastId, n.id); }, 100);
-    return;
-  }
-
-  if(n.tipo==='consumo_fora_faixa' && n.dados && n.dados.abastId){
-    // Consumo: corrige horímetro e/ou volume
-    n.lida=true; n.aprovada=false;
-    saveDB(); updateNotifBadge();
-    setTimeout(function(){ abrirModalCorrigir(n.dados.abastId, n.id); }, 100);
-    return;
-  }
-
-  n.lida=true; n.aprovada=false;
-  saveDB(); updateNotifBadge(); renderNotif();
+// Alias para compatibilidade com código existente
+function criarNotif(tipo, titulo, descricao, dados){
+  var permitidos=['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
+  if(permitidos.indexOf(tipo)===-1) return null;
+  return avisosAdd(tipo, titulo, descricao, dados);
 }
+function marcarLida(id){ avisosMarcarLida(id); }
+function marcarTodasLidas(){ avisosMarcarTodos(); }
+function apagarNotif(id){ avisosApagar(id); }
+function apagarNotifLidas(){ avisosApagarLidos(); }
+function aprovarNotif(id){ avisosAprovar(id); }
+function rejeitarNotif(id){ avisosCorrigir(id); }
 
+// ─────────────────────────────────────────────
+//  MODAL DE CORREÇÃO
+// ─────────────────────────────────────────────
 var _corrigirAbastId=null;
 var _corrigirNotifId=null;
 
@@ -2404,26 +713,17 @@ function abrirModalCorrigir(abastId, notifId){
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
   var isKm=eq&&eq.unidade==='km';
   var unid=isKm?'km':'h';
-
-  // Busca horímetro anterior para referência
   var hodAnt=null;
   var hist=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==ab.id&&Number(a.hod)>0;});
-  if(hist.length){
-    var ant=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    hodAnt=Number(ant.hod);
-  }
-
-  _corrigirAbastId=abastId;
-  _corrigirNotifId=notifId||null;
-
+  if(hist.length){var ant=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodAnt=Number(ant.hod);}
+  _corrigirAbastId=abastId; _corrigirNotifId=notifId||null;
   var m=document.getElementById('modal-corrigir');
-  if(!m){ alert('Modal não encontrado. Recarregue o app.'); return; }
+  if(!m){alert('Modal não encontrado.');return;}
   document.getElementById('mc-desc').textContent='Equipamento: '+ab.equip+' • '+fmtDate(ab.data);
   document.getElementById('mc-info').innerHTML=
     '<strong>'+(isKm?'Odômetro':'Horímetro')+' lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
-    (hodAnt!==null?' | <strong>Anterior (mínimo):</strong> <span style="color:var(--am)">'+hodAnt.toLocaleString('pt-BR')+' '+unid+'</span>':'')+
-    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L'+
-    (hodAnt!==null?'<br><span style="font-size:11px;color:var(--am)">⚠ O novo valor deve ser maior que '+hodAnt.toLocaleString('pt-BR')+' '+unid+'</span>':'');
+    (hodAnt!==null?' | <strong>Mínimo aceito:</strong> <span style="color:var(--am)">'+hodAnt.toLocaleString('pt-BR')+' '+unid+' + 1</span>':'')+
+    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
   document.getElementById('mc-hod-label').textContent=(isKm?'Odômetro (km)':'Horímetro (h)');
   document.getElementById('mc-hod').value=ab.hod;
   document.getElementById('mc-vol').value=ab.vol;
@@ -2436,58 +736,25 @@ function salvarCorrecao(){
   var newVol=parseFloat(document.getElementById('mc-vol').value);
   if(!newHod||newHod<=0){alert('Informe o horímetro.');return;}
   if(!newVol||newVol<=0){alert('Informe o volume.');return;}
-
   var ab=db.abastecimentos.filter(function(a){return a.id===_corrigirAbastId;})[0];
-  if(!ab){ fecharModalCorrigir(); return; }
-
-  // Ponto 3: novo horímetro deve ser maior que o último registro anterior
+  if(!ab){fecharModalCorrigir();return;}
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km';
-  var unid=isKm?'km':'h';
-  var histAnt=db.abastecimentos.filter(function(a){
-    return a.equip===ab.equip && a.id!==_corrigirAbastId && Number(a.hod)>0;
-  });
-  var hodMinimo=0;
-  if(histAnt.length){
-    var antRec=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    hodMinimo=Number(antRec.hod);
-  }
-  if(hodMinimo>0 && newHod<=hodMinimo){
-    alert('O horímetro corrigido ('+newHod.toLocaleString('pt-BR')+' '+unid+') '+
-          'deve ser maior que o último registro anterior ('+hodMinimo.toLocaleString('pt-BR')+' '+unid+').\n\n'+
-          'Informe um valor válido.');
-    return;
-  }
-
-  var hodAnterior=ab.hod;
-  var volAnterior=ab.vol;
-
+  var isKm=eq&&eq.unidade==='km'; var unid=isKm?'km':'h';
+  // Valida horímetro mínimo
+  var histAnt=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==_corrigirAbastId&&Number(a.hod)>0;});
+  var hodMin=0;
+  if(histAnt.length){var ar=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodMin=Number(ar.hod);}
+  if(hodMin>0&&newHod<=hodMin){alert('O '+unid+' deve ser maior que '+hodMin.toLocaleString('pt-BR')+' '+unid+'.');return;}
+  var hodAnt=ab.hod, volAnt=ab.vol;
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
-
-  // Marca notificações relacionadas como resolvidas
-  if(db.notificacoes){
-    db.notificacoes.forEach(function(n){
-      if(n.dados&&n.dados.abastId===_corrigirAbastId&&!n.lida){
-        n.lida=true; n.aprovada=true;
-      }
-    });
-  }
-
-  // Cria notificação de registro corrigido (ponto 2.4)
-  criarNotif('abast_corrigido',
-    'Abastecimento corrigido — '+ab.equip,
-    'Registro de '+fmtDate(ab.data)+' corrigido:\n'+
-    (isKm?'Odômetro':'Horímetro')+': '+Number(hodAnterior).toLocaleString('pt-BR')+' → '+
-    Number(newHod).toLocaleString('pt-BR')+' '+unid+
-    ' | Volume: '+Number(volAnterior).toFixed(0)+' → '+newVol+' L',
-    {abastId:_corrigirAbastId,equip:ab.equip,hodAnterior:hodAnterior,hodNovo:newHod,volAnterior:volAnterior,volNovo:newVol}
-  );
-
-  saveDB();
-  fecharModalCorrigir();
-  updateNotifBadge();
-  renderNotif();
-  atualizarCiclo();
+  // Registra correção na aba Avisos
+  avisosAdd('abast_corrigido','Abastecimento corrigido — '+ab.equip,
+    'Registro de '+fmtDate(ab.data)+' corrigido
+'+
+    (isKm?'Odômetro':'Horímetro')+': '+Number(hodAnt).toLocaleString('pt-BR')+' → '+Number(newHod).toLocaleString('pt-BR')+' '+unid+
+    ' | Volume: '+Number(volAnt).toFixed(0)+' → '+newVol+' L',
+    {abastId:_corrigirAbastId,equip:ab.equip});
+  saveDB(); fecharModalCorrigir(); renderNotif(); atualizarCiclo();
   alert('Abastecimento corrigido com sucesso!');
 }
 
@@ -2723,7 +990,7 @@ function toggleModalApagar(){
     var el=document.getElementById('del-entradas-ct'); if(el)el.textContent=db.entradas.length+' registro'+(db.entradas.length!==1?'s':'');
     el=document.getElementById('del-comboios-ct'); if(el)el.textContent=db.comboios.length+' registro'+(db.comboios.length!==1?'s':'');
     el=document.getElementById('del-abast-ct'); if(el)el.textContent=db.abastecimentos.length+' registro'+(db.abastecimentos.length!==1?'s':'');
-    el=document.getElementById('del-notif-ct'); if(el)el.textContent=(db.notificacoes||[]).length+' notificaç'+(db.notificacoes&&db.notificacoes.length!==1?'ões':'ão');
+    el=document.getElementById('del-notif-ct'); if(el)el.textContent=avisosList().length+' aviso'+(avisosList().length!==1?'s':'');
     // Uncheck all
     ['del-entradas','del-comboios','del-abast','del-notif'].forEach(function(id){var el=document.getElementById(id);if(el)el.checked=false;});
   }
@@ -2745,7 +1012,7 @@ function confirmarApagar(){
   if(delEnt) db.entradas=[];
   if(delCom) db.comboios=[];
   if(delAb)  db.abastecimentos=[];
-  if(delNot){ db.notificacoes=[]; _fbSyncNotif(); }
+  if(delNot){ avisosSave([]); avisosUpdateBadge(); }
 
   _fbSetLocalTs(Date.now());
   saveDB();
@@ -2994,7 +1261,7 @@ function exportBackup(){
 function limparDados(){
   if(!confirm('Apagar lan\u00e7amentos?\n\nSer\u00e3o removidos:\n\u2022 Entradas de diesel\n\u2022 Carregamentos do comboio\n\u2022 Abastecimentos\n\u2022 Notifica\u00e7\u00f5es\n\nEquipamentos e operadores s\u00e3o mantidos.'))return;
   if(!confirm('Confirma? Esta a\u00e7\u00e3o n\u00e3o tem volta.'))return;
-  db.entradas=[];db.comboios=[];db.abastecimentos=[];db.notificacoes=[];
+  db.entradas=[];db.comboios=[];db.abastecimentos=[];avisosSave([]);
   saveDB(); renderAdmin(); alert('Lan\u00e7amentos apagados. Equipamentos e operadores mantidos.');
 }
 
