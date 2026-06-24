@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783260000">
+<meta name="app-version" content="1783300000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -384,15 +384,15 @@ input,select,textarea,button{font-family:inherit}
   </div>
 
 
-  <!-- AVISOS -->
+  <!-- NOTIFICAÇÕES -->
   <div id="screen-notif" class="screen">
     <div class="topbar"><div class="tb">
       <div style="flex:1"><h1>Avisos</h1></div>
       <span id="notif-badge-top" class="pill p-adm" style="display:none"></span>
-      <button class="btn bs bsm" onclick="avisosMarcarTodos()" style="padding:6px 12px;font-size:12px;margin-left:8px"><i class="ti ti-checks"></i> Lidas</button>
-      <button class="btn bd bsm" onclick="avisosApagarLidos()" style="padding:6px 12px;font-size:12px;margin-left:6px"><i class="ti ti-trash"></i> Apagar lidas</button>
+      <button class="btn bs bsm" onclick="marcarTodasLidasNotif()" style="padding:6px 12px;font-size:12px;margin-left:8px"><i class="ti ti-checks"></i> Lidas</button>
+      <button class="btn bd bsm" onclick="apagarNotifLidas()" style="padding:6px 12px;font-size:12px;margin-left:6px"><i class="ti ti-trash"></i> Apagar lidas</button>
     </div></div>
-    <div class="sb" id="avisos-body"></div>
+    <div class="sb" id="notif-body"></div>
     <nav class="bnav" id="nav-notif"></nav>
   </div>
 
@@ -493,7 +493,17 @@ function updateSaldo(){
 function saveDB(){
   updateSaldo();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  // Salva notificações na chave dedicada também
+  _notifSalvar();
   fbPush();
+}
+function loadDB(){
+  try{
+    var s=localStorage.getItem(DB_KEY);
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+  }catch(e){}
+  // Restaura notificações da chave dedicada — tem prioridade
+  _notifCarregar();
 }
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -603,8 +613,11 @@ function iniciarFirebase(url, showAlert, role){
         keys.forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
+        // Restaura notificações da chave dedicada ANTES de salvar
+        _notifCarregar();
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo();
+        updateNotifBadge();
         var ae=document.querySelector('.screen.active');
         if(ae){
           var sid=ae.id.replace('screen-','');
@@ -1692,144 +1705,157 @@ function excluirComboio(id){
 }
 
 // ─────────────────────────────────────────────
-//  AVISOS — armazenamento local independente
-//  localStorage['comboio_avisos_v1'] — nunca toca em db ou Firebase
+//  NOTIFICAÇÕES
 // ─────────────────────────────────────────────
-var AVISOS_KEY = 'comboio_avisos_v1';
+var NOTIF_KEY = 'comboio_notif_v1'; // chave dedicada — Firebase nunca toca aqui
 
-function avisosList(){
-  try{ var s=localStorage.getItem(AVISOS_KEY); return s?JSON.parse(s):[]; }catch(e){ return []; }
+function _notifSalvar(){
+  try{ localStorage.setItem(NOTIF_KEY, JSON.stringify(db.notificacoes||[])); }catch(e){}
 }
-function avisosSave(arr){
-  try{ localStorage.setItem(AVISOS_KEY, JSON.stringify(arr)); }catch(e){}
+function _notifCarregar(){
+  try{
+    var s=localStorage.getItem(NOTIF_KEY);
+    if(s){ var arr=JSON.parse(s); if(Array.isArray(arr)) db.notificacoes=arr; }
+  }catch(e){}
 }
-function avisosAdd(tipo, titulo, descricao, dados){
-  var avisos=avisosList();
-  var n={id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{},
-    data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), lida:false};
-  avisos.unshift(n);
-  avisosSave(avisos);
-  avisosUpdateBadge();
+
+function criarNotif(tipo, titulo, descricao, dados){
+  var n = {id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{}, data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), lida:false, aprovada:null};
+  if(!db.notificacoes) db.notificacoes=[];
+  db.notificacoes.unshift(n);
+  // Salva IMEDIATAMENTE na chave dedicada — não depende do saveDB
+  _notifSalvar();
+  updateNotifBadge();
   return n.id;
 }
-function avisosUpdateBadge(){
-  var avisos=avisosList();
-  var n=avisos.filter(function(a){return !a.lida;}).length;
+
+function updateNotifBadge(){
+  _notifCarregar(); // sempre lê da chave dedicada
+  var nLidas=(db.notificacoes||[]).filter(function(n){return !n.lida;}).length;
+  // Badge no topo da tela de notificações
   var top=document.getElementById('notif-badge-top');
-  if(top){top.textContent=n>0?n+' pendente'+(n>1?'s':''):''; top.style.display=n>0?'':'none';}
-  // Badge no botão de nav
-  var navBtns=document.querySelectorAll('.nb');
-  navBtns.forEach(function(el){
+  if(top){top.textContent=nLidas>0?nLidas+' pendente'+(nLidas>1?'s':''):'';top.style.display=nLidas>0?'':'none';}
+  // Badge nos botões de nav — procura botão que navega para notif
+  document.querySelectorAll('button.nb').forEach(function(el){
     var oc=el.getAttribute('onclick')||'';
     if(oc.indexOf('notif')===-1) return;
-    var b=el.querySelector('.aviso-badge');
-    if(!b){
-      b=document.createElement('span'); b.className='aviso-badge';
-      b.style.cssText='position:absolute;top:0;right:0;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px;min-width:13px;text-align:center';
+    var b=el.querySelector('.nb-badge');
+    if(!b&&nLidas>0){
+      b=document.createElement('span'); b.className='nb-badge';
+      b.style.cssText='position:absolute;top:0;right:0;background:#e53935;color:#fff;font-size:9px;font-weight:700;border-radius:99px;padding:1px 4px;line-height:14px;min-width:14px;text-align:center';
       el.style.position='relative'; el.appendChild(b);
     }
-    b.textContent=n>0?n:''; b.style.display=n>0?'':'none';
+    if(b){b.textContent=nLidas>0?nLidas:''; b.style.display=nLidas>0?'':'none';}
   });
 }
-function updateNotifBadge(){ avisosUpdateBadge(); }
 
 function renderNotif(){
-  var el=document.getElementById('avisos-body'); if(!el) return;
-  var avisos=avisosList();
-  if(!avisos.length){
-    el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhum aviso</div>';
-    avisosUpdateBadge(); return;
+  _notifCarregar(); // sempre lê da chave dedicada antes de exibir
+  var el=document.getElementById('notif-body'); if(!el) return;
+  var lista=(db.notificacoes||[]).slice().sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+  if(!lista.length){
+    el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhuma notificação</div>';
+    updateNotifBadge(); return;
   }
   var ICON={
-    hod_inferior:      {i:'ti-alert-triangle',c:'var(--red)',bg:'var(--rl)'},
-    volume_excede_tank:{i:'ti-alert-triangle',c:'var(--red)',bg:'var(--rl)'},
-    consumo_fora_faixa:{i:'ti-chart-line',    c:'var(--am)', bg:'var(--al)'},
-    abast_corrigido:   {i:'ti-edit',          c:'var(--green)',bg:'var(--gl)'}
+    hod_inferior:      {i:'ti-alert-triangle',c:'var(--red)'},
+    volume_excede_tank:{i:'ti-alert-triangle',c:'var(--red)'},
+    consumo_fora_faixa:{i:'ti-chart-line',    c:'var(--am)'},
+    consumo_divergente:{i:'ti-chart-line',    c:'var(--am)'},
+    abast_corrigido:   {i:'ti-edit',          c:'var(--green)'},
+    comboio_baixo:     {i:'ti-droplet-off',   c:'var(--am)'},
+    reservatorio_baixo:{i:'ti-tank',          c:'var(--am)'}
   };
   var CORRIGIVEIS=['hod_inferior','volume_excede_tank','consumo_fora_faixa'];
-  el.innerHTML=avisos.map(function(n){
-    var ic=ICON[n.tipo]||{i:'ti-bell',c:'var(--t2)',bg:'var(--bg2)'};
-    var border=n.lida?'var(--br)':ic.c;
-    var html='<div style="border:2px solid '+border+';border-radius:var(--r);padding:14px;margin-bottom:10px;background:var(--bg)">'+
+  el.innerHTML=lista.map(function(n){
+    var ic=ICON[n.tipo]||{i:'ti-bell',c:'var(--t2)'};
+    var border=n.lida?'var(--br)':'2px solid '+ic.c;
+    var h='<div style="border:'+border+';border-radius:var(--r);padding:14px;margin-bottom:10px;background:var(--bg)">'+
       '<div style="display:flex;gap:10px;align-items:flex-start">'+
-      '<div style="background:'+ic.bg+';border-radius:8px;padding:8px;flex-shrink:0">'+
-        '<i class="ti '+ic.i+'" style="font-size:20px;color:'+ic.c+'"></i></div>'+
+      '<i class="ti '+ic.i+'" style="font-size:22px;color:'+ic.c+';flex-shrink:0;margin-top:2px"></i>'+
       '<div style="flex:1;min-width:0">'+
         '<div style="font-size:13px;font-weight:700;color:'+ic.c+';margin-bottom:2px">'+n.titulo+'</div>'+
-        '<div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:6px">'+n.descricao+'</div>'+
+        '<div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:5px">'+n.descricao+'</div>'+
         '<div style="font-size:11px;color:var(--t3)">'+fmtDate(n.data)+(n.hora?' • '+n.hora:'')+'</div>';
-    if(!n.lida && CORRIGIVEIS.indexOf(n.tipo)!==-1 && n.dados && n.dados.abastId){
-      html+='<div style="display:flex;gap:8px;margin-top:10px">'+
-        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="avisosAprovar(\''+n.id+'\')"><i class="ti ti-check"></i> Aprovar</button>'+
-        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="avisosCorrigir(\''+n.id+'\')"><i class="ti ti-pencil"></i> Corrigir</button></div>';
+    if(!n.lida&&CORRIGIVEIS.indexOf(n.tipo)!==-1&&n.dados&&n.dados.abastId){
+      h+='<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="btn bp" style="flex:1;padding:8px;font-size:12px" onclick="aprovarNotif(\''+n.id+'\')"><i class="ti ti-check"></i> Aprovar</button>'+
+        '<button class="btn bd" style="flex:1;padding:8px;font-size:12px" onclick="rejeitarNotif(\''+n.id+'\')"><i class="ti ti-pencil"></i> Corrigir</button></div>';
     } else if(!n.lida){
-      html+='<div style="margin-top:8px">'+
-        '<button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="avisosMarcarLida(\''+n.id+'\')"><i class="ti ti-check"></i> Marcar como lida</button></div>';
+      h+='<div style="margin-top:8px"><button class="btn bs" style="padding:6px 14px;font-size:12px" onclick="marcarLidaNotif(\''+n.id+'\')"><i class="ti ti-check"></i> Marcar como lida</button></div>';
     } else {
-      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">'+
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">'+
         '<span style="font-size:11px;color:var(--t3)">✓ Lida</span>'+
-        '<button onclick="avisosApagar(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);cursor:pointer;padding:2px 6px"><i class="ti ti-trash" style="font-size:14px"></i></button></div>';
+        '<button onclick="apagarNotif(\''+n.id+'\')" style="background:none;border:none;color:var(--t3);cursor:pointer;padding:2px 6px"><i class="ti ti-trash" style="font-size:14px"></i></button></div>';
     }
-    html+='</div></div></div>';
-    return html;
+    h+='</div></div></div>'; return h;
   }).join('');
-  avisosUpdateBadge();
+  updateNotifBadge();
 }
 
-function avisosMarcarLida(id){ var a=avisosList(); a.forEach(function(x){if(x.id===id)x.lida=true;}); avisosSave(a); avisosUpdateBadge(); renderNotif(); }
-function avisosMarcarTodos(){ var a=avisosList(); a.forEach(function(x){x.lida=true;}); avisosSave(a); avisosUpdateBadge(); renderNotif(); }
-function avisosApagar(id){ avisosSave(avisosList().filter(function(x){return x.id!==id;})); avisosUpdateBadge(); renderNotif(); }
-function avisosApagarLidos(){
-  var a=avisosList(), n=a.filter(function(x){return x.lida;}).length;
-  if(!n){alert('Nenhum aviso lido.');return;}
-  if(!confirm('Apagar '+n+' aviso'+(n>1?'s lidos':' lido')+'?'))return;
-  avisosSave(a.filter(function(x){return !x.lida;})); avisosUpdateBadge(); renderNotif();
+function marcarLidaNotif(id){
+  _notifCarregar();
+  var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
+  n.lida=true; _notifSalvar(); updateNotifBadge(); renderNotif();
 }
-function avisosAprovar(id){
-  var a=avisosList(), n=a.filter(function(x){return x.id===id;})[0]; if(!n) return;
-  if(n.dados&&n.dados.abastId){
-    var ab=db.abastecimentos.filter(function(x){return x.id===n.dados.abastId;})[0];
+function marcarTodasLidasNotif(){
+  _notifCarregar();
+  (db.notificacoes||[]).forEach(function(n){n.lida=true;});
+  _notifSalvar(); updateNotifBadge(); renderNotif();
+}
+function apagarNotif(id){
+  _notifCarregar();
+  db.notificacoes=(db.notificacoes||[]).filter(function(n){return n.id!==id;});
+  _notifSalvar(); updateNotifBadge(); renderNotif();
+}
+function apagarNotifLidas(){
+  _notifCarregar();
+  var lidas=(db.notificacoes||[]).filter(function(n){return n.lida;}).length;
+  if(!lidas){alert('Nenhuma notificação lida.');return;}
+  if(!confirm('Apagar '+lidas+' notificação'+(lidas>1?'s lidas':' lida')+'?'))return;
+  db.notificacoes=(db.notificacoes||[]).filter(function(n){return !n.lida;});
+  _notifSalvar(); updateNotifBadge(); renderNotif();
+}
+
+function aprovarNotif(id){
+  _notifCarregar();
+  var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
+  n.lida=true; n.aprovada=true;
+  if(n.tipo==='hod_inferior'&&n.dados&&n.dados.abastId){
+    var ab=db.abastecimentos.filter(function(a){return a.id===n.dados.abastId;})[0];
     if(ab){ab.aprovado=true; saveDB();}
   }
-  n.lida=true; avisosSave(a); avisosUpdateBadge(); renderNotif();
+  _notifSalvar(); updateNotifBadge(); renderNotif();
 }
-function avisosCorrigir(id){
-  var a=avisosList(), n=a.filter(function(x){return x.id===id;})[0]; if(!n) return;
-  n.lida=true; avisosSave(a); avisosUpdateBadge();
-  if(n.dados&&n.dados.abastId) setTimeout(function(){abrirModalCorrigir(n.dados.abastId,id);},100);
-}
-// Aliases para compatibilidade
-function criarNotif(tipo,titulo,descricao,dados){
-  var ok=['hod_inferior','consumo_fora_faixa','volume_excede_tank','abast_corrigido'];
-  if(ok.indexOf(tipo)===-1) return null;
-  return avisosAdd(tipo,titulo,descricao,dados);
-}
-function marcarLida(id){avisosMarcarLida(id);}
-function marcarTodasLidas(){avisosMarcarTodos();}
-function apagarNotif(id){avisosApagar(id);}
-function apagarNotifLidas(){avisosApagarLidos();}
-function aprovarNotif(id){avisosAprovar(id);}
-function rejeitarNotif(id){avisosCorrigir(id);}
 
-var _corrigirAbastId=null;
-function abrirModalCorrigir(abastId,notifId){
+function rejeitarNotif(id){
+  _notifCarregar();
+  var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
+  n.lida=true; n.aprovada=false;
+  _notifSalvar(); updateNotifBadge();
+  if(n.dados&&n.dados.abastId){ setTimeout(function(){abrirModalCorrigir(n.dados.abastId,id);},100); return; }
+  renderNotif();
+}
+
+function abrirModalEditarRejeicao(abastId, notifId){
   var ab=db.abastecimentos.filter(function(a){return a.id===abastId;})[0];
   if(!ab){renderNotif();return;}
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km', unid=isKm?'km':'h';
-  var hodAnt=null;
-  var hist=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==ab.id&&Number(a.hod)>0;});
-  if(hist.length){var ant=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodAnt=Number(ant.hod);}
-  _corrigirAbastId=abastId;
-  var m=document.getElementById('modal-corrigir'); if(!m){alert('Modal não encontrado.');return;}
+  var unid=eq&&eq.unidade==='km'?'km':'h';
+  var m=document.getElementById('modal-rejeicao');
+    if(!m){ alert('Modal não encontrado. Recarregue o app.'); return; }
+  // Populate and show modal
   document.getElementById('mc-desc').textContent='Equipamento: '+ab.equip+' • '+fmtDate(ab.data);
-  document.getElementById('mc-info').innerHTML='<strong>'+(isKm?'Odômetro':'Horímetro')+':</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
-    (hodAnt!==null?' | <strong>Mínimo:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
-  document.getElementById('mc-hod-label').textContent=isKm?'Odômetro (km)':'Horímetro (h)';
+  document.getElementById('mc-info').innerHTML=
+    '<strong>Horímetro lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
+    (hodAnt!==null?' | <strong>Anterior:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+
+    ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
+  document.getElementById('mc-hod-label').textContent=(isKm?'Odômetro (km)':'Horímetro (h)');
   document.getElementById('mc-hod').value=ab.hod;
   document.getElementById('mc-vol').value=ab.vol;
   m.style.display='flex';
 }
+
 function salvarCorrecao(){
   if(!_corrigirAbastId) return;
   var newHod=parseFloat(document.getElementById('mc-hod').value);
@@ -1838,25 +1864,27 @@ function salvarCorrecao(){
   if(!newVol||newVol<=0){alert('Informe o volume.');return;}
   var ab=db.abastecimentos.filter(function(a){return a.id===_corrigirAbastId;})[0];
   if(!ab){fecharModalCorrigir();return;}
-  var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var isKm=eq&&eq.unidade==='km', unid=isKm?'km':'h';
-  var histAnt=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==_corrigirAbastId&&Number(a.hod)>0;});
-  var hodMin=0;
-  if(histAnt.length){var ar=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});hodMin=Number(ar.hod);}
-  if(hodMin>0&&newHod<=hodMin){alert('O '+unid+' deve ser maior que '+hodMin.toLocaleString('pt-BR')+' '+unid+'.');return;}
-  var hodAnt=ab.hod, volAnt=ab.vol;
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
-  avisosAdd('abast_corrigido','Abastecimento corrigido — '+ab.equip,
-    'Registro de '+fmtDate(ab.data)+' corrigido. '+(isKm?'Odômetro':'Horímetro')+': '+
-    Number(hodAnt).toLocaleString('pt-BR')+' -> '+Number(newHod).toLocaleString('pt-BR')+' '+unid+
-    ' | Volume: '+Number(volAnt).toFixed(0)+' -> '+newVol+' L',
-    {abastId:_corrigirAbastId,equip:ab.equip});
-  saveDB(); fecharModalCorrigir(); renderNotif(); atualizarCiclo();
-  alert('Abastecimento corrigido com sucesso!');
+  // Mark related notification as resolved
+  if(db.notificacoes){
+    db.notificacoes.forEach(function(n){
+      if(n.dados&&n.dados.abastId===_corrigirAbastId&&!n.lida){
+        n.lida=true; n.aprovada=true;
+      }
+    });
+  }
+  saveDB();
+  fecharModalCorrigir();
+  updateNotifBadge();
+  renderNotif();
+  atualizarCiclo();
+  alert('Abastecimento corrigido!');
 }
+
 function fecharModalCorrigir(){
   _corrigirAbastId=null;
-  var m=document.getElementById('modal-corrigir'); if(m) m.style.display='none';
+  var m=document.getElementById('modal-corrigir');
+  if(m) m.style.display='none';
 }
 
 // ─────────────────────────────────────────────
