@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783420000">
+<meta name="app-version" content="1783460000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -477,12 +477,6 @@ var fs = {step:1, equip:null, hod:null, litros:null,
 // ─────────────────────────────────────────────
 //  DB
 // ─────────────────────────────────────────────
-function loadDB(){
-  try{
-    var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
-  }catch(e){}
-}
 function updateSaldo(){
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
@@ -491,20 +485,18 @@ function updateSaldo(){
        - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0)
   };
 }
-function saveDB(){
-  updateSaldo();
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
-  // Salva notificações na chave dedicada também
-  _notifSalvar();
-  fbPush();
-}
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
     if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
-  // Restaura notificações da chave dedicada — tem prioridade
-  _notifCarregar();
+  if(typeof _notifCarregar==='function') _notifCarregar();
+}
+function saveDB(){
+  updateSaldo();
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  if(typeof _notifSalvar==='function') _notifSalvar();
+  fbPush();
 }
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
