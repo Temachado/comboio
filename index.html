@@ -282,9 +282,10 @@ input,select,textarea,button{font-family:inherit}
             <div class="field"><label>Unidade</label><select id="eq-unid"><option value="h">Horímetro (h)</option><option value="km">Odômetro (km)</option></select></div>
           </div>
           <div class="r2">
-            <div class="field"><label>Consumo esperado</label><input type="number" id="eq-cons" min="0" step="0.1" inputmode="decimal"></div>
-            <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
+            <div class="field"><label>Consumo mín. (L/h ou L/100km)</label><input type="number" id="eq-cons-min" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 8"></div>
+            <div class="field"><label>Consumo máx. (L/h ou L/100km)</label><input type="number" id="eq-cons-max" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 15"></div>
           </div>
+          <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarEq()"><i class="ti ti-device-floppy"></i> Salvar</button>
             <button class="btn bs" style="width:auto;padding:10px 16px" onclick="togFormEq()">Cancelar</button>
@@ -1079,24 +1080,21 @@ function renderResumo(){
 //  KEY PRINCIPLE: oninput NEVER calls renderField()
 //  Only dedicated update functions touch the DOM
 // ─────────────────────────────────────────────
-// Toast visual para o operador de campo
 function fsToast(msg, tipo, duracao){
   var old=document.getElementById('fs-toast'); if(old) old.remove();
   var cor=tipo==='red'?'#c62828':'#e65100';
   var bg=tipo==='red'?'#ffebee':'#fff3e0';
   var t=document.createElement('div');
   t.id='fs-toast';
-  t.style.cssText='position:fixed;top:16px;left:50%;'+
-    'transform:translateX(-50%);z-index:99999;background:'+bg+';border:2px solid '+cor+';'+
-    'border-radius:12px;padding:14px 16px;max-width:340px;width:calc(100% - 32px);'+
-    'box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;align-items:flex-start;gap:10px;'+
-    'animation:toastSlide .2s ease';
+  t.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;'+
+    'background:'+bg+';border:2px solid '+cor+';border-radius:12px;padding:14px 16px;'+
+    'max-width:340px;width:calc(100% - 32px);box-shadow:0 8px 32px rgba(0,0,0,.25);'+
+    'display:flex;align-items:flex-start;gap:10px;animation:toastSlide .2s ease';
   t.innerHTML='<i class="ti ti-alert-triangle" style="font-size:22px;color:'+cor+';flex-shrink:0;margin-top:1px"></i>'+
     '<div style="font-size:13px;font-weight:600;color:'+cor+';line-height:1.5;flex:1;white-space:pre-line">'+msg+'</div>'+
     '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:'+cor+';font-size:22px;cursor:pointer;padding:0;flex-shrink:0;line-height:1;margin-top:-2px">×</button>';
-  // Garantir que o estilo de animação existe
   if(!document.getElementById('toast-anim')){
-    var s=document.createElement('style'); s.id='toast-anim';
+    var s=document.createElement('style');s.id='toast-anim';
     s.textContent='@keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
     document.head.appendChild(s);
   }
@@ -1104,7 +1102,6 @@ function fsToast(msg, tipo, duracao){
   if(duracao!==0) setTimeout(function(){if(t.parentElement)t.remove();},duracao||5000);
 }
 
-// Valida step ao tentar avançar — retorna {msg,tipo,foco} ou null
 function _fsValidarStep(step){
   if(step===2){
     if(!fs.hod) return {msg:'Informe o horímetro antes de continuar.',tipo:'red',foco:'hod-inp'};
@@ -1115,13 +1112,7 @@ function _fsValidarStep(step){
       var ultHod=Number(ult.hod);
       if(hodAtual<=ultHod){
         var ig=hodAtual===ultHod?'igual':'inferior';
-        return {
-          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\n'+
-            'Lançado: '+hodAtual.toLocaleString('pt-BR')+
-            ' | Último: '+ultHod.toLocaleString('pt-BR')+
-            '\n\nCorrija o valor para continuar.',
-          tipo:'red', foco:'hod-inp'
-        };
+        return {msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\nLançado: '+hodAtual.toLocaleString('pt-BR')+' | Último: '+ultHod.toLocaleString('pt-BR')+'\n\nCorrija o valor para continuar.',tipo:'red',foco:'hod-inp'};
       }
     }
   }
@@ -1129,33 +1120,23 @@ function _fsValidarStep(step){
     if(!fs.litros||Number(fs.litros)<=0) return {msg:'Informe a quantidade abastecida.',tipo:'red',foco:'lit-inp'};
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
-    if(cap>0&&l>cap){
-      return {
-        msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',
-        tipo:'red', foco:'lit-inp'
-      };
-    }
+    if(cap>0&&l>cap) return {msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',tipo:'red',foco:'lit-inp'};
   }
   return null;
 }
 
 function fsGo(n){
-  // Valida ao avançar (não ao voltar)
   if(n>fs.step){
     var erro=_fsValidarStep(fs.step);
     if(erro){
-      fsToast(erro.msg, erro.tipo, 0);
-      if(erro.foco) setTimeout(function(){
-        var el=document.getElementById(erro.foco);
-        if(el){el.focus();el.select();}
-      },80);
+      fsToast(erro.msg,erro.tipo,0);
+      if(erro.foco) setTimeout(function(){var el=document.getElementById(erro.foco);if(el){el.focus();el.select();}},80);
       return;
     }
   }
   var old=document.getElementById('fs-toast'); if(old) old.remove();
   history.pushState({step:n},'','#field-'+n);
-  fs.step=n;
-  renderField();
+  fs.step=n; renderField();
 }
 
 function renderField(){
@@ -1199,16 +1180,11 @@ function renderFS2(){
   var unit=isKm?'km':'horas';
   var placeholder=isKm?'Ex: 125400':'Ex: 4820';
 
-  // Busca último horímetro registrado para orientação
+  // Referência do último horímetro aprovado
   var ultimoHod=null;
   var histRef=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-  if(histRef.length){
-    var ultRef=histRef.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    ultimoHod=Number(ultRef.hod);
-  }
-  var hodRefHtml=ultimoHod!==null
-    ? '<div style="font-size:12px;color:var(--t3);margin-top:6px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>'
-    : '';
+  if(histRef.length){var ultRef=histRef.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});ultimoHod=Number(ultRef.hod);}
+  var hodRefHtml=ultimoHod!==null?'<div style="font-size:12px;color:var(--t3);margin-top:6px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>':'';
 
   // Photo area horímetro
   var hodPhotoHtml='';
@@ -1240,6 +1216,8 @@ function renderFS2(){
     '<div class="seg-label">Horímetro</div>'+
     hodPhotoHtml+
     '</div>'+
+    // CRITICAL: input has NO oninput that calls renderField
+    // uses onHodChange which only updates button state
     '<div class="field">'+
     '<label>Digitar '+unit+' manualmente</label>'+
     '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
@@ -1292,45 +1270,16 @@ function renderFS3(){
 
 function renderFS4(){
   var e=fs.equip, isKm=(e.unidade==='km');
-  var hodAtual=Number(fs.hod), volAtual=Number(fs.litros);
-  var cap=e.tank?Number(e.tank):0;
-
-  // Calcular erros críticos
-  var erros=[];
-  var hist4=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-  if(hist4.length){
-    var ult4=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
-    var ultH4=Number(ult4.hod);
-    if(hodAtual<=ultH4){
-      var ig4=hodAtual===ultH4?'igual':'inferior';
-      erros.push((isKm?'Odômetro':'Horímetro')+' '+ig4+' ao anterior ('+ultH4.toLocaleString('pt-BR')+'). Volte e corrija.');
-    }
-  }
-  if(cap>0&&volAtual>cap){
-    erros.push('Volume ('+volAtual.toFixed(0)+' L) maior que a capacidade ('+cap.toLocaleString('pt-BR')+' L). Volte e corrija.');
-  }
-
-  var errosHtml=erros.map(function(msg){
-    return '<div style="background:#ffebee;border:2px solid #c62828;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:flex-start">'+
-      '<i class="ti ti-alert-triangle" style="color:#c62828;font-size:18px;flex-shrink:0;margin-top:1px"></i>'+
-      '<div style="font-size:13px;font-weight:600;color:#c62828">'+msg+'</div></div>';
-  }).join('');
-
   var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
     '<div class="crow"><span class="cl">Tipo</span><span class="cv">'+e.tipo+'</span></div>'+
     (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
-    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+hodAtual.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
-    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+volAtual.toFixed(0)+' L</span></div>'+
+    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
+    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div>'+
     '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
     '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
-
-  var btnConfirmar = erros.length>0
-    ? '<button class="btn" disabled style="width:100%;padding:16px;background:#e0e0e0;color:#9e9e9e;border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:not-allowed;display:flex;align-items:center;justify-content:center;gap:8px"><i class="ti ti-lock"></i> Corrija os erros para confirmar</button>'
-    : '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>';
-
   return '<div class="seg-label">Confirme os dados</div>'+
-    '<div class="card" style="margin-bottom:12px">'+rows+'</div>'+
-    errosHtml+btnConfirmar+
+    '<div class="card" style="margin-bottom:14px">'+rows+'</div>'+
+    '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>'+
     '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';
 }
 
@@ -1344,17 +1293,15 @@ function renderFS5(){
 
 // ─── Input handlers — ONLY update button state, never rebuild DOM ───
 function onHodChange(val){
-  fs.hod = val.trim() || null;
+  fs.hod=val.trim()||null;
   var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-hod');
-  if(btn) btn.disabled=!fs.hod;
+  var btn=document.getElementById('btn-hod'); if(btn) btn.disabled=!fs.hod;
 }
 
 function onLitrosChange(val){
-  fs.litros = val || null;
+  fs.litros=val||null;
   var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-lit');
-  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+  var btn=document.getElementById('btn-lit'); if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
 }
 
 // ±50 buttons — update input field directly, no DOM rebuild
@@ -2102,7 +2049,8 @@ function editarEq(cod){
   document.getElementById('eq-placa').value=e.placa||'';
   document.getElementById('eq-tank').value=e.tank||'';
   document.getElementById('eq-unid').value=e.unidade||'h';
-  document.getElementById('eq-cons').value=e.consumo||'';
+  document.getElementById('eq-cons-min').value=e.consumoMin||'';
+  document.getElementById('eq-cons-max').value=e.consumoMax||'';
   document.getElementById('eq-frente').value=e.frente||'';
   document.getElementById('eq-cod').dataset.editando=cod;
   document.getElementById('form-eq').style.display='block';
@@ -2527,31 +2475,24 @@ document.getElementById('c-data').value=today();
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
-      reg.update();
-      function mostrarBanner(worker){
-        // Instrui o novo SW a assumir controle imediatamente
-        worker.postMessage({type:'SKIP_WAITING'});
-        var b=document.getElementById('update-banner');
-        if(b) return; // já está mostrando
-        b=document.createElement('div');
-        b.id='update-banner';
-        b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
-        document.body.appendChild(b);
-      }
-      if(reg.waiting) mostrarBanner(reg.waiting);
-      reg.addEventListener('updatefound',function(){
-        var w=reg.installing;
-        w.addEventListener('statechange',function(){
-          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
+      reg.update(); // Force check on every load
+      var handleUpdate=function(worker){
+        worker.addEventListener('statechange',function(){
+          if(this.state==='activated'){
+            // Show banner and auto-reload after 3s
+            var b=document.createElement('div');
+            b.id='update-banner';
+            b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600';
+            b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+            document.body.appendChild(b);
+          }
         });
-      });
-      // Detecta quando SW assume controle — recarrega automaticamente
-      var refreshing=false;
-      navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(!refreshing){refreshing=true; window.location.reload();}
-      });
+      };
+      if(reg.waiting) handleUpdate(reg.waiting);
+      reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
+      // Periodic check every 5 minutes
       setInterval(function(){ reg.update(); }, 300000);
+      // Periodic Firebase reconnect check every 30 seconds
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
