@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783460000">
+<meta name="app-version" content="1783500000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -144,7 +144,7 @@ input,select,textarea,button{font-family:inherit}
   <div style="font-size:56px;color:#9fe1cb;margin-bottom:16px"><i class="ti ti-gas-station"></i></div>
   <div style="font-size:24px;font-weight:600;color:#e1f5ee;margin-bottom:8px">Comboio</div>
   <div style="font-size:14px;color:#5dcaa5;margin-bottom:40px;line-height:1.6">Controle de combustível<br>Selecione seu tipo de acesso</div>
-  <button onclick="entrarCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
+  <button onclick="mostrarLoginCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
     <i class="ti ti-tractor" style="font-size:22px"></i> Sou operador de campo
   </button>
   <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
@@ -153,8 +153,33 @@ input,select,textarea,button{font-family:inherit}
   <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
 </div>
 
+<!-- LOGIN CAMPO -->
+<div id="login-campo" style="display:none" class="login-wrap">
+  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-tractor"></i></div>
+  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Operador de campo</div>
+  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Use seu login e senha</div>
+  <div class="login-card">
+    <div class="login-err" id="login-campo-err" style="display:none">Usuário ou senha incorretos.</div>
+    <div class="field"><label>Usuário</label><input type="text" id="campo-user" autocomplete="username" autocapitalize="none" placeholder="Seu usuário" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
+    <div class="field"><label>Senha</label><input type="password" id="campo-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
+    <button class="btn bp" onclick="doLoginCampo()"><i class="ti ti-lock-open"></i> Entrar</button>
+    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
+  </div>
+</div>
+
 <!-- LOGIN ADMIN -->
 <div id="login-admin" style="display:none" class="login-wrap">
+  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
+  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
+  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
+  <div class="login-card">
+    <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
+    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocomplete="username" autocapitalize="none" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="btn bp" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
+    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
+  </div>
+</div>
   <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
   <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
   <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
@@ -274,7 +299,7 @@ input,select,textarea,button{font-family:inherit}
             </div>
           </div>
           <div class="r2">
-            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="words" placeholder="Ex: Komatsu PC200"></div>
+            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: KOMATSU PC200" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase" placeholder="ABC-1234"></div>
           </div>
           <div class="r2">
@@ -282,10 +307,9 @@ input,select,textarea,button{font-family:inherit}
             <div class="field"><label>Unidade</label><select id="eq-unid"><option value="h">Horímetro (h)</option><option value="km">Odômetro (km)</option></select></div>
           </div>
           <div class="r2">
-            <div class="field"><label>Consumo mín. (L/h ou L/100km)</label><input type="number" id="eq-cons-min" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 8"></div>
-            <div class="field"><label>Consumo máx. (L/h ou L/100km)</label><input type="number" id="eq-cons-max" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 15"></div>
+            <div class="field"><label>Consumo mín. (L/h ou L/km)</label><input type="number" id="eq-cons-min" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 8"></div>
+            <div class="field"><label>Consumo máx. (L/h ou L/km)</label><input type="number" id="eq-cons-max" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 15"></div>
           </div>
-          <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarEq()"><i class="ti ti-device-floppy"></i> Salvar</button>
             <button class="btn bs" style="width:auto;padding:10px 16px" onclick="togFormEq()">Cancelar</button>
@@ -294,17 +318,21 @@ input,select,textarea,button{font-family:inherit}
         <div id="lista-eq"></div>
       </div>
 
-      <!-- Operadores -->
+      <!-- Operadores de campo com login -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="ct" style="margin-bottom:0">Operadores de campo</div>
+          <div class="ct" style="margin-bottom:0">Logins de operadores</div>
           <button class="btn bp bsm" onclick="togFormUser()"><i class="ti ti-plus"></i> Adicionar</button>
         </div>
-        <p class="note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
+        <p class="note" style="margin-bottom:12px">Cada operador tem usuário e senha próprios. Somente o administrador pode criar ou alterar.</p>
         <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
           <div class="r2">
             <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: JOÃO SILVA" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Usuário (login)</label><input type="text" id="u-login" autocapitalize="none" autocomplete="off" placeholder="Ex: joao.silva"></div>
+            <div class="field"><label>Senha</label><input type="password" id="u-senha" autocomplete="new-password" placeholder="Mín. 4 caracteres"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button>
@@ -469,7 +497,7 @@ var fbRefMaster = null;  // /comboio_master — Mac writes here
 var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos here
 
 // Field wizard state — never destroyed during input
-var fs = {step:1, equip:null, hod:null, litros:null,
+var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
           fotoHod:false, fotoBomba:false,
           imgHod:null, imgBomba:null, imgId:null,
           analisando:false};
@@ -690,13 +718,32 @@ function renderSyncStatus(){
 // ─────────────────────────────────────────────
 //  SPLASH / LOGIN
 // ─────────────────────────────────────────────
+function mostrarLoginCampo(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-campo').style.display='flex';
+  setTimeout(function(){document.getElementById('campo-user').focus();},100);
+}
+function doLoginCampo(){
+  var u=document.getElementById('campo-user').value.trim().toLowerCase();
+  var p=document.getElementById('campo-pass').value;
+  var op=db.operadores.filter(function(x){return (x.login||'').toLowerCase()===u && x.senha===p;})[0];
+  var errEl=document.getElementById('login-campo-err');
+  if(op){
+    errEl.style.display='none';
+    document.getElementById('login-campo').style.display='none';
+    document.getElementById('campo-user').value='';
+    document.getElementById('campo-pass').value='';
+    entrarCampo();
+  } else {
+    errEl.style.display='block';
+  }
+}
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
+  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
-  // Always mark this device as receptor
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  // Auto-connect silently
   setTimeout(_fbAutoConectar, 500);
 }
 function mostrarLoginAdmin(){
@@ -706,10 +753,14 @@ function mostrarLoginAdmin(){
 }
 function voltarSplash(){
   document.getElementById('login-admin').style.display='none';
+  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-err').style.display='none';
+  document.getElementById('login-campo-err').style.display='none';
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
+  document.getElementById('campo-user').value='';
+  document.getElementById('campo-pass').value='';
   document.getElementById('splash').style.display='flex';
 }
 function doLogin(){
@@ -1191,16 +1242,17 @@ function renderFS2(){
     hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
   }
 
-  // Photo area bomba
+  // Campo litragem da bomba (substitui foto)
   var bombaHtml='';
   if(fs.fotoHod||fs.hod){
-    if(fs.fotoBomba){
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
-    } else {
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
-    }
+    bombaHtml='<div style="margin-top:14px"><div class="field">'+
+      '<label>Leitura da bomba (L) <span style="color:var(--t3);font-weight:400;font-size:11px">(opcional)</span></label>'+
+      '<input type="number" id="bomba-lit" inputmode="decimal" placeholder="Ex: 12450.5" step="0.1" min="0"'+
+      ' value="'+(fs.litrosBomba||'')+'"'+
+      ' oninput="fs.litrosBomba=this.value||null"'+
+      ' style="font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
+      '<div style="font-size:11px;color:var(--t3);margin-top:4px">Numeração do visor da bomba no momento do abastecimento</div>'+
+      '</div></div>';
   }
 
   return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
@@ -1267,7 +1319,8 @@ function renderFS4(){
     (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
     '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
     '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div>'+
-    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
+    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'—')+'</span></div>'+
+    (fs.litrosBomba?'<div class="crow"><span class="cl">Leitura bomba</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litrosBomba).toLocaleString('pt-BR')+' L</span></div>':'')+
     '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
   return '<div class="seg-label">Confirme os dados</div>'+
     '<div class="card" style="margin-bottom:14px">'+rows+'</div>'+
@@ -1308,7 +1361,7 @@ function fsAdj(d){
 
 function fsSelEq(cod){
   fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
-  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
+  fs.hod=null;fs.litros=null;fs.litrosBomba=null;fs.fotoHod=false;fs.fotoBomba=false;
   fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
   renderField();
 }
@@ -1318,7 +1371,7 @@ function fsEditHod(){
   setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
 }
 function fsNovo(){
-  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
+  fs={step:1,equip:null,hod:null,litros:null,litrosBomba:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
   renderField();
 }
 
@@ -1469,7 +1522,7 @@ function fsConfirmar(){
     ultimoHod=Number(ultimo.hod);
   }
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,litrosBomba:fs.litrosBomba?Number(fs.litrosBomba):null};
   db.abastecimentos.push(abast);
 
   if(fs.fotoHod||fs.fotoBomba){
@@ -2051,12 +2104,39 @@ function editarEq(cod){
 function salvarUser(){
   var nome=document.getElementById('u-nome').value.trim().toUpperCase();
   if(!nome){alert('Informe o nome.');return;}
-  db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});
+  var login=(document.getElementById('u-login').value||'').trim().toLowerCase();
+  var senha=document.getElementById('u-senha').value||'';
+  if(!login){alert('Informe o usuário de login.');return;}
+  if(!senha||senha.length<4){alert('Informe uma senha de no mínimo 4 caracteres.');return;}
+  // Verificar login duplicado
+  var editandoId=document.getElementById('u-nome').dataset.editando||'';
+  var dup=db.operadores.filter(function(u){return u.login===login&&u.id!==editandoId;});
+  if(dup.length){alert('Este login já está em uso. Escolha outro.');return;}
+  if(editandoId){
+    db.operadores=db.operadores.map(function(u){
+      if(u.id!==editandoId) return u;
+      return {id:u.id,nome:nome,mat:document.getElementById('u-mat').value,login:login,senha:senha};
+    });
+    document.getElementById('u-nome').dataset.editando='';
+    alert('Operador atualizado!');
+  } else {
+    db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value,login:login,senha:senha});
+    alert('Operador cadastrado!');
+  }
   saveDB();
-  ['u-nome','u-mat'].forEach(function(id){document.getElementById(id).value='';});
+  ['u-nome','u-mat','u-login','u-senha'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('form-user').style.display='none';
   renderAdmin();
-  alert('Operador cadastrado!');
+}
+function editarUser(id){
+  var u=db.operadores.filter(function(x){return x.id===id;})[0]; if(!u) return;
+  document.getElementById('u-nome').value=u.nome||'';
+  document.getElementById('u-mat').value=u.mat||'';
+  document.getElementById('u-login').value=u.login||'';
+  document.getElementById('u-senha').value=u.senha||'';
+  document.getElementById('u-nome').dataset.editando=id;
+  document.getElementById('form-user').style.display='block';
+  document.getElementById('form-user').scrollIntoView({behavior:'smooth'});
 }
 function removerUser(id){
   if(!confirm('Remover?'))return;
@@ -2093,7 +2173,8 @@ function renderAdmin(){
   lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador</div>':
     db.operadores.map(function(u){
       return'<div class="uitem"><div class="uav">'+u.nome.charAt(0).toUpperCase()+'</div>'+
-        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+'Operador</div></div>'+
+        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+
+        (u.login?'Login: <strong>'+u.login+'</strong>':'sem login')+'</div></div>'+
         '<div style="display:flex;gap:4px">'+
         '<button class="del" onclick="editarUser(\''+u.id+'\')"><i class="ti ti-pencil"></i></button>'+
         '<button class="del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button>'+
@@ -2235,27 +2316,19 @@ function updateDelSelBtn(){
 function apagarSelecionados(){
   var selecionados=Object.entries(_histSel).filter(function(kv){return kv[1].checked;});
   if(!selecionados.length){alert('Nenhum item selecionado.');return;}
-  if(!confirm('Apagar '+selecionados.length+' lançamento'+(selecionados.length>1?'s':'')+' selecionado'+(selecionados.length>1?'s':'')+'?'))return;
+  if(!confirm('Apagar '+selecionados.length+' registro'+(selecionados.length>1?'s':'')+' do histórico?\n\nNota: abastecimentos de campo são removidos apenas deste histórico. Entradas e carregamentos são removidos dos seus módulos originais também.'))return;
   selecionados.forEach(function(kv){
     var id=kv[0], tipo=kv[1].tipo;
-    if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
+    // Abastecimentos: remove apenas do histórico (não propaga)
+    if(tipo==='fuel'){
+      db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
+    }
+    // Entradas e comboios: remove também do módulo original
+    else if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
     else if(tipo==='transfer') db.comboios=db.comboios.filter(function(c){return c.id!==id;});
-    else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
-  // Pause campo listener to prevent deleted items from reappearing
-  if(fbRefCampo) try{fbRefCampo.child('abastecimentos').off();}catch(e){}
   saveDB();
-  // Update campo node with cleaned list
-  if(fbRefCampo&&fbActive) try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}
-  // Push master
-  setTimeout(fbPush, 100);
-  // Re-attach campo listener after a delay
-  setTimeout(function(){
-    if(fbRefCampo&&fbActive){
-      fbRefCampo.child('abastecimentos').on('value',onCampoAbastUpdate);
-    }
-  }, 2000);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
@@ -2467,24 +2540,28 @@ document.getElementById('c-data').value=today();
 if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
-      reg.update(); // Force check on every load
-      var handleUpdate=function(worker){
-        worker.addEventListener('statechange',function(){
-          if(this.state==='activated'){
-            // Show banner and auto-reload after 3s
-            var b=document.createElement('div');
-            b.id='update-banner';
-            b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600';
-            b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
-            document.body.appendChild(b);
-          }
+      reg.update();
+      function mostrarBanner(worker){
+        worker.postMessage({type:'SKIP_WAITING'});
+        if(document.getElementById('update-banner')) return;
+        var b=document.createElement('div');
+        b.id='update-banner';
+        b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+        document.body.appendChild(b);
+      }
+      if(reg.waiting) mostrarBanner(reg.waiting);
+      reg.addEventListener('updatefound',function(){
+        var w=reg.installing;
+        w.addEventListener('statechange',function(){
+          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
         });
-      };
-      if(reg.waiting) handleUpdate(reg.waiting);
-      reg.addEventListener('updatefound',function(){ handleUpdate(reg.installing); });
-      // Periodic check every 5 minutes
+      });
+      var refreshing=false;
+      navigator.serviceWorker.addEventListener('controllerchange',function(){
+        if(!refreshing){refreshing=true;window.location.reload();}
+      });
       setInterval(function(){ reg.update(); }, 300000);
-      // Periodic Firebase reconnect check every 30 seconds
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
