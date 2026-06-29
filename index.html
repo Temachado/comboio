@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783500000">
+<meta name="app-version" content="1783560000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -99,8 +99,8 @@ input,select,textarea,button{font-family:inherit}
 .hic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .hic.entry{background:var(--bll);color:var(--bl)}.hic.transfer{background:var(--al);color:var(--am)}.hic.fuel{background:var(--gl);color:var(--green)}
 .hb{flex:1;min-width:0}.hn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hs{font-size:11px;color:var(--t3)}.hv{font-size:14px;font-weight:600;font-family:monospace;white-space:nowrap}
-.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd);text-align:center}
-.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd)}
+.splash{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--gd);text-align:center}
+.login-wrap{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--gd)}
 .login-card{background:var(--cd);border-radius:var(--r);padding:24px;width:100%;max-width:360px}
 .login-err{background:var(--rl);color:var(--red);border-radius:var(--rs);padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
 .eli{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--br)}
@@ -144,27 +144,13 @@ input,select,textarea,button{font-family:inherit}
   <div style="font-size:56px;color:#9fe1cb;margin-bottom:16px"><i class="ti ti-gas-station"></i></div>
   <div style="font-size:24px;font-weight:600;color:#e1f5ee;margin-bottom:8px">Comboio</div>
   <div style="font-size:14px;color:#5dcaa5;margin-bottom:40px;line-height:1.6">Controle de combustível<br>Selecione seu tipo de acesso</div>
-  <button onclick="mostrarLoginCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
+  <button onclick="entrarCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
     <i class="ti ti-tractor" style="font-size:22px"></i> Sou operador de campo
   </button>
   <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
     <i class="ti ti-shield-lock" style="font-size:18px"></i> Acesso administrativo
   </button>
   <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
-</div>
-
-<!-- LOGIN CAMPO -->
-<div id="login-campo" style="display:none" class="login-wrap">
-  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-tractor"></i></div>
-  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Operador de campo</div>
-  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Use seu login e senha</div>
-  <div class="login-card">
-    <div class="login-err" id="login-campo-err" style="display:none">Usuário ou senha incorretos.</div>
-    <div class="field"><label>Usuário</label><input type="text" id="campo-user" autocomplete="username" autocapitalize="none" placeholder="Seu usuário" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
-    <div class="field"><label>Senha</label><input type="password" id="campo-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
-    <button class="btn bp" onclick="doLoginCampo()"><i class="ti ti-lock-open"></i> Entrar</button>
-    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
-  </div>
 </div>
 
 <!-- LOGIN ADMIN -->
@@ -718,29 +704,8 @@ function renderSyncStatus(){
 // ─────────────────────────────────────────────
 //  SPLASH / LOGIN
 // ─────────────────────────────────────────────
-function mostrarLoginCampo(){
-  document.getElementById('splash').style.display='none';
-  document.getElementById('login-campo').style.display='flex';
-  setTimeout(function(){document.getElementById('campo-user').focus();},100);
-}
-function doLoginCampo(){
-  var u=document.getElementById('campo-user').value.trim().toLowerCase();
-  var p=document.getElementById('campo-pass').value;
-  var op=db.operadores.filter(function(x){return (x.login||'').toLowerCase()===u && x.senha===p;})[0];
-  var errEl=document.getElementById('login-campo-err');
-  if(op){
-    errEl.style.display='none';
-    document.getElementById('login-campo').style.display='none';
-    document.getElementById('campo-user').value='';
-    document.getElementById('campo-pass').value='';
-    entrarCampo();
-  } else {
-    errEl.style.display='block';
-  }
-}
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
-  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
@@ -753,14 +718,10 @@ function mostrarLoginAdmin(){
 }
 function voltarSplash(){
   document.getElementById('login-admin').style.display='none';
-  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-err').style.display='none';
-  document.getElementById('login-campo-err').style.display='none';
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
-  document.getElementById('campo-user').value='';
-  document.getElementById('campo-pass').value='';
   document.getElementById('splash').style.display='flex';
 }
 function doLogin(){
@@ -2541,33 +2502,44 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
       reg.update();
-      function mostrarBanner(worker){
-        worker.postMessage({type:'SKIP_WAITING'});
+      var swWaiting=null;
+      function mostrarBanner(){
         if(document.getElementById('update-banner')) return;
         var b=document.createElement('div');
         b.id='update-banner';
         b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+        b.innerHTML='<span>✨ Nova versão disponível</span>'
+          +'<button id="btn-atualizar" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar agora</button>';
         document.body.appendChild(b);
+        document.getElementById('btn-atualizar').addEventListener('click',function(){
+          this.disabled=true; this.textContent='Atualizando...';
+          if(swWaiting) swWaiting.postMessage({type:'SKIP_WAITING'});
+          else window.location.reload(true);
+        });
       }
-      if(reg.waiting) mostrarBanner(reg.waiting);
+      // Detecta SW em waiting
+      function checkWaiting(r){
+        if(r.waiting){swWaiting=r.waiting; mostrarBanner();}
+      }
+      checkWaiting(reg);
       reg.addEventListener('updatefound',function(){
         var w=reg.installing;
         w.addEventListener('statechange',function(){
-          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
+          if(w.state==='installed'&&navigator.serviceWorker.controller){
+            swWaiting=w; mostrarBanner();
+          }
         });
       });
-      var refreshing=false;
+      // Quando SW assume controle após skipWaiting → recarrega
       navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(!refreshing){refreshing=true;window.location.reload();}
+        window.location.reload();
       });
-      setInterval(function(){ reg.update(); }, 300000);
+      setInterval(function(){ reg.update(); },300000);
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
           var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-          _fbStarted=false;
-          iniciarFirebase(url,false,_isM?'admin':'campo');
+          _fbStarted=false; iniciarFirebase(url,false,_isM?'admin':'campo');
         }
       },30000);
     }).catch(function(){});
