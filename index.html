@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783420000">
+<meta name="app-version" content="1783600000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -204,19 +204,9 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <div class="field"><label>Fornecedor</label><input type="text" id="e-forn" autocapitalize="words" placeholder="Nome da distribuidora"></div>
         <div style="height:1px;background:var(--br);margin:4px 0 14px"></div>
-        <div class="seg-label">Bomba do pátio <span style="color:var(--t3);font-weight:400">(opcional)</span></div>
-        <div id="e-foto-area" class="pha" onclick="abrirCamEntrada()" style="padding:18px 16px;margin-bottom:12px">
-          <i class="ti ti-camera" id="e-foto-icon" style="font-size:26px;color:var(--t3);display:block;margin-bottom:6px"></i>
-          <div class="pt" id="e-foto-label" style="font-size:12px">Fotografar bomba do pátio</div>
-          <div class="ps" id="e-foto-sub" style="font-size:11px">Visor do horímetro ou bomba</div>
-        </div>
-        <input type="file" id="cam-entrada" accept="image/*" capture="environment" style="display:none" onchange="onFotoEntrada(this)">
-        <div id="e-hod-box" style="display:none">
-          <div id="e-ocr-status"></div>
-          <div class="field">
-            <label>Leitura da bomba (m³ ou L)</label>
-            <input type="number" id="e-hod" inputmode="numeric" placeholder="Ex: 125400" style="font-size:18px;font-family:monospace">
-          </div>
+        <div class="field">
+          <label>Número da bomba (m³ ou L) <span style="color:var(--t3);font-weight:400;font-size:11px">(opcional)</span></label>
+          <input type="number" id="e-hod" inputmode="numeric" placeholder="Ex: 125400" style="font-size:18px;font-family:monospace">
         </div>
         <button class="btn bp" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
       </div>
@@ -274,7 +264,7 @@ input,select,textarea,button{font-family:inherit}
             </div>
           </div>
           <div class="r2">
-            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="words" placeholder="Ex: Komatsu PC200"></div>
+            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: KOMATSU PC200" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase" placeholder="ABC-1234"></div>
           </div>
           <div class="r2">
@@ -282,8 +272,8 @@ input,select,textarea,button{font-family:inherit}
             <div class="field"><label>Unidade</label><select id="eq-unid"><option value="h">Horímetro (h)</option><option value="km">Odômetro (km)</option></select></div>
           </div>
           <div class="r2">
-            <div class="field"><label>Consumo esperado</label><input type="number" id="eq-cons" min="0" step="0.1" inputmode="decimal"></div>
-            <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
+            <div class="field"><label>Consumo mín. (L/h ou L/km)</label><input type="number" id="eq-cons-min" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 8"></div>
+            <div class="field"><label>Consumo máx. (L/h ou L/km)</label><input type="number" id="eq-cons-max" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 15"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarEq()"><i class="ti ti-device-floppy"></i> Salvar</button>
@@ -468,7 +458,7 @@ var fbRefMaster = null;  // /comboio_master — Mac writes here
 var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos here
 
 // Field wizard state — never destroyed during input
-var fs = {step:1, equip:null, hod:null, litros:null,
+var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
           fotoHod:false, fotoBomba:false,
           imgHod:null, imgBomba:null, imgId:null,
           analisando:false};
@@ -1223,18 +1213,6 @@ function renderFS2(){
     hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
   }
 
-  // Photo area bomba
-  var bombaHtml='';
-  if(fs.fotoHod||fs.hod){
-    if(fs.fotoBomba){
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
-    } else {
-      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
-    }
-  }
-
   return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
     '<div style="margin-bottom:14px">'+
     '<div class="seg-label">Horímetro</div>'+
@@ -1247,9 +1225,7 @@ function renderFS2(){
     ' style="font-size:20px;font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
     hodRefHtml+
     '</div>'+
-    bombaHtml+
     '<input type="file" id="cam-hod" accept="image/*" capture="environment" style="display:none" onchange="onFotoHod(this)">'+
-    '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)">'+
     '<button id="btn-hod" class="btn bp" '+(fs.hod?'':'disabled')+' onclick="fsGo(3)"><i class="ti ti-arrow-right"></i> Próximo</button>'+
     '<button class="btn bs" onclick="fsGo(1)"><i class="ti ti-arrow-left"></i> Voltar</button>';
 }
@@ -1262,16 +1238,14 @@ function renderFS3(){
   if(l>0&&l>sc&&sc>0) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que o saldo do comboio ('+sc.toFixed(0)+' L).</span></div>';
   if(l>0&&l>cap*1.05&&cap<9999) warns+='<div class="alert aw"><i class="ti ti-alert-triangle"></i><span>Volume maior que a capacidade ('+cap+' L).</span></div>';
 
-  // Photo area bomba (also available on this step)
-  var bombaStep='';
-  if(!fs.fotoBomba){
-    bombaStep='<div style="margin-bottom:14px"><div class="seg-label">Foto da bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
-      '<div class="pha" onclick="abrirCamBomba()" style="padding:16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div>'+
-      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
-  } else {
-    bombaStep='<div style="margin-bottom:14px"><div class="pha has" onclick="abrirCamBomba()" style="padding:14px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto da bomba capturada</div></div>'+
-      '<input type="file" id="cam-bomba" accept="image/*" capture="environment" style="display:none" onchange="onFotoBomba(this)"></div>';
-  }
+  // Campo de leitura da bomba (substitui foto)
+  var bombaStep='<div style="margin-bottom:14px"><div class="field">'+
+    '<label>Leitura da bomba (L) <span style="color:var(--t3);font-weight:400;font-size:11px">(opcional)</span></label>'+
+    '<input type="number" id="bomba-lit" inputmode="decimal" step="0.1" min="0" placeholder="Ex: 12450.5" value="'+(fs.litrosBomba||'')+'"'+
+    ' oninput="fs.litrosBomba=this.value||null"'+
+    ' style="font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
+    '<div style="font-size:11px;color:var(--t3);margin-top:4px">Numeração do visor da bomba no abastecimento</div>'+
+    '</div></div>';
 
   return '<div class="sbar"><span class="sbarlabel"><i class="ti ti-droplet"></i> Saldo no comboio</span><span class="sbarval">'+Math.max(0,sc).toLocaleString('pt-BR',{maximumFractionDigits:0})+' L</span></div>'+
     bombaStep+
@@ -1321,7 +1295,8 @@ function renderFS4(){
     (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
     '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+hodAtual.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
     '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+volAtual.toFixed(0)+' L</span></div>'+
-    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
+    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'—')+'</span></div>'+
+    (fs.litrosBomba?'<div class="crow"><span class="cl">Leitura bomba</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litrosBomba).toLocaleString('pt-BR')+' L</span></div>':'')+
     '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
 
   var btnConfirmar = erros.length>0
@@ -1369,7 +1344,7 @@ function fsAdj(d){
 
 function fsSelEq(cod){
   fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
-  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
+  fs.hod=null;fs.litros=null;fs.litrosBomba=null;fs.fotoHod=false;fs.fotoBomba=false;
   fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
   renderField();
 }
@@ -1379,7 +1354,7 @@ function fsEditHod(){
   setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
 }
 function fsNovo(){
-  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
+  fs={step:1,equip:null,hod:null,litros:null,litrosBomba:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
   renderField();
 }
 
@@ -1530,7 +1505,7 @@ function fsConfirmar(){
     ultimoHod=Number(ultimo.hod);
   }
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,litrosBomba:fs.litrosBomba?Number(fs.litrosBomba):null};
   db.abastecimentos.push(abast);
 
   if(fs.fotoHod||fs.fotoBomba){
@@ -1678,59 +1653,16 @@ function fsConfirmar(){
 // ─────────────────────────────────────────────
 var _eHodImg=null, _eHodVal=null;
 
-function abrirCamEntrada(){document.getElementById('cam-entrada').click();}
-
-function onFotoEntrada(input){
-  var file=input.files[0]; if(!file) return;
-  var r=new FileReader();
-  r.onload=function(e){
-    _eHodImg=e.target.result; _eHodVal=null;
-    var fa=document.getElementById('e-foto-area');
-    var fi=document.getElementById('e-foto-icon');
-    var fl=document.getElementById('e-foto-label');
-    var fs=document.getElementById('e-foto-sub');
-    fa.classList.add('has');
-    fi.className='ti ti-check'; fi.style.color='var(--green)';
-    fl.textContent='Foto capturada';
-    fs.textContent='Toque para tirar outra';
-    document.getElementById('e-hod-box').style.display='block';
-    document.getElementById('e-ocr-status').innerHTML='<div class="analyzing"><div class="spin"></div> Lendo bomba...</div>';
-    runOCREntrada(e.target.result, function(num){
-      _eHodVal=num||null;
-      document.getElementById('e-ocr-status').innerHTML='';
-      if(num){document.getElementById('e-hod').value=num;}
-      else{setTimeout(function(){alert('Não foi possível ler automaticamente. Digite manualmente.');},200);}
-    });
-  };
-  r.readAsDataURL(file);
-  input.value='';
-}
-
 function salvarEntrada(){
   var vol=parseFloat(document.getElementById('e-vol').value);
   if(!vol||vol<=0){alert('Informe o volume.');return;}
   var hodVal=document.getElementById('e-hod').value;
   var entrada={id:uid(),data:document.getElementById('e-data').value||today(),vol:vol,nf:(document.getElementById('e-nf').value||'').toUpperCase(),forn:document.getElementById('e-forn').value,hod:hodVal||null,fotoId:null};
-  if(_eHodImg){
-    var fid=uid();
-    entrada.fotoId=fid;
-    try{localStorage.setItem('foto_entrada_'+fid,JSON.stringify({id:fid,tipo:'entrada',data:entrada.data,vol:vol,hod:hodVal,img:_eHodImg,conferido:false}));}catch(e){}
-  }
   db.entradas.push(entrada);
   saveDB();
-  // Start new cycle for this entry volume
   iniciarCiclo(vol, entrada.id);
   ['e-vol','e-nf','e-forn','e-hod'].forEach(function(id){document.getElementById(id).value='';});
-  _eHodImg=null; _eHodVal=null;
-  // Reset foto area
-  var fa=document.getElementById('e-foto-area');
-  var fi=document.getElementById('e-foto-icon');
-  var fl=document.getElementById('e-foto-label');
-  var fs2=document.getElementById('e-foto-sub');
-  if(fa){fa.classList.remove('has');fi.className='ti ti-camera';fi.style.color='var(--t3)';fl.textContent='Fotografar bomba do pátio';fs2.textContent='Visor do horímetro ou bomba';}
-  document.getElementById('e-hod-box').style.display='none';
   renderHistEnt();
-  // Check reservatório after entry
   var _sr=getSaldoRes();
   if(_sr<500&&_sr>=0){var _jn=db.notificacoes&&db.notificacoes.filter(function(n){return n.tipo==='reservatorio_baixo'&&n.data===today()&&!n.lida;}).length>0;if(!_jn)criarNotif('reservatorio_baixo','Reservatório abaixo de 500 litros','Saldo atual: '+Math.max(0,_sr).toFixed(0)+' L. Solicite reabastecimento.',{saldo:_sr});}
   alert('Entrada registrada!');
@@ -2058,16 +1990,14 @@ function salvarEq(){
   if(!editando && db.equipamentos.filter(function(e){return e.cod===cod;}).length){
     alert('Código já existe.');return;
   }
-  var _modelo=document.getElementById('eq-mod').value.trim();
+  var _modelo=document.getElementById('eq-mod').value.trim().toUpperCase();
   var _placa=document.getElementById('eq-placa').value.trim().toUpperCase();
-  var _frente=document.getElementById('eq-frente').value.trim();
   var novoEq={cod:cod,tipo:document.getElementById('eq-tipo').value,modelo:_modelo,placa:_placa,
     tank:parseFloat(document.getElementById('eq-tank').value)||0,
     unidade:document.getElementById('eq-unid').value,
     consumoMin:parseFloat(document.getElementById('eq-cons-min').value)||0,
     consumoMax:parseFloat(document.getElementById('eq-cons-max').value)||0,
-    consumo:parseFloat(document.getElementById('eq-cons-max').value)||0, // compat
-    frente:_frente};
+    consumo:parseFloat(document.getElementById('eq-cons-max').value)||0}; // compat
   if(editando){
     db.equipamentos=db.equipamentos.map(function(e){return e.cod===editando?novoEq:e;});
     codEl.dataset.editando='';
@@ -2077,7 +2007,7 @@ function salvarEq(){
     alert('Equipamento cadastrado!');
   }
   saveDB();
-  ['eq-cod','eq-mod','eq-placa','eq-tank','eq-cons-min','eq-cons-max','eq-frente'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['eq-cod','eq-mod','eq-placa','eq-tank','eq-cons-min','eq-cons-max'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('form-eq').style.display='none';
   renderAdmin();
 }
@@ -2102,8 +2032,8 @@ function editarEq(cod){
   document.getElementById('eq-placa').value=e.placa||'';
   document.getElementById('eq-tank').value=e.tank||'';
   document.getElementById('eq-unid').value=e.unidade||'h';
-  document.getElementById('eq-cons').value=e.consumo||'';
-  document.getElementById('eq-frente').value=e.frente||'';
+  document.getElementById('eq-cons-min').value=e.consumoMin||'';
+  document.getElementById('eq-cons-max').value=e.consumoMax||'';
   document.getElementById('eq-cod').dataset.editando=cod;
   document.getElementById('form-eq').style.display='block';
   document.getElementById('form-eq').scrollIntoView({behavior:'smooth'});
