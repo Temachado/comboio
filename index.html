@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783720000">
+<meta name="app-version" content="1783760000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -144,7 +144,7 @@ input,select,textarea,button{font-family:inherit}
   <div style="font-size:56px;color:#9fe1cb;margin-bottom:16px"><i class="ti ti-gas-station"></i></div>
   <div style="font-size:24px;font-weight:600;color:#e1f5ee;margin-bottom:8px">Comboio</div>
   <div style="font-size:14px;color:#5dcaa5;margin-bottom:40px;line-height:1.6">Controle de combustível<br>Selecione seu tipo de acesso</div>
-  <button onclick="entrarCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
+  <button onclick="mostrarLoginCampo()" style="background:#e1f5ee;color:#085041;border:none;border-radius:12px;padding:16px 24px;font-size:16px;font-weight:600;cursor:pointer;width:100%;max-width:320px;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:10px">
     <i class="ti ti-tractor" style="font-size:22px"></i> Sou operador de campo
   </button>
   <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
@@ -153,13 +153,27 @@ input,select,textarea,button{font-family:inherit}
   <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
 </div>
 
+<!-- LOGIN CAMPO -->
+<div id="login-campo" style="display:none" class="login-wrap">
+  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-tractor"></i></div>
+  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Operador de campo</div>
+  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Use o login fornecido pelo administrador</div>
+  <div class="login-card">
+    <div class="login-err" id="login-campo-err" style="display:none">Usuário ou senha incorretos.</div>
+    <div class="field"><label>Usuário</label><input type="text" id="campo-user" autocomplete="username" autocapitalize="none" placeholder="seu.usuario" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
+    <div class="field"><label>Senha</label><input type="password" id="campo-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLoginCampo()"></div>
+    <button class="btn bp" onclick="doLoginCampo()"><i class="ti ti-lock-open"></i> Entrar</button>
+    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
+  </div>
+</div>
+
 <!-- LOGIN ADMIN -->
 <div id="login-admin" style="display:none" class="login-wrap">
   <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
   <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
   <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
   <div class="login-card">
-    <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
+    <div class="login-err" id="login-err" style="display:none">Usuário ou senha incorretos.</div>
     <div class="field"><label>Usuário</label><input type="text" id="login-user" autocomplete="username" autocapitalize="none" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="btn bp" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
@@ -286,14 +300,18 @@ input,select,textarea,button{font-family:inherit}
       <!-- Operadores -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="ct" style="margin-bottom:0">Operadores de campo</div>
+          <div class="ct" style="margin-bottom:0">Logins de operadores de campo</div>
           <button class="btn bp bsm" onclick="togFormUser()"><i class="ti ti-plus"></i> Adicionar</button>
         </div>
-        <p class="note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
+        <p class="note" style="margin-bottom:12px">Cada operador tem usuário e senha próprios para acessar a tela de abastecimento. Somente o administrador pode criar ou alterar.</p>
         <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
           <div class="r2">
             <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: JOÃO SILVA" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Usuário (login)</label><input type="text" id="u-login" autocomplete="off" autocapitalize="none" placeholder="Ex: joao.silva"></div>
+            <div class="field"><label>Senha</label><input type="text" id="u-senha" autocomplete="off" placeholder="Mín. 4 caracteres"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button>
@@ -443,6 +461,7 @@ var DB_KEY = 'fuelterra_v6';
 var FB_KEY = 'fuelterra_fb_url';
 var db = {equipamentos:[],operadores:[],entradas:[],comboios:[],abastecimentos:[],notificacoes:[],ciclos:[],cicloAtivo:null,saldo:{res:0,com:0},admin:{usuario:'admin',senha:'1234'}};
 var adminLogado = false;
+var operadorLogado = null;
 var fbApp = null, fbActive = false, fbRole = 'campo';
 // Persistent device ID — identifies this specific device
 var DEVICE_KEY = 'comboio_device_id';
@@ -687,8 +706,30 @@ function renderSyncStatus(){
 // ─────────────────────────────────────────────
 //  SPLASH / LOGIN
 // ─────────────────────────────────────────────
+function mostrarLoginCampo(){
+  document.getElementById('splash').style.display='none';
+  document.getElementById('login-campo').style.display='flex';
+  setTimeout(function(){document.getElementById('campo-user').focus();},100);
+}
+function doLoginCampo(){
+  var u=(document.getElementById('campo-user').value||'').trim().toLowerCase();
+  var p=document.getElementById('campo-pass').value||'';
+  var op=db.operadores.filter(function(x){return (x.login||'').toLowerCase()===u && x.senha===p;})[0];
+  var errEl=document.getElementById('login-campo-err');
+  if(op){
+    errEl.style.display='none';
+    operadorLogado=op;
+    document.getElementById('login-campo').style.display='none';
+    document.getElementById('campo-user').value='';
+    document.getElementById('campo-pass').value='';
+    entrarCampo();
+  } else {
+    errEl.style.display='block';
+  }
+}
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
+  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
   // Always mark this device as receptor
@@ -703,10 +744,14 @@ function mostrarLoginAdmin(){
 }
 function voltarSplash(){
   document.getElementById('login-admin').style.display='none';
+  document.getElementById('login-campo').style.display='none';
   document.getElementById('main-app').style.display='none';
   document.getElementById('login-err').style.display='none';
+  document.getElementById('login-campo-err').style.display='none';
   document.getElementById('login-user').value='';
   document.getElementById('login-pass').value='';
+  document.getElementById('campo-user').value='';
+  document.getElementById('campo-pass').value='';
   document.getElementById('splash').style.display='flex';
 }
 function doLogin(){
@@ -726,6 +771,7 @@ function doLogin(){
 }
 function logout(){
   adminLogado=false;
+  operadorLogado=null;
   _fbStarted=false; // allow reinit as campo if needed
   document.getElementById('main-app').style.display='none';
   document.getElementById('splash').style.display='flex';
@@ -2064,12 +2110,39 @@ function editarEq(cod){
 function salvarUser(){
   var nome=document.getElementById('u-nome').value.trim().toUpperCase();
   if(!nome){alert('Informe o nome.');return;}
-  db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});
+  var login=(document.getElementById('u-login').value||'').trim().toLowerCase();
+  var senha=document.getElementById('u-senha').value||'';
+  if(!login){alert('Informe o usuário de login.');return;}
+  if(!senha||senha.length<4){alert('Informe uma senha de no mínimo 4 caracteres.');return;}
+  var editando=document.getElementById('u-nome').dataset.editando||'';
+  var dup=db.operadores.filter(function(u){return u.login===login&&u.id!==editando;});
+  if(dup.length){alert('Este login já está em uso. Escolha outro.');return;}
+  var mat=document.getElementById('u-mat').value;
+  if(editando){
+    db.operadores=db.operadores.map(function(u){
+      if(u.id!==editando) return u;
+      return {id:u.id,nome:nome,mat:mat,login:login,senha:senha};
+    });
+    document.getElementById('u-nome').dataset.editando='';
+    alert('Operador atualizado!');
+  } else {
+    db.operadores.push({id:uid(),nome:nome,mat:mat,login:login,senha:senha});
+    alert('Operador cadastrado!');
+  }
   saveDB();
-  ['u-nome','u-mat'].forEach(function(id){document.getElementById(id).value='';});
+  ['u-nome','u-mat','u-login','u-senha'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('form-user').style.display='none';
   renderAdmin();
-  alert('Operador cadastrado!');
+}
+function editarUser(id){
+  var u=db.operadores.filter(function(x){return x.id===id;})[0]; if(!u) return;
+  document.getElementById('u-nome').value=u.nome||'';
+  document.getElementById('u-mat').value=u.mat||'';
+  document.getElementById('u-login').value=u.login||'';
+  document.getElementById('u-senha').value=u.senha||'';
+  document.getElementById('u-nome').dataset.editando=id;
+  document.getElementById('form-user').style.display='block';
+  document.getElementById('form-user').scrollIntoView({behavior:'smooth'});
 }
 function removerUser(id){
   if(!confirm('Remover?'))return;
@@ -2106,7 +2179,8 @@ function renderAdmin(){
   lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador</div>':
     db.operadores.map(function(u){
       return'<div class="uitem"><div class="uav">'+u.nome.charAt(0).toUpperCase()+'</div>'+
-        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+'Operador</div></div>'+
+        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+
+        (u.login?'Login: <strong>'+u.login+'</strong>':'sem login')+'</div></div>'+
         '<div style="display:flex;gap:4px">'+
         '<button class="del" onclick="editarUser(\''+u.id+'\')"><i class="ti ti-pencil"></i></button>'+
         '<button class="del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button>'+
