@@ -1,16 +1,15 @@
-const CACHE = 'combustivel-1783580000';
+const CACHE = 'combustivel-1783420000';
 const FILES = ['./', './index.html', './manifest.json'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
-  // Não chama skipWaiting — aguarda o usuário clicar no botão
 });
 self.addEventListener('message', e => {
   if(e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks =>
-    Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
+  e.waitUntil(
+    caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
+  );
   return self.clients.claim();
 });
 self.addEventListener('fetch', e => {

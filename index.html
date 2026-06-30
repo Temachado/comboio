@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783580000">
+<meta name="app-version" content="1783420000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -22,9 +22,9 @@
 <style>
 :root{--green:#0f6e56;--gl:#e1f5ee;--gm:#1d9e75;--gd:#085041;--am:#854f0b;--al:#faeeda;--red:#a32d2d;--rl:#fcebeb;--bl:#185fa5;--bll:#e6f1fb;--tx:#1a1a1a;--t2:#666;--t3:#999;--bg:#f7f7f5;--cd:#fff;--br:#e5e5e0;--r:12px;--rs:8px;font-family:'IBM Plex Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;margin:0;font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden}
 input,select,textarea,button{font-family:inherit}
-.app{max-width:480px;margin:0 auto;min-height:100vh;position:relative;z-index:1}
+.app{max-width:480px;margin:0 auto;min-height:100vh}
 .screen{display:none;flex-direction:column;min-height:100vh}
 .screen.active{display:flex}
 .topbar{background:var(--green);padding:env(safe-area-inset-top,0) 0 0;flex-shrink:0}
@@ -99,8 +99,8 @@ input,select,textarea,button{font-family:inherit}
 .hic{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .hic.entry{background:var(--bll);color:var(--bl)}.hic.transfer{background:var(--al);color:var(--am)}.hic.fuel{background:var(--gl);color:var(--green)}
 .hb{flex:1;min-width:0}.hn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hs{font-size:11px;color:var(--t3)}.hv{font-size:14px;font-weight:600;font-family:monospace;white-space:nowrap}
-.splash{position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--gd);text-align:center;overflow-y:auto}
-.login-wrap{position:fixed;inset:0;z-index:500;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;background:var(--gd);overflow-y:auto}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd);text-align:center}
+.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd)}
 .login-card{background:var(--cd);border-radius:var(--r);padding:24px;width:100%;max-width:360px}
 .login-err{background:var(--rl);color:var(--red);border-radius:var(--rs);padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
 .eli{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--br)}
@@ -155,17 +155,6 @@ input,select,textarea,button{font-family:inherit}
 
 <!-- LOGIN ADMIN -->
 <div id="login-admin" style="display:none" class="login-wrap">
-  <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
-  <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
-  <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
-  <div class="login-card">
-    <div class="login-err" id="login-err">Usuário ou senha incorretos.</div>
-    <div class="field"><label>Usuário</label><input type="text" id="login-user" autocomplete="username" autocapitalize="none" placeholder="admin" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="field"><label>Senha</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <button class="btn bp" onclick="doLogin()"><i class="ti ti-lock-open"></i> Entrar</button>
-    <button class="btn bs" onclick="voltarSplash()"><i class="ti ti-arrow-left"></i> Voltar</button>
-  </div>
-</div>
   <div style="font-size:52px;color:#9fe1cb;margin-bottom:12px"><i class="ti ti-shield-lock"></i></div>
   <div style="font-size:22px;font-weight:600;color:#e1f5ee;margin-bottom:4px;text-align:center">Área administrativa</div>
   <div style="font-size:13px;color:#5dcaa5;margin-bottom:32px;text-align:center">Acesso restrito ao responsável</div>
@@ -285,7 +274,7 @@ input,select,textarea,button{font-family:inherit}
             </div>
           </div>
           <div class="r2">
-            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: KOMATSU PC200" oninput="this.value=this.value.toUpperCase()"></div>
+            <div class="field"><label>Marca/Modelo</label><input type="text" id="eq-mod" autocapitalize="words" placeholder="Ex: Komatsu PC200"></div>
             <div class="field"><label>Placa</label><input type="text" id="eq-placa" autocapitalize="characters" style="text-transform:uppercase" placeholder="ABC-1234"></div>
           </div>
           <div class="r2">
@@ -293,8 +282,8 @@ input,select,textarea,button{font-family:inherit}
             <div class="field"><label>Unidade</label><select id="eq-unid"><option value="h">Horímetro (h)</option><option value="km">Odômetro (km)</option></select></div>
           </div>
           <div class="r2">
-            <div class="field"><label>Consumo mín. (L/h ou L/km)</label><input type="number" id="eq-cons-min" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 8"></div>
-            <div class="field"><label>Consumo máx. (L/h ou L/km)</label><input type="number" id="eq-cons-max" min="0" step="0.1" inputmode="decimal" placeholder="Ex: 15"></div>
+            <div class="field"><label>Consumo esperado</label><input type="number" id="eq-cons" min="0" step="0.1" inputmode="decimal"></div>
+            <div class="field"><label>Frente / Local</label><input type="text" id="eq-frente" autocapitalize="words" placeholder="Ex: Frente A"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarEq()"><i class="ti ti-device-floppy"></i> Salvar</button>
@@ -304,21 +293,17 @@ input,select,textarea,button{font-family:inherit}
         <div id="lista-eq"></div>
       </div>
 
-      <!-- Operadores de campo com login -->
+      <!-- Operadores -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div class="ct" style="margin-bottom:0">Logins de operadores</div>
+          <div class="ct" style="margin-bottom:0">Operadores de campo</div>
           <button class="btn bp bsm" onclick="togFormUser()"><i class="ti ti-plus"></i> Adicionar</button>
         </div>
-        <p class="note" style="margin-bottom:12px">Cada operador tem usuário e senha próprios. Somente o administrador pode criar ou alterar.</p>
+        <p class="note" style="margin-bottom:12px">Operadores acessam apenas abastecimento, sem senha.</p>
         <div id="form-user" style="display:none;padding-top:12px;border-top:1px solid var(--br)">
           <div class="r2">
             <div class="field"><label>Nome</label><input type="text" id="u-nome" autocapitalize="characters" style="text-transform:uppercase" placeholder="Ex: JOÃO SILVA" oninput="this.value=this.value.toUpperCase()"></div>
             <div class="field"><label>Matrícula</label><input type="text" id="u-mat" autocapitalize="characters" style="text-transform:uppercase" placeholder="OP-01"></div>
-          </div>
-          <div class="r2">
-            <div class="field"><label>Usuário (login)</label><input type="text" id="u-login" autocapitalize="none" autocomplete="off" placeholder="Ex: joao.silva"></div>
-            <div class="field"><label>Senha</label><input type="password" id="u-senha" autocomplete="new-password" placeholder="Mín. 4 caracteres"></div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn bp" style="flex:1" onclick="salvarUser()"><i class="ti ti-device-floppy"></i> Salvar</button>
@@ -483,7 +468,7 @@ var fbRefMaster = null;  // /comboio_master — Mac writes here
 var fbRefCampo  = null;  // /comboio_campo  — iPhone writes abastecimentos here
 
 // Field wizard state — never destroyed during input
-var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
+var fs = {step:1, equip:null, hod:null, litros:null,
           fotoHod:false, fotoBomba:false,
           imgHod:null, imgBomba:null, imgId:null,
           analisando:false};
@@ -491,6 +476,12 @@ var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
 // ─────────────────────────────────────────────
 //  DB
 // ─────────────────────────────────────────────
+function loadDB(){
+  try{
+    var s=localStorage.getItem(DB_KEY);
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+  }catch(e){}
+}
 function updateSaldo(){
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
@@ -499,18 +490,20 @@ function updateSaldo(){
        - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0)
   };
 }
+function saveDB(){
+  updateSaldo();
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  // Salva notificações na chave dedicada também
+  _notifSalvar();
+  fbPush();
+}
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
     if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
-  if(typeof _notifCarregar==='function') _notifCarregar();
-}
-function saveDB(){
-  updateSaldo();
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
-  if(typeof _notifSalvar==='function') _notifSalvar();
-  fbPush();
+  // Restaura notificações da chave dedicada — tem prioridade
+  _notifCarregar();
 }
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
@@ -708,7 +701,9 @@ function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('main-app').style.display='';
   navigate('field');
+  // Always mark this device as receptor
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
+  // Auto-connect silently
   setTimeout(_fbAutoConectar, 500);
 }
 function mostrarLoginAdmin(){
@@ -769,9 +764,6 @@ function buildNav(active){
 }
 
 function navigate(id){
-  // Não navega se o app não estiver autenticado e visível
-  var app=document.getElementById('main-app');
-  if(!app||app.style.display==='none') return;
   history.pushState({nav:id},'','#'+id);
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.getElementById('screen-'+id).classList.add('active');
@@ -791,6 +783,7 @@ function navigate(id){
     renderHistEnt();
     renderHistCom();
   }
+
   if(id==='admin')  renderAdmin();
   if(id==='fotos')  renderFotos();
   if(id==='notif')  renderNotif();
@@ -1086,21 +1079,24 @@ function renderResumo(){
 //  KEY PRINCIPLE: oninput NEVER calls renderField()
 //  Only dedicated update functions touch the DOM
 // ─────────────────────────────────────────────
+// Toast visual para o operador de campo
 function fsToast(msg, tipo, duracao){
   var old=document.getElementById('fs-toast'); if(old) old.remove();
   var cor=tipo==='red'?'#c62828':'#e65100';
   var bg=tipo==='red'?'#ffebee':'#fff3e0';
   var t=document.createElement('div');
   t.id='fs-toast';
-  t.style.cssText='position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:99999;'+
-    'background:'+bg+';border:2px solid '+cor+';border-radius:12px;padding:14px 16px;'+
-    'max-width:340px;width:calc(100% - 32px);box-shadow:0 8px 32px rgba(0,0,0,.25);'+
-    'display:flex;align-items:flex-start;gap:10px;animation:toastSlide .2s ease';
+  t.style.cssText='position:fixed;top:16px;left:50%;'+
+    'transform:translateX(-50%);z-index:99999;background:'+bg+';border:2px solid '+cor+';'+
+    'border-radius:12px;padding:14px 16px;max-width:340px;width:calc(100% - 32px);'+
+    'box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;align-items:flex-start;gap:10px;'+
+    'animation:toastSlide .2s ease';
   t.innerHTML='<i class="ti ti-alert-triangle" style="font-size:22px;color:'+cor+';flex-shrink:0;margin-top:1px"></i>'+
     '<div style="font-size:13px;font-weight:600;color:'+cor+';line-height:1.5;flex:1;white-space:pre-line">'+msg+'</div>'+
     '<button onclick="this.parentElement.remove()" style="background:none;border:none;color:'+cor+';font-size:22px;cursor:pointer;padding:0;flex-shrink:0;line-height:1;margin-top:-2px">×</button>';
+  // Garantir que o estilo de animação existe
   if(!document.getElementById('toast-anim')){
-    var s=document.createElement('style');s.id='toast-anim';
+    var s=document.createElement('style'); s.id='toast-anim';
     s.textContent='@keyframes toastSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
     document.head.appendChild(s);
   }
@@ -1108,6 +1104,7 @@ function fsToast(msg, tipo, duracao){
   if(duracao!==0) setTimeout(function(){if(t.parentElement)t.remove();},duracao||5000);
 }
 
+// Valida step ao tentar avançar — retorna {msg,tipo,foco} ou null
 function _fsValidarStep(step){
   if(step===2){
     if(!fs.hod) return {msg:'Informe o horímetro antes de continuar.',tipo:'red',foco:'hod-inp'};
@@ -1118,7 +1115,13 @@ function _fsValidarStep(step){
       var ultHod=Number(ult.hod);
       if(hodAtual<=ultHod){
         var ig=hodAtual===ultHod?'igual':'inferior';
-        return {msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\nLançado: '+hodAtual.toLocaleString('pt-BR')+' | Último: '+ultHod.toLocaleString('pt-BR')+'\n\nCorrija o valor para continuar.',tipo:'red',foco:'hod-inp'};
+        return {
+          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\n'+
+            'Lançado: '+hodAtual.toLocaleString('pt-BR')+
+            ' | Último: '+ultHod.toLocaleString('pt-BR')+
+            '\n\nCorrija o valor para continuar.',
+          tipo:'red', foco:'hod-inp'
+        };
       }
     }
   }
@@ -1126,23 +1129,33 @@ function _fsValidarStep(step){
     if(!fs.litros||Number(fs.litros)<=0) return {msg:'Informe a quantidade abastecida.',tipo:'red',foco:'lit-inp'};
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
-    if(cap>0&&l>cap) return {msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',tipo:'red',foco:'lit-inp'};
+    if(cap>0&&l>cap){
+      return {
+        msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',
+        tipo:'red', foco:'lit-inp'
+      };
+    }
   }
   return null;
 }
 
 function fsGo(n){
+  // Valida ao avançar (não ao voltar)
   if(n>fs.step){
     var erro=_fsValidarStep(fs.step);
     if(erro){
-      fsToast(erro.msg,erro.tipo,0);
-      if(erro.foco) setTimeout(function(){var el=document.getElementById(erro.foco);if(el){el.focus();el.select();}},80);
+      fsToast(erro.msg, erro.tipo, 0);
+      if(erro.foco) setTimeout(function(){
+        var el=document.getElementById(erro.foco);
+        if(el){el.focus();el.select();}
+      },80);
       return;
     }
   }
   var old=document.getElementById('fs-toast'); if(old) old.remove();
   history.pushState({step:n},'','#field-'+n);
-  fs.step=n; renderField();
+  fs.step=n;
+  renderField();
 }
 
 function renderField(){
@@ -1186,11 +1199,16 @@ function renderFS2(){
   var unit=isKm?'km':'horas';
   var placeholder=isKm?'Ex: 125400':'Ex: 4820';
 
-  // Referência do último horímetro aprovado
+  // Busca último horímetro registrado para orientação
   var ultimoHod=null;
   var histRef=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
-  if(histRef.length){var ultRef=histRef.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});ultimoHod=Number(ultRef.hod);}
-  var hodRefHtml=ultimoHod!==null?'<div style="font-size:12px;color:var(--t3);margin-top:6px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>':'';
+  if(histRef.length){
+    var ultRef=histRef.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    ultimoHod=Number(ultRef.hod);
+  }
+  var hodRefHtml=ultimoHod!==null
+    ? '<div style="font-size:12px;color:var(--t3);margin-top:6px">Último registro: <strong style="color:var(--t2)">'+ultimoHod.toLocaleString('pt-BR')+' '+unit+'</strong></div>'
+    : '';
 
   // Photo area horímetro
   var hodPhotoHtml='';
@@ -1205,17 +1223,16 @@ function renderFS2(){
     hodPhotoHtml='<div class="pha" onclick="abrirCamHod()"><i class="ti ti-camera"></i><div class="pt">Fotografar '+unit+'</div><div class="ps">Aponte para o display</div></div>';
   }
 
-  // Campo litragem da bomba (substitui foto)
+  // Photo area bomba
   var bombaHtml='';
   if(fs.fotoHod||fs.hod){
-    bombaHtml='<div style="margin-top:14px"><div class="field">'+
-      '<label>Leitura da bomba (L) <span style="color:var(--t3);font-weight:400;font-size:11px">(opcional)</span></label>'+
-      '<input type="number" id="bomba-lit" inputmode="decimal" placeholder="Ex: 12450.5" step="0.1" min="0"'+
-      ' value="'+(fs.litrosBomba||'')+'"'+
-      ' oninput="fs.litrosBomba=this.value||null"'+
-      ' style="font-family:\'IBM Plex Mono\',monospace;letter-spacing:.05em">'+
-      '<div style="font-size:11px;color:var(--t3);margin-top:4px">Numeração do visor da bomba no momento do abastecimento</div>'+
-      '</div></div>';
+    if(fs.fotoBomba){
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha has" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-check"></i><div class="pt" style="font-size:12px">Foto capturada</div><div class="ps">Toque para outra</div></div></div>';
+    } else {
+      bombaHtml='<div style="margin-top:14px"><div class="seg-label">Bomba <span style="color:var(--t3);font-weight:400">(opcional)</span></div>'+
+        '<div class="pha" onclick="abrirCamBomba()" style="padding:20px 16px"><i class="ti ti-camera"></i><div class="pt" style="font-size:12px">Fotografar bomba</div><div class="ps">Visor de abastecimento</div></div></div>';
+    }
   }
 
   return '<div class="seg-label">'+e.cod+' — '+e.tipo+(e.placa?' • '+e.placa:'')+'</div>'+
@@ -1223,8 +1240,6 @@ function renderFS2(){
     '<div class="seg-label">Horímetro</div>'+
     hodPhotoHtml+
     '</div>'+
-    // CRITICAL: input has NO oninput that calls renderField
-    // uses onHodChange which only updates button state
     '<div class="field">'+
     '<label>Digitar '+unit+' manualmente</label>'+
     '<input type="number" id="hod-inp" inputmode="numeric" placeholder="'+placeholder+'" value="'+(fs.hod||'')+'" autocomplete="off"'+
@@ -1277,17 +1292,45 @@ function renderFS3(){
 
 function renderFS4(){
   var e=fs.equip, isKm=(e.unidade==='km');
+  var hodAtual=Number(fs.hod), volAtual=Number(fs.litros);
+  var cap=e.tank?Number(e.tank):0;
+
+  // Calcular erros críticos
+  var erros=[];
+  var hist4=db.abastecimentos.filter(function(a){return a.equip===e.cod&&Number(a.hod)>0&&a.aprovado!==false;});
+  if(hist4.length){
+    var ult4=hist4.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    var ultH4=Number(ult4.hod);
+    if(hodAtual<=ultH4){
+      var ig4=hodAtual===ultH4?'igual':'inferior';
+      erros.push((isKm?'Odômetro':'Horímetro')+' '+ig4+' ao anterior ('+ultH4.toLocaleString('pt-BR')+'). Volte e corrija.');
+    }
+  }
+  if(cap>0&&volAtual>cap){
+    erros.push('Volume ('+volAtual.toFixed(0)+' L) maior que a capacidade ('+cap.toLocaleString('pt-BR')+' L). Volte e corrija.');
+  }
+
+  var errosHtml=erros.map(function(msg){
+    return '<div style="background:#ffebee;border:2px solid #c62828;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;gap:10px;align-items:flex-start">'+
+      '<i class="ti ti-alert-triangle" style="color:#c62828;font-size:18px;flex-shrink:0;margin-top:1px"></i>'+
+      '<div style="font-size:13px;font-weight:600;color:#c62828">'+msg+'</div></div>';
+  }).join('');
+
   var rows='<div class="crow"><span class="cl">Equipamento</span><span class="cv">'+e.cod+'</span></div>'+
     '<div class="crow"><span class="cl">Tipo</span><span class="cv">'+e.tipo+'</span></div>'+
     (e.placa?'<div class="crow"><span class="cl">Placa</span><span class="cv">'+e.placa+'</span></div>':'')+
-    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.hod).toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
-    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litros).toFixed(0)+' L</span></div>'+
-    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'—')+'</span></div>'+
-    (fs.litrosBomba?'<div class="crow"><span class="cl">Leitura bomba</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+Number(fs.litrosBomba).toLocaleString('pt-BR')+' L</span></div>':'')+
+    '<div class="crow"><span class="cl">'+(isKm?'Odômetro':'Horímetro')+'</span><span class="cv" style="font-family:\'IBM Plex Mono\',monospace">'+hodAtual.toLocaleString('pt-BR')+' '+(isKm?'km':'h')+'</span></div>'+
+    '<div class="crow"><span class="cl">Volume</span><span class="cv" style="color:var(--green);font-size:18px;font-family:\'IBM Plex Mono\',monospace">'+volAtual.toFixed(0)+' L</span></div>'+
+    '<div class="crow"><span class="cl">Fotos</span><span class="cv">'+(fs.fotoHod?'✓ Horímetro':'')+' '+(fs.fotoBomba?'✓ Bomba':'')+'</span></div>'+
     '<div class="crow"><span class="cl">Data</span><span class="cv">'+fmtDate(today())+'</span></div>';
+
+  var btnConfirmar = erros.length>0
+    ? '<button class="btn" disabled style="width:100%;padding:16px;background:#e0e0e0;color:#9e9e9e;border:none;border-radius:var(--r);font-size:15px;font-weight:600;cursor:not-allowed;display:flex;align-items:center;justify-content:center;gap:8px"><i class="ti ti-lock"></i> Corrija os erros para confirmar</button>'
+    : '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>';
+
   return '<div class="seg-label">Confirme os dados</div>'+
-    '<div class="card" style="margin-bottom:14px">'+rows+'</div>'+
-    '<button class="btn bp" onclick="fsConfirmar()"><i class="ti ti-check"></i> Confirmar abastecimento</button>'+
+    '<div class="card" style="margin-bottom:12px">'+rows+'</div>'+
+    errosHtml+btnConfirmar+
     '<button class="btn bs" onclick="fsGo(3)"><i class="ti ti-arrow-left"></i> Voltar</button>';
 }
 
@@ -1301,15 +1344,17 @@ function renderFS5(){
 
 // ─── Input handlers — ONLY update button state, never rebuild DOM ───
 function onHodChange(val){
-  fs.hod=val.trim()||null;
+  fs.hod = val.trim() || null;
   var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-hod'); if(btn) btn.disabled=!fs.hod;
+  var btn=document.getElementById('btn-hod');
+  if(btn) btn.disabled=!fs.hod;
 }
 
 function onLitrosChange(val){
-  fs.litros=val||null;
+  fs.litros = val || null;
   var old=document.getElementById('fs-toast'); if(old) old.remove();
-  var btn=document.getElementById('btn-lit'); if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
+  var btn=document.getElementById('btn-lit');
+  if(btn) btn.disabled=!(fs.litros&&Number(fs.litros)>0);
 }
 
 // ±50 buttons — update input field directly, no DOM rebuild
@@ -1324,7 +1369,7 @@ function fsAdj(d){
 
 function fsSelEq(cod){
   fs.equip=db.equipamentos.filter(function(e){return e.cod===cod;})[0]||null;
-  fs.hod=null;fs.litros=null;fs.litrosBomba=null;fs.fotoHod=false;fs.fotoBomba=false;
+  fs.hod=null;fs.litros=null;fs.fotoHod=false;fs.fotoBomba=false;
   fs.imgHod=null;fs.imgBomba=null;fs.imgId=null;fs.analisando=false;
   renderField();
 }
@@ -1334,7 +1379,7 @@ function fsEditHod(){
   setTimeout(function(){var i=document.getElementById('hod-inp');if(i){i.focus();i.value='';}},80);
 }
 function fsNovo(){
-  fs={step:1,equip:null,hod:null,litros:null,litrosBomba:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
+  fs={step:1,equip:null,hod:null,litros:null,fotoHod:false,fotoBomba:false,imgHod:null,imgBomba:null,imgId:null,analisando:false};
   renderField();
 }
 
@@ -1485,7 +1530,7 @@ function fsConfirmar(){
     ultimoHod=Number(ultimo.hod);
   }
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,litrosBomba:fs.litrosBomba?Number(fs.litrosBomba):null};
+  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true};
   db.abastecimentos.push(abast);
 
   if(fs.fotoHod||fs.fotoBomba){
@@ -2057,8 +2102,7 @@ function editarEq(cod){
   document.getElementById('eq-placa').value=e.placa||'';
   document.getElementById('eq-tank').value=e.tank||'';
   document.getElementById('eq-unid').value=e.unidade||'h';
-  document.getElementById('eq-cons-min').value=e.consumoMin||'';
-  document.getElementById('eq-cons-max').value=e.consumoMax||'';
+  document.getElementById('eq-cons').value=e.consumo||'';
   document.getElementById('eq-frente').value=e.frente||'';
   document.getElementById('eq-cod').dataset.editando=cod;
   document.getElementById('form-eq').style.display='block';
@@ -2067,39 +2111,12 @@ function editarEq(cod){
 function salvarUser(){
   var nome=document.getElementById('u-nome').value.trim().toUpperCase();
   if(!nome){alert('Informe o nome.');return;}
-  var login=(document.getElementById('u-login').value||'').trim().toLowerCase();
-  var senha=document.getElementById('u-senha').value||'';
-  if(!login){alert('Informe o usuário de login.');return;}
-  if(!senha||senha.length<4){alert('Informe uma senha de no mínimo 4 caracteres.');return;}
-  // Verificar login duplicado
-  var editandoId=document.getElementById('u-nome').dataset.editando||'';
-  var dup=db.operadores.filter(function(u){return u.login===login&&u.id!==editandoId;});
-  if(dup.length){alert('Este login já está em uso. Escolha outro.');return;}
-  if(editandoId){
-    db.operadores=db.operadores.map(function(u){
-      if(u.id!==editandoId) return u;
-      return {id:u.id,nome:nome,mat:document.getElementById('u-mat').value,login:login,senha:senha};
-    });
-    document.getElementById('u-nome').dataset.editando='';
-    alert('Operador atualizado!');
-  } else {
-    db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value,login:login,senha:senha});
-    alert('Operador cadastrado!');
-  }
+  db.operadores.push({id:uid(),nome:nome,mat:document.getElementById('u-mat').value});
   saveDB();
-  ['u-nome','u-mat','u-login','u-senha'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['u-nome','u-mat'].forEach(function(id){document.getElementById(id).value='';});
   document.getElementById('form-user').style.display='none';
   renderAdmin();
-}
-function editarUser(id){
-  var u=db.operadores.filter(function(x){return x.id===id;})[0]; if(!u) return;
-  document.getElementById('u-nome').value=u.nome||'';
-  document.getElementById('u-mat').value=u.mat||'';
-  document.getElementById('u-login').value=u.login||'';
-  document.getElementById('u-senha').value=u.senha||'';
-  document.getElementById('u-nome').dataset.editando=id;
-  document.getElementById('form-user').style.display='block';
-  document.getElementById('form-user').scrollIntoView({behavior:'smooth'});
+  alert('Operador cadastrado!');
 }
 function removerUser(id){
   if(!confirm('Remover?'))return;
@@ -2136,8 +2153,7 @@ function renderAdmin(){
   lu.innerHTML=!db.operadores.length?'<div class="empty"><i class="ti ti-users"></i>Nenhum operador</div>':
     db.operadores.map(function(u){
       return'<div class="uitem"><div class="uav">'+u.nome.charAt(0).toUpperCase()+'</div>'+
-        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+
-        (u.login?'Login: <strong>'+u.login+'</strong>':'sem login')+'</div></div>'+
+        '<div class="ub"><div class="un">'+u.nome+'</div><div class="ur">'+(u.mat?u.mat+' • ':'')+'Operador</div></div>'+
         '<div style="display:flex;gap:4px">'+
         '<button class="del" onclick="editarUser(\''+u.id+'\')"><i class="ti ti-pencil"></i></button>'+
         '<button class="del" onclick="removerUser(\''+u.id+'\')"><i class="ti ti-trash"></i></button>'+
@@ -2279,19 +2295,27 @@ function updateDelSelBtn(){
 function apagarSelecionados(){
   var selecionados=Object.entries(_histSel).filter(function(kv){return kv[1].checked;});
   if(!selecionados.length){alert('Nenhum item selecionado.');return;}
-  if(!confirm('Apagar '+selecionados.length+' registro'+(selecionados.length>1?'s':'')+' do histórico?\n\nNota: abastecimentos de campo são removidos apenas deste histórico. Entradas e carregamentos são removidos dos seus módulos originais também.'))return;
+  if(!confirm('Apagar '+selecionados.length+' lançamento'+(selecionados.length>1?'s':'')+' selecionado'+(selecionados.length>1?'s':'')+'?'))return;
   selecionados.forEach(function(kv){
     var id=kv[0], tipo=kv[1].tipo;
-    // Abastecimentos: remove apenas do histórico (não propaga)
-    if(tipo==='fuel'){
-      db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
-    }
-    // Entradas e comboios: remove também do módulo original
-    else if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
+    if(tipo==='entry') db.entradas=db.entradas.filter(function(e){return e.id!==id;});
     else if(tipo==='transfer') db.comboios=db.comboios.filter(function(c){return c.id!==id;});
+    else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
+  // Pause campo listener to prevent deleted items from reappearing
+  if(fbRefCampo) try{fbRefCampo.child('abastecimentos').off();}catch(e){}
   saveDB();
+  // Update campo node with cleaned list
+  if(fbRefCampo&&fbActive) try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}
+  // Push master
+  setTimeout(fbPush, 100);
+  // Re-attach campo listener after a delay
+  setTimeout(function(){
+    if(fbRefCampo&&fbActive){
+      fbRefCampo.child('abastecimentos').on('value',onCampoAbastUpdate);
+    }
+  }, 2000);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
@@ -2504,44 +2528,36 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
       reg.update();
-      var swWaiting=null;
-      function mostrarBanner(){
-        if(document.getElementById('update-banner')) return;
-        var b=document.createElement('div');
+      function mostrarBanner(worker){
+        // Instrui o novo SW a assumir controle imediatamente
+        worker.postMessage({type:'SKIP_WAITING'});
+        var b=document.getElementById('update-banner');
+        if(b) return; // já está mostrando
+        b=document.createElement('div');
         b.id='update-banner';
         b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-        b.innerHTML='<span>✨ Nova versão disponível</span>'
-          +'<button id="btn-atualizar" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar agora</button>';
+        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
         document.body.appendChild(b);
-        document.getElementById('btn-atualizar').addEventListener('click',function(){
-          this.disabled=true; this.textContent='Atualizando...';
-          if(swWaiting) swWaiting.postMessage({type:'SKIP_WAITING'});
-          else window.location.reload(true);
-        });
       }
-      // Detecta SW em waiting
-      function checkWaiting(r){
-        if(r.waiting){swWaiting=r.waiting; mostrarBanner();}
-      }
-      checkWaiting(reg);
+      if(reg.waiting) mostrarBanner(reg.waiting);
       reg.addEventListener('updatefound',function(){
         var w=reg.installing;
         w.addEventListener('statechange',function(){
-          if(w.state==='installed'&&navigator.serviceWorker.controller){
-            swWaiting=w; mostrarBanner();
-          }
+          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
         });
       });
-      // Quando SW assume controle após skipWaiting → recarrega
+      // Detecta quando SW assume controle — recarrega automaticamente
+      var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
-        window.location.reload();
+        if(!refreshing){refreshing=true; window.location.reload();}
       });
-      setInterval(function(){ reg.update(); },300000);
+      setInterval(function(){ reg.update(); }, 300000);
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
           var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-          _fbStarted=false; iniciarFirebase(url,false,_isM?'admin':'campo');
+          _fbStarted=false;
+          iniciarFirebase(url,false,_isM?'admin':'campo');
         }
       },30000);
     }).catch(function(){});
