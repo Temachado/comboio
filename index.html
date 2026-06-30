@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783600000">
+<meta name="app-version" content="1783640000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2458,25 +2458,34 @@ if('serviceWorker' in navigator){
   window.addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').then(function(reg){
       reg.update();
+      var swWaiting=null;
       function mostrarBanner(worker){
-        // Instrui o novo SW a assumir controle imediatamente
-        worker.postMessage({type:'SKIP_WAITING'});
-        var b=document.getElementById('update-banner');
-        if(b) return; // já está mostrando
-        b=document.createElement('div');
+        swWaiting=worker;
+        if(document.getElementById('update-banner')) return; // já mostrando
+        var b=document.createElement('div');
         b.id='update-banner';
         b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
-        b.innerHTML='<span>✨ Nova versão disponível</span><button onclick="window.location.reload(true)" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar</button>';
+        b.innerHTML='<span>✨ Nova versão disponível</span>'
+          +'<button id="btn-atualizar-sw" style="background:#e1f5ee;color:var(--green);border:none;border-radius:6px;padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer">Atualizar agora</button>';
         document.body.appendChild(b);
+        document.getElementById('btn-atualizar-sw').addEventListener('click',function(){
+          this.disabled=true; this.textContent='Atualizando...';
+          if(swWaiting){ swWaiting.postMessage({type:'SKIP_WAITING'}); }
+          else { window.location.reload(true); }
+        });
       }
+      // Verifica se já há um SW esperando (página recarregada após instalar)
       if(reg.waiting) mostrarBanner(reg.waiting);
+      // Detecta nova instalação durante a sessão
       reg.addEventListener('updatefound',function(){
         var w=reg.installing;
         w.addEventListener('statechange',function(){
-          if(w.state==='installed'&&navigator.serviceWorker.controller) mostrarBanner(w);
+          if(w.state==='installed'&&navigator.serviceWorker.controller){
+            mostrarBanner(w);
+          }
         });
       });
-      // Detecta quando SW assume controle — recarrega automaticamente
+      // Só recarrega quando o SW realmente assume controle — após clique do usuário
       var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
         if(!refreshing){refreshing=true; window.location.reload();}
