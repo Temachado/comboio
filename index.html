@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783680000">
+<meta name="app-version" content="1783720000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1874,6 +1874,7 @@ function aprovarNotif(id){
   _notifSalvar(); updateNotifBadge(); renderNotif();
 }
 
+var _corrigirAbastId=null;
 function rejeitarNotif(id){
   _notifCarregar();
   var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
@@ -1883,18 +1884,26 @@ function rejeitarNotif(id){
   renderNotif();
 }
 
-function abrirModalEditarRejeicao(abastId, notifId){
+function abrirModalCorrigir(abastId, notifId){
   var ab=db.abastecimentos.filter(function(a){return a.id===abastId;})[0];
-  if(!ab){renderNotif();return;}
+  if(!ab){ renderNotif(); return; }
   var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
-  var unid=eq&&eq.unidade==='km'?'km':'h';
-  var m=document.getElementById('modal-rejeicao');
-    if(!m){ alert('Modal não encontrado. Recarregue o app.'); return; }
-  // Populate and show modal
+  var isKm=eq&&eq.unidade==='km';
+  var unid=isKm?'km':'h';
+  // Busca horímetro anterior para referência de validação
+  var hodAnt=null;
+  var hist=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==ab.id&&Number(a.hod)>0&&a.aprovado!==false;});
+  if(hist.length){
+    var ant=hist.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    hodAnt=Number(ant.hod);
+  }
+  _corrigirAbastId=abastId;
+  var m=document.getElementById('modal-corrigir');
+  if(!m){ alert('Modal não encontrado. Recarregue o app.'); return; }
   document.getElementById('mc-desc').textContent='Equipamento: '+ab.equip+' • '+fmtDate(ab.data);
   document.getElementById('mc-info').innerHTML=
-    '<strong>Horímetro lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
-    (hodAnt!==null?' | <strong>Anterior:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+
+    '<strong>'+(isKm?'Odômetro':'Horímetro')+' lançado:</strong> '+Number(ab.hod).toLocaleString('pt-BR')+' '+unid+
+    (hodAnt!==null?' | <strong>Mínimo aceito:</strong> '+hodAnt.toLocaleString('pt-BR')+' '+unid:'')+
     ' | <strong>Volume:</strong> '+Number(ab.vol).toFixed(0)+' L';
   document.getElementById('mc-hod-label').textContent=(isKm?'Odômetro (km)':'Horímetro (h)');
   document.getElementById('mc-hod').value=ab.hod;
@@ -1910,6 +1919,20 @@ function salvarCorrecao(){
   if(!newVol||newVol<=0){alert('Informe o volume.');return;}
   var ab=db.abastecimentos.filter(function(a){return a.id===_corrigirAbastId;})[0];
   if(!ab){fecharModalCorrigir();return;}
+  var eq=db.equipamentos.filter(function(e){return e.cod===ab.equip;})[0];
+  var isKm=eq&&eq.unidade==='km';
+  var unid=isKm?'km':'h';
+  // Valida horímetro mínimo (igual à regra do wizard de campo)
+  var histAnt=db.abastecimentos.filter(function(a){return a.equip===ab.equip&&a.id!==_corrigirAbastId&&Number(a.hod)>0&&a.aprovado!==false;});
+  var hodMin=0;
+  if(histAnt.length){
+    var ar=histAnt.reduce(function(p,c){return Number(c.hod)>Number(p.hod)?c:p;});
+    hodMin=Number(ar.hod);
+  }
+  if(hodMin>0&&newHod<=hodMin){
+    alert('O '+(isKm?'odômetro':'horímetro')+' corrigido deve ser maior que '+hodMin.toLocaleString('pt-BR')+' '+unid+' (último registro válido).');
+    return;
+  }
   ab.hod=newHod; ab.vol=newVol; ab.aprovado=true;
   // Mark related notification as resolved
   if(db.notificacoes){
