@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783640000">
+<meta name="app-version" content="1783680000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2459,9 +2459,10 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').then(function(reg){
       reg.update();
       var swWaiting=null;
+      var userClicouAtualizar=false; // só true após clique explícito no botão
       function mostrarBanner(worker){
         swWaiting=worker;
-        if(document.getElementById('update-banner')) return; // já mostrando
+        if(document.getElementById('update-banner')) return;
         var b=document.createElement('div');
         b.id='update-banner';
         b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--green);color:#e1f5ee;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.2)';
@@ -2470,13 +2471,12 @@ if('serviceWorker' in navigator){
         document.body.appendChild(b);
         document.getElementById('btn-atualizar-sw').addEventListener('click',function(){
           this.disabled=true; this.textContent='Atualizando...';
+          userClicouAtualizar=true;
           if(swWaiting){ swWaiting.postMessage({type:'SKIP_WAITING'}); }
           else { window.location.reload(true); }
         });
       }
-      // Verifica se já há um SW esperando (página recarregada após instalar)
       if(reg.waiting) mostrarBanner(reg.waiting);
-      // Detecta nova instalação durante a sessão
       reg.addEventListener('updatefound',function(){
         var w=reg.installing;
         w.addEventListener('statechange',function(){
@@ -2485,9 +2485,10 @@ if('serviceWorker' in navigator){
           }
         });
       });
-      // Só recarrega quando o SW realmente assume controle — após clique do usuário
+      // Só recarrega se o usuário explicitamente clicou em Atualizar
       var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
+        if(!userClicouAtualizar) return; // ignora qualquer troca de controle não solicitada
         if(!refreshing){refreshing=true; window.location.reload();}
       });
       setInterval(function(){ reg.update(); }, 300000);
