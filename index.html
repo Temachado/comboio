@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783760000">
+<meta name="app-version" content="1783800000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -710,22 +710,55 @@ function mostrarLoginCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('login-campo').style.display='flex';
   setTimeout(function(){document.getElementById('campo-user').focus();},100);
+  // Inicia conexão Firebase em background para ter operadores sincronizados antes do login
+  if(!fbActive){
+    var url=getFbUrl();
+    if(url) try{iniciarFirebase(url,false,'campo');}catch(e){}
+  }
 }
 function doLoginCampo(){
   var u=(document.getElementById('campo-user').value||'').trim().toLowerCase();
   var p=document.getElementById('campo-pass').value||'';
-  var op=db.operadores.filter(function(x){return (x.login||'').toLowerCase()===u && x.senha===p;})[0];
   var errEl=document.getElementById('login-campo-err');
-  if(op){
-    errEl.style.display='none';
-    operadorLogado=op;
-    document.getElementById('login-campo').style.display='none';
-    document.getElementById('campo-user').value='';
-    document.getElementById('campo-pass').value='';
-    entrarCampo();
-  } else {
-    errEl.style.display='block';
+  var btnEl=document.querySelector('#login-campo .btn.bp');
+
+  function tentarLogin(){
+    var op=db.operadores.filter(function(x){return (x.login||'').toLowerCase()===u && x.senha===p;})[0];
+    if(op){
+      errEl.style.display='none';
+      operadorLogado=op;
+      document.getElementById('login-campo').style.display='none';
+      document.getElementById('campo-user').value='';
+      document.getElementById('campo-pass').value='';
+      if(btnEl){btnEl.disabled=false;btnEl.innerHTML='<i class="ti ti-lock-open"></i> Entrar';}
+      entrarCampo();
+    } else {
+      if(btnEl){btnEl.disabled=false;btnEl.innerHTML='<i class="ti ti-lock-open"></i> Entrar';}
+      errEl.style.display='block';
+    }
   }
+
+  // Se não há operadores locais, tenta sincronizar via Firebase primeiro
+  if(!db.operadores.length){
+    var url=getFbUrl();
+    if(url && !fbActive){
+      if(btnEl){btnEl.disabled=true;btnEl.innerHTML='<i class="ti ti-loader"></i> Sincronizando...';}
+      errEl.style.display='none';
+      // Conecta ao Firebase e aguarda dados chegarem
+      iniciarFirebase(url, false, 'campo');
+      // Aguarda até 5s pela sincronização
+      var tentativas=0;
+      var aguardar=setInterval(function(){
+        tentativas++;
+        if(db.operadores.length || tentativas>=10){
+          clearInterval(aguardar);
+          tentarLogin();
+        }
+      }, 500);
+      return;
+    }
+  }
+  tentarLogin();
 }
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
