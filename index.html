@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783920000">
+<meta name="app-version" content="1783960000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -499,8 +499,12 @@ function updateSaldo(){
        - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0)
   };
 }
+function _getLocalTs(){try{return Number(localStorage.getItem('comboio_ts'))||0;}catch(e){return 0;}}
+function _setLocalTs(ts){try{localStorage.setItem('comboio_ts',String(ts));}catch(e){}}
+
 function saveDB(){
   updateSaldo();
+  _setLocalTs(Date.now());
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
   // Salva notificações na chave dedicada também
   _notifSalvar();
@@ -592,61 +596,37 @@ function onCampoAbastUpdate(snap){
 function iniciarFirebase(url, showAlert, role){
   fbRole = role||'campo';
   try{if(fbRefMaster) fbRefMaster.off();}catch(e){}
-  try{if(fbRefCampo)  fbRefCampo.off(); }catch(e){}
+  try{if(fbRefCampo)  fbRefCampo.off();}catch(e){}
   fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
   try{
     var appName='cb_'+Date.now();
     fbApp = firebase.initializeApp({databaseURL:url}, appName);
     var db2 = fbApp.database();
-    fbRefMaster = db2.ref('comboio_master');
+    var ref = db2.ref('comboio_b02a7'); // path único compartilhado
+    fbRefMaster = ref;
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    var isMasterDevice=false;
-    try{isMasterDevice=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-
-    fbRefMaster.on('value', function(snap){
+    // ── LISTENER ÚNICO ──
+    // Regra: quem tem _ts mais recente vence
+    ref.on('value', function(snap){
       var r = snap.val();
+      if(!r){ _fbEnviar(ref); renderSyncStatus(); return; }
 
-      // Sem dados no Firebase — Mac envia, iPhone pede reenvio via ping
-      if(!r || !r._masterId){
-        if(isMasterDevice){
-          setTimeout(function(){if(fbActive)fbPush();},300);
-        } else {
-          try{db2.ref('comboio_ping').set({ts:Date.now(),d:myDeviceId});}catch(e){}
-        }
-        renderSyncStatus(); return;
-      }
+      var remoteTs = r._ts || 0;
+      var localTs  = _getLocalTs();
 
-      var rId=r._masterId;
-      var rTs=r._masterTs||0;
-      masterDeviceId=rId;
-
-      if(isMasterDevice && rId===myDeviceId){
-        // Echo do meu próprio envio — ignorar
-        renderSyncStatus(); return;
-      }
-
-      // --- APLICAR DADOS REMOTOS ---
-      // Qualquer dispositivo aplica dados mais recentes que os seus
-      var localTs=0;
-      try{localTs=Number(localStorage.getItem('comboio_ts'))||0;}catch(e){}
-
-      if(rTs > localTs || !isMasterDevice){
-        // Receptor sempre aplica; Mestre só aplica se dado remoto for mais novo
+      if(remoteTs > localTs){
+        // Dado remoto é mais novo — aplica localmente
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
         _notifCarregar();
-        try{
-          localStorage.setItem(DB_KEY,JSON.stringify(db));
-          if(rTs) localStorage.setItem('comboio_ts',String(rTs));
-        }catch(e){}
-        updateSaldo();
-        updateNotifBadge();
-        // Atualiza a tela atual
+        _setLocalTs(remoteTs);
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        updateSaldo(); updateNotifBadge();
         var ae=document.querySelector('.screen.active');
         if(ae){
           var sid=ae.id.replace('screen-','');
@@ -658,31 +638,25 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
+      } else if(localTs > remoteTs){
+        // Dado local é mais novo — envia para Firebase
+        _fbEnviar(ref);
       }
       renderSyncStatus();
     }, function(err){
-      console.error('FB master error:',err.message||err);
-      fbActive=false;
+      console.error('FB error:',err.message||err);
+      fbActive=false; _fbConnecting=false;
       window._fbLastError=err.message||String(err);
-      _fbConnecting=false;
       renderSyncStatus();
       setTimeout(_fbAutoConectar, 10000);
     });
 
-    // Listener de ping: iPhone pede reenvio → Mac responde
-    db2.ref('comboio_ping').on('value', function(snap){
-      if(!snap.val()) return;
-      var isMasterNow=false;
-      try{isMasterNow=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-      if(isMasterNow && fbActive) setTimeout(function(){fbPush();},500);
-    });
-
-    // Campo: abastecimentos do operador de campo
+    // Abastecimentos do campo (path separado para não conflitar)
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
-    // Mac envia imediatamente ao conectar
-    if(isMasterDevice) setTimeout(function(){if(fbActive)fbPush();},600);
+    // Ao conectar: envia dados locais se tiver algo
+    setTimeout(function(){ if(fbActive) _fbEnviar(ref); }, 800);
     if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
@@ -691,15 +665,13 @@ function iniciarFirebase(url, showAlert, role){
   }
 }
 
-
-function fbPush(){
-  if(!fbRefMaster||!fbActive) return;
-  var isMaster=false;
-  try{isMaster=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-  if(!isMaster) return;
+// Envia dados locais para o Firebase com timestamp atual
+function _fbEnviar(ref){
+  if(!ref||!fbActive) return;
   var ts=Date.now();
+  _setLocalTs(ts);
   try{
-    fbRefMaster.set({
+    ref.set({
       equipamentos:db.equipamentos||[],
       operadores:db.operadores||[],
       entradas:db.entradas||[],
@@ -708,11 +680,16 @@ function fbPush(){
       ciclos:db.ciclos||[],
       cicloAtivo:db.cicloAtivo||null,
       saldo:db.saldo||{res:0,com:0},
-      _masterId:myDeviceId,
-      _masterTs:ts
+      _device:myDeviceId,
+      _ts:ts
     });
-    try{localStorage.setItem('comboio_ts',String(ts));}catch(e){}
-  }catch(e){console.error('fbPush:',e);}
+  }catch(e){console.error('fbEnviar:',e);}
+}
+
+
+function fbPush(){
+  if(!fbRefMaster||!fbActive) return;
+  _fbEnviar(fbRefMaster);
 }
 
 
