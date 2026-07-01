@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784200000">
+<meta name="app-version" content="1784240000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -150,7 +150,7 @@ input,select,textarea,button{font-family:inherit}
   <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
     <i class="ti ti-shield-lock" style="font-size:18px"></i> Acesso administrativo
   </button>
-  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
+  <div style="margin-top:40px;font-size:11px;color:#3a8a72">v6</div>
 </div>
 
 <!-- LOGIN CAMPO -->
@@ -182,7 +182,7 @@ input,select,textarea,button{font-family:inherit}
 </div>
 
 <!-- MAIN APP -->
-<div id="main-app" class="app" style="display:none">
+<div id="main-app" class="app" style="display:none;visibility:hidden">
 
   <!-- RESUMO -->
   <div id="screen-resumo" class="screen">
@@ -770,7 +770,8 @@ function doLoginCampo(){
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('login-campo').style.display='none';
-  document.getElementById('main-app').style.display='';
+  var _app=document.getElementById('main-app');
+  _app.style.display=''; _app.style.visibility='';
   navigate('field');
   // Always mark this device as receptor
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
@@ -785,7 +786,8 @@ function mostrarLoginAdmin(){
 function voltarSplash(){
   document.getElementById('login-admin').style.display='none';
   document.getElementById('login-campo').style.display='none';
-  document.getElementById('main-app').style.display='none';
+  var _app3=document.getElementById('main-app');
+  _app3.style.display='none'; _app3.style.visibility='hidden';
   document.getElementById('login-err').style.display='none';
   document.getElementById('login-campo-err').style.display='none';
   document.getElementById('login-user').value='';
@@ -801,7 +803,8 @@ function doLogin(){
     adminLogado=true;
     document.getElementById('login-err').style.display='none';
     document.getElementById('login-admin').style.display='none';
-    document.getElementById('main-app').style.display='';
+    var _app2=document.getElementById('main-app');
+    _app2.style.display=''; _app2.style.visibility='';
     navigate('resumo');
     // Auto-connect using saved role (set once via Mac/iPhone buttons)
     setTimeout(_fbAutoConectar, 500);
