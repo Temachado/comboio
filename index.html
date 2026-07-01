@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783800000">
+<meta name="app-version" content="1783920000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -591,13 +591,11 @@ function onCampoAbastUpdate(snap){
 
 function iniciarFirebase(url, showAlert, role){
   fbRole = role||'campo';
-  // Always off existing listeners first
   try{if(fbRefMaster) fbRefMaster.off();}catch(e){}
   try{if(fbRefCampo)  fbRefCampo.off(); }catch(e){}
   fbRefMaster=null; fbRefCampo=null; fbActive=false;
 
   try{
-    // Use timestamp name — avoids "already exists" error completely
     var appName='cb_'+Date.now();
     fbApp = firebase.initializeApp({databaseURL:url}, appName);
     var db2 = fbApp.database();
@@ -605,37 +603,59 @@ function iniciarFirebase(url, showAlert, role){
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    // UNIFIED listener — works for Mac AND iPhone
-    // deviceId determines who is master, not login role
+    var isMasterDevice=false;
+    try{isMasterDevice=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+
     fbRefMaster.on('value', function(snap){
       var r = snap.val();
-      if(!r){ renderSyncStatus(); return; }
 
-      var incomingId = r._masterId||null;
-      masterDeviceId = incomingId;
-      var iAmMaster  = (incomingId && incomingId===myDeviceId);
+      // Sem dados no Firebase — Mac envia, iPhone pede reenvio via ping
+      if(!r || !r._masterId){
+        if(isMasterDevice){
+          setTimeout(function(){if(fbActive)fbPush();},300);
+        } else {
+          try{db2.ref('comboio_ping').set({ts:Date.now(),d:myDeviceId});}catch(e){}
+        }
+        renderSyncStatus(); return;
+      }
 
-      if(!iAmMaster){
-        // I am NOT the master → apply ALL Mac data
-        var keys=['equipamentos','operadores','entradas','comboios',
-                  'abastecimentos','ciclos','cicloAtivo','saldo'];
-        keys.forEach(function(k){
+      var rId=r._masterId;
+      var rTs=r._masterTs||0;
+      masterDeviceId=rId;
+
+      if(isMasterDevice && rId===myDeviceId){
+        // Echo do meu próprio envio — ignorar
+        renderSyncStatus(); return;
+      }
+
+      // --- APLICAR DADOS REMOTOS ---
+      // Qualquer dispositivo aplica dados mais recentes que os seus
+      var localTs=0;
+      try{localTs=Number(localStorage.getItem('comboio_ts'))||0;}catch(e){}
+
+      if(rTs > localTs || !isMasterDevice){
+        // Receptor sempre aplica; Mestre só aplica se dado remoto for mais novo
+        ['equipamentos','operadores','entradas','comboios',
+         'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
-        // Restaura notificações da chave dedicada ANTES de salvar
         _notifCarregar();
-        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        try{
+          localStorage.setItem(DB_KEY,JSON.stringify(db));
+          if(rTs) localStorage.setItem('comboio_ts',String(rTs));
+        }catch(e){}
         updateSaldo();
         updateNotifBadge();
+        // Atualiza a tela atual
         var ae=document.querySelector('.screen.active');
         if(ae){
           var sid=ae.id.replace('screen-','');
-          if(sid==='resumo')  renderResumo();
-          else if(sid==='field')  renderField();
-          else if(sid==='entrada'){renderHistEnt();renderHistCom();}
-          else if(sid==='admin')  renderAdmin();
-          else if(sid==='fotos')  renderFotos();
-          else if(sid==='notif')  renderNotif();
+          if(sid==='resumo')         renderResumo();
+          else if(sid==='field')     renderField();
+          else if(sid==='entrada')   {renderHistEnt();renderHistCom();}
+          else if(sid==='admin')     renderAdmin();
+          else if(sid==='fotos')     renderFotos();
+          else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
       }
@@ -646,16 +666,23 @@ function iniciarFirebase(url, showAlert, role){
       window._fbLastError=err.message||String(err);
       _fbConnecting=false;
       renderSyncStatus();
-      // Silent retry after 10s
       setTimeout(_fbAutoConectar, 10000);
     });
 
-    // Campo listener — receive field abastecimentos on ALL devices
+    // Listener de ping: iPhone pede reenvio → Mac responde
+    db2.ref('comboio_ping').on('value', function(snap){
+      if(!snap.val()) return;
+      var isMasterNow=false;
+      try{isMasterNow=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+      if(isMasterNow && fbActive) setTimeout(function(){fbPush();},500);
+    });
+
+    // Campo: abastecimentos do operador de campo
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
-    // If master, push local data immediately
-    setTimeout(function(){ if(fbActive) fbPush(); }, 600);
+    // Mac envia imediatamente ao conectar
+    if(isMasterDevice) setTimeout(function(){if(fbActive)fbPush();},600);
     if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
@@ -666,9 +693,11 @@ function iniciarFirebase(url, showAlert, role){
 
 
 function fbPush(){
-  // Only master device pushes
   if(!fbRefMaster||!fbActive) return;
-  try{if(localStorage.getItem('comboio_is_master')!=='true')return;}catch(e){return;}
+  var isMaster=false;
+  try{isMaster=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+  if(!isMaster) return;
+  var ts=Date.now();
   try{
     fbRefMaster.set({
       equipamentos:db.equipamentos||[],
@@ -680,8 +709,9 @@ function fbPush(){
       cicloAtivo:db.cicloAtivo||null,
       saldo:db.saldo||{res:0,com:0},
       _masterId:myDeviceId,
-      _masterTs:Date.now()
+      _masterTs:ts
     });
+    try{localStorage.setItem('comboio_ts',String(ts));}catch(e){}
   }catch(e){console.error('fbPush:',e);}
 }
 
