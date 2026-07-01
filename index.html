@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784160000">
+<meta name="app-version" content="1784200000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2622,11 +2622,17 @@ if('serviceWorker' in navigator){
           }
         });
       });
-      // Só recarrega se o usuário explicitamente clicou em Atualizar
+      // Recarrega quando SW assume controle:
+      // - sempre se não há controlador anterior (primeira instalação)
+      // - só se usuário clicou quando há SW antigo sendo substituído
       var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(!userClicouAtualizar) return; // ignora qualquer troca de controle não solicitada
-        if(!refreshing){refreshing=true; window.location.reload();}
+        if(refreshing) return;
+        refreshing=true;
+        // Se o usuário clicou OU se não havia SW antes (primeira carga)
+        if(userClicouAtualizar || !document.getElementById('update-banner')){
+          window.location.reload();
+        }
       });
       setInterval(function(){ reg.update(); }, 300000);
       setInterval(function(){
