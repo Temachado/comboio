@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1783960000">
+<meta name="app-version" content="1784000000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -135,7 +135,89 @@ input,select,textarea,button{font-family:inherit}
 .sync-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
 .sb-on{background:var(--gl);color:var(--gd)}.sb-off{background:#fff3cd;color:#856404}
 .seg-label{font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
-</style>
+/* ── DESKTOP (Mac / Windows) ── */
+@media (min-width: 768px){
+  body{background:var(--bg2);}
+
+  /* App centralizado com sombra */
+  .app{
+    max-width:960px;
+    margin:0 auto;
+    min-height:100vh;
+    box-shadow:0 0 40px rgba(0,0,0,.10);
+    background:var(--bg);
+  }
+
+  /* Splash e login — mais compactos, sem ocupar 100vh */
+  .splash,.login-wrap{
+    position:fixed;inset:0;z-index:500;
+    background:var(--gd);
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    padding:40px;
+  }
+  .login-card{width:380px;max-width:100%;}
+
+  /* Topbar maior */
+  .tb{padding:16px 24px;}
+  .tb h1{font-size:18px;}
+
+  /* Nav horizontal com labels maiores */
+  .bnav{padding:0 8px;}
+  .nb{padding:12px 8px 10px;font-size:11px;}
+  .nb i{font-size:22px;}
+
+  /* Scroll body com padding maior */
+  .sb{padding:24px 28px;padding-bottom:32px;}
+
+  /* Cards com espaçamento maior */
+  .card{padding:20px;margin-bottom:16px;}
+  .ct{font-size:12px;}
+
+  /* Grid de 2 colunas para formulários */
+  .r2{gap:16px;}
+
+  /* Botões */
+  .btn{font-size:15px;padding:14px 24px;}
+  .btn.bsm{font-size:12px;padding:8px 14px;}
+
+  /* Resumo — cards de saldo em grid */
+  .sbar{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:0;}
+  .sbar-item{margin-bottom:0;}
+
+  /* Histórico — itens com mais espaço */
+  .hi{padding:12px 4px;}
+  .hn{font-size:14px;}
+  .hs{font-size:12px;}
+  .hv{font-size:15px;}
+
+  /* Modais — centralizados */
+  #modal-corrigir,#modal-apagar{align-items:center;}
+  #modal-corrigir > div,#modal-apagar > div{
+    border-radius:var(--r);
+    max-width:480px;
+    width:90%;
+  }
+
+  /* Wizard de campo — mais espaçoso */
+  .pha{padding:28px 20px;}
+  .fld-step{width:36px;height:36px;font-size:14px;}
+
+  /* Tela OK */
+  .ok-icon{font-size:72px;}
+  .ok-title{font-size:26px;}
+}
+
+@media (min-width: 1100px){
+  .app{max-width:1100px;}
+
+  /* Layout 2 colunas usando o primeiro .bnav como sidebar */
+  .sb{padding:28px 32px;}
+
+  /* Cards em 2 colunas em telas largas */
+  .r2{grid-template-columns:1fr 1fr;}
+}
+
 </head>
 <body>
 
