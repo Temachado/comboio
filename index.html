@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784240000">
+<meta name="app-version" content="1784260000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -333,7 +333,7 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <button class="btn bp" onclick="ativarComoMestre()" style="font-size:12px"><i class="ti ti-device-desktop"></i> Mac (mestre)</button>
-          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> iPhone (receptor)</button>
+          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> Outros Sistemas</button>
         </div>
         <button class="btn bs" onclick="gerarLink()" style="font-size:12px"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
       </div>
@@ -698,7 +698,7 @@ function renderSyncStatus(){
   var url=getFbUrl();
   if(fbActive&&url){
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
+    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>Outros Sistemas</strong> — recebendo dados';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
     // Disconnected — trigger silent reconnect and show minimal status
