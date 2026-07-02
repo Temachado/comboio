@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784400000">
+<meta name="app-version" content="1784440000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -498,7 +498,7 @@ function _setLocalTs(ts){try{localStorage.setItem('comboio_ts',String(ts));}catc
 
 function saveDB(){
   updateSaldo();
-  db._ts = Date.now();
+  db._ts = Date.now(); // _ts dentro do db — fonte de verdade para sync
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
   _notifSalvar();
   fbPush();
@@ -511,7 +511,7 @@ function loadDB(){
       ['equipamentos','operadores','entradas','comboios','abastecimentos',
        'notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
       if(p.admin&&p.admin.usuario) db.admin=p.admin;
-      if(p._ts) db._ts=p._ts; // restaura timestamp — chave para o sync
+      if(p._ts) db._ts=p._ts; // restaura _ts — essencial para sync correto
     }
   }catch(e){}
   _notifCarregar();
@@ -601,15 +601,12 @@ function iniciarFirebase(url, showAlert, role){
     var appName='cb_'+Date.now();
     fbApp = firebase.initializeApp({databaseURL:url}, appName);
     var db2 = fbApp.database();
-    var ref = db2.ref('comboio_b02a7');
+    var ref = db2.ref('comboio_b02a7'); // path único compartilhado
     fbRefMaster = ref;
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    // ── LISTENER ÚNICO ──
-    // REGRA: o _ts do próprio registro no banco local decide.
-    // Ao carregar, cada dispositivo sabe QUANDO salvou pela última vez.
-    // O Firebase é a fonte de verdade — quem tem _ts maior vence.
+    // ── LISTENER ÚNICO — regra: último _ts vence ──
     ref.on('value', function(snap){
       var r = snap.val();
 
@@ -624,18 +621,16 @@ function iniciarFirebase(url, showAlert, role){
         renderSyncStatus(); return;
       }
 
-      // _ts do registro local (gravado no próprio db junto com os dados)
       var remoteTs = r._ts;
-      var localTs  = db._ts || 0; // _ts salvo dentro do próprio db local
+      var localTs  = db._ts || 0; // _ts dentro do db — não do localStorage separado
 
-      // REGRA ÚNICA: Firebase mais recente → aplica. Local mais recente → envia.
-      if(remoteTs >= localTs || r._forceApply){
-        // Firebase venceu — aplica localmente
+      // _forceApply (apagamentos) ou Firebase mais recente → aplica
+      if(r._forceApply || remoteTs >= localTs){
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
-        db._ts = remoteTs; // grava o _ts dentro do db para comparação futura
+        db._ts = remoteTs;
         _notifCarregar();
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
@@ -651,11 +646,10 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='historico') renderHistorico();
         }
       } else {
-        // Local mais recente — envia para Firebase
+        // Local mais recente → envia para Firebase
         _fbEnviar(ref);
       }
       renderSyncStatus();
-
     }, function(err){
       console.error('FB error:',err.message||err);
       fbActive=false; _fbConnecting=false;
@@ -664,8 +658,12 @@ function iniciarFirebase(url, showAlert, role){
       setTimeout(_fbAutoConectar, 10000);
     });
 
+    // Abastecimentos do campo (path separado para não conflitar)
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
+
     renderSyncStatus();
+    // Ao conectar: aguarda o Firebase primeiro (listener acima cuida do envio se necessário)
+    // Não enviar imediatamente para não sobrescrever _forceApply pendente
     if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
@@ -677,8 +675,8 @@ function iniciarFirebase(url, showAlert, role){
 // Envia dados locais para o Firebase
 function _fbEnviar(ref, forceTs, forceApply){
   if(!ref||!fbActive) return;
-  var ts = forceTs || Date.now();
-  db._ts = ts; // grava dentro do db para comparação futura
+  var ts = forceTs || db._ts || Date.now();
+  db._ts = ts; // garante que db._ts está atualizado
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   var payload={
     equipamentos:db.equipamentos||[],
