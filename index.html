@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784280000">
+<meta name="app-version" content="1784300000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -666,9 +666,9 @@ function iniciarFirebase(url, showAlert, role){
 }
 
 // Envia dados locais para o Firebase com timestamp atual
-function _fbEnviar(ref){
+function _fbEnviar(ref, forceTs){
   if(!ref||!fbActive) return;
-  var ts=Date.now();
+  var ts=forceTs||Date.now();
   _setLocalTs(ts);
   try{
     ref.set({
@@ -2324,12 +2324,15 @@ function confirmarApagar(){
   if(delCom)db.comboios=[];
   if(delAb)db.abastecimentos=[];
   if(delNot)db.notificacoes=[];
-  saveDB();
-  db.saldo=savedSaldo;
+  // Timestamp futuro garante que todos os dispositivos aplicam este apagamento
+  var tsForce=Date.now()+300000; // +5 minutos no futuro
+  _setLocalTs(tsForce);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
-  fbPush();
+  _notifSalvar();
+  _fbEnviar(fbRefMaster, tsForce);
   toggleModalApagar();
   renderAdmin();
+  renderResumo();
   alert('Dados apagados com sucesso.');
 }
 
@@ -2373,19 +2376,11 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
-  // Pause campo listener to prevent deleted items from reappearing
-  if(fbRefCampo) try{fbRefCampo.child('abastecimentos').off();}catch(e){}
-  saveDB();
-  // Update campo node with cleaned list
-  if(fbRefCampo&&fbActive) try{fbRefCampo.child('abastecimentos').set(db.abastecimentos||[]);}catch(e){}
-  // Push master
-  setTimeout(fbPush, 100);
-  // Re-attach campo listener after a delay
-  setTimeout(function(){
-    if(fbRefCampo&&fbActive){
-      fbRefCampo.child('abastecimentos').on('value',onCampoAbastUpdate);
-    }
-  }, 2000);
+  var tsForce=Date.now()+300000; // +5 minutos — garante que receptores aplicam
+  _setLocalTs(tsForce);
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  _notifSalvar();
+  _fbEnviar(fbRefMaster, tsForce);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
