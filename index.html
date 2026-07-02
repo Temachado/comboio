@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784300000">
+<meta name="app-version" content="1784320000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -609,22 +609,27 @@ function iniciarFirebase(url, showAlert, role){
     fbActive = true;
 
     // ── LISTENER ÚNICO ──
-    // Regra: quem tem _ts mais recente vence
     ref.on('value', function(snap){
       var r = snap.val();
       if(!r){ _fbEnviar(ref); renderSyncStatus(); return; }
 
+      // Se veio de outro dispositivo com _forceApply, aplica SEMPRE sem verificar timestamp
+      var deOutroDispositivo = r._device && r._device !== myDeviceId;
+      var forceApply = r._forceApply && deOutroDispositivo;
+
       var remoteTs = r._ts || 0;
       var localTs  = _getLocalTs();
 
-      if(remoteTs > localTs){
-        // Dado remoto é mais novo — aplica localmente
+      var deveAplicar = forceApply || (deOutroDispositivo && remoteTs > localTs);
+      var deveEnviar  = !deOutroDispositivo ? false : (remoteTs < localTs && !forceApply);
+
+      if(deveAplicar){
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
         _notifCarregar();
-        _setLocalTs(remoteTs);
+        _setLocalTs(remoteTs || Date.now());
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
         var ae=document.querySelector('.screen.active');
@@ -638,8 +643,7 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-      } else if(localTs > remoteTs){
-        // Dado local é mais novo — envia para Firebase
+      } else if(deveEnviar){
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -665,25 +669,25 @@ function iniciarFirebase(url, showAlert, role){
   }
 }
 
-// Envia dados locais para o Firebase com timestamp atual
-function _fbEnviar(ref, forceTs){
+// Envia dados locais para o Firebase
+function _fbEnviar(ref, forceTs, forceApply){
   if(!ref||!fbActive) return;
   var ts=forceTs||Date.now();
   _setLocalTs(ts);
-  try{
-    ref.set({
-      equipamentos:db.equipamentos||[],
-      operadores:db.operadores||[],
-      entradas:db.entradas||[],
-      comboios:db.comboios||[],
-      abastecimentos:db.abastecimentos||[],
-      ciclos:db.ciclos||[],
-      cicloAtivo:db.cicloAtivo||null,
-      saldo:db.saldo||{res:0,com:0},
-      _device:myDeviceId,
-      _ts:ts
-    });
-  }catch(e){console.error('fbEnviar:',e);}
+  var payload={
+    equipamentos:db.equipamentos||[],
+    operadores:db.operadores||[],
+    entradas:db.entradas||[],
+    comboios:db.comboios||[],
+    abastecimentos:db.abastecimentos||[],
+    ciclos:db.ciclos||[],
+    cicloAtivo:db.cicloAtivo||null,
+    saldo:db.saldo||{res:0,com:0},
+    _device:myDeviceId,
+    _ts:ts
+  };
+  if(forceApply) payload._forceApply=true;
+  try{ ref.set(payload); }catch(e){console.error('fbEnviar:',e);}
 }
 
 
@@ -2324,12 +2328,12 @@ function confirmarApagar(){
   if(delCom)db.comboios=[];
   if(delAb)db.abastecimentos=[];
   if(delNot)db.notificacoes=[];
-  // Timestamp futuro garante que todos os dispositivos aplicam este apagamento
-  var tsForce=Date.now()+300000; // +5 minutos no futuro
-  _setLocalTs(tsForce);
+  var ts=Date.now();
+  _setLocalTs(ts);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  _fbEnviar(fbRefMaster, tsForce);
+  // _forceApply=true: todos os dispositivos aplicam este apagamento sem verificar timestamp
+  _fbEnviar(fbRefMaster, ts, true);
   toggleModalApagar();
   renderAdmin();
   renderResumo();
@@ -2376,11 +2380,12 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
-  var tsForce=Date.now()+300000; // +5 minutos — garante que receptores aplicam
-  _setLocalTs(tsForce);
+  var ts=Date.now();
+  _setLocalTs(ts);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  _fbEnviar(fbRefMaster, tsForce);
+  // _forceApply=true: todos os dispositivos aplicam sem verificar timestamp
+  _fbEnviar(fbRefMaster, ts, true);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
