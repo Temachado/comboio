@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784320000">
+<meta name="app-version" content="1784360000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -611,7 +611,14 @@ function iniciarFirebase(url, showAlert, role){
     // ── LISTENER ÚNICO ──
     ref.on('value', function(snap){
       var r = snap.val();
-      if(!r){ _fbEnviar(ref); renderSyncStatus(); return; }
+      var isMasterDevice=false;
+      try{isMasterDevice=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+
+      if(!r){
+        // Firebase vazio: só o Mac envia dados
+        if(isMasterDevice) _fbEnviar(ref);
+        renderSyncStatus(); return;
+      }
 
       // Se veio de outro dispositivo com _forceApply, aplica SEMPRE sem verificar timestamp
       var deOutroDispositivo = r._device && r._device !== myDeviceId;
@@ -621,7 +628,7 @@ function iniciarFirebase(url, showAlert, role){
       var localTs  = _getLocalTs();
 
       var deveAplicar = forceApply || (deOutroDispositivo && remoteTs > localTs);
-      var deveEnviar  = !deOutroDispositivo ? false : (remoteTs < localTs && !forceApply);
+      var deveEnviar  = isMasterDevice && deOutroDispositivo && remoteTs < localTs && !forceApply;
 
       if(deveAplicar){
         ['equipamentos','operadores','entradas','comboios',
@@ -659,8 +666,8 @@ function iniciarFirebase(url, showAlert, role){
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
-    // Ao conectar: envia dados locais se tiver algo
-    setTimeout(function(){ if(fbActive) _fbEnviar(ref); }, 800);
+    // Ao conectar: aguarda o Firebase primeiro (listener acima cuida do envio se necessário)
+    // Não enviar imediatamente para não sobrescrever _forceApply pendente
     if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
