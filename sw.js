@@ -1,4 +1,4 @@
-const CACHE = 'combustivel-1784360000';
+const CACHE = 'combustivel-1784480000';
 const FILES = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
