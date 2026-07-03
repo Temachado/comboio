@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784480000">
+<meta name="app-version" content="1784520000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -649,6 +649,13 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='fotos')     renderFotos();
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
+        }
+        // Se havia _forceApply, reenviar SEM ele após aplicar
+        // Isso limpa o flag no Firebase e evita reaplicar o apagamento em futuras conexões
+        if(forceApply){
+          setTimeout(function(){
+            if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, null, false);
+          }, 1500);
         }
       } else if(deveEnviar){
         _fbEnviar(ref);
