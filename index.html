@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784640000">
+<meta name="app-version" content="1784680000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2318,10 +2318,13 @@ function confirmarApagar(){
   var savedSaldo=JSON.parse(JSON.stringify(db.saldo||{res:0,com:0}));
   if(delEnt)db.entradas=[];
   if(delCom)db.comboios=[];
-  if(delAb)db.abastecimentos=[];
+  if(delAb){
+    db.abastecimentos=[];
+    // Limpa também o path do campo no Firebase — evita que os dados voltem via onCampoAbastUpdate
+    if(fbRefCampo&&fbActive){try{fbRefCampo.child('abastecimentos').set([]);}catch(e){}}
+  }
   if(delNot)db.notificacoes=[];
   updateSaldo();
-  // Timestamp 10 anos no futuro — garante que nenhum dispositivo vai "superar" este apagamento
   var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
   _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
@@ -2372,6 +2375,11 @@ function apagarSelecionados(){
     else if(tipo==='transfer') db.comboios=db.comboios.filter(function(c){return c.id!==id;});
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
+  // Se apagou abastecimentos, limpa também o path do campo no Firebase
+  var apagouFuel=selecionados.some(function(kv){return kv[1].tipo==='fuel';});
+  if(apagouFuel&&fbRefCampo&&fbActive){
+    try{fbRefCampo.child('abastecimentos').set(db.abastecimentos);}catch(e){}
+  }
   _histSel={};
   updateSaldo();
   var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
