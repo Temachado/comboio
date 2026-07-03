@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784440000">
+<meta name="app-version" content="1784360000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -485,6 +485,12 @@ var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
 // ─────────────────────────────────────────────
 //  DB
 // ─────────────────────────────────────────────
+function loadDB(){
+  try{
+    var s=localStorage.getItem(DB_KEY);
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+  }catch(e){}
+}
 function updateSaldo(){
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
@@ -498,22 +504,18 @@ function _setLocalTs(ts){try{localStorage.setItem('comboio_ts',String(ts));}catc
 
 function saveDB(){
   updateSaldo();
-  db._ts = Date.now(); // _ts dentro do db — fonte de verdade para sync
+  _setLocalTs(Date.now());
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
+  // Salva notificações na chave dedicada também
   _notifSalvar();
   fbPush();
 }
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){
-      var p=JSON.parse(s);
-      ['equipamentos','operadores','entradas','comboios','abastecimentos',
-       'notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});
-      if(p.admin&&p.admin.usuario) db.admin=p.admin;
-      if(p._ts) db._ts=p._ts; // restaura _ts — essencial para sync correto
-    }
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
+  // Restaura notificações da chave dedicada — tem prioridade
   _notifCarregar();
 }
 function today(){return new Date().toISOString().slice(0,10);}
@@ -606,32 +608,35 @@ function iniciarFirebase(url, showAlert, role){
     fbRefCampo  = db2.ref('comboio_campo');
     fbActive = true;
 
-    // ── LISTENER ÚNICO — regra: último _ts vence ──
+    // ── LISTENER ÚNICO ──
     ref.on('value', function(snap){
       var r = snap.val();
+      var isMasterDevice=false;
+      try{isMasterDevice=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
 
-      // Firebase vazio — envia dados locais
-      if(!r || !r._ts){
-        _fbEnviar(ref);
+      if(!r){
+        // Firebase vazio: só o Mac envia dados
+        if(isMasterDevice) _fbEnviar(ref);
         renderSyncStatus(); return;
       }
 
-      // Ignora eco do próprio envio
-      if(r._device === myDeviceId){
-        renderSyncStatus(); return;
-      }
+      // Se veio de outro dispositivo com _forceApply, aplica SEMPRE sem verificar timestamp
+      var deOutroDispositivo = r._device && r._device !== myDeviceId;
+      var forceApply = r._forceApply && deOutroDispositivo;
 
-      var remoteTs = r._ts;
-      var localTs  = db._ts || 0; // _ts dentro do db — não do localStorage separado
+      var remoteTs = r._ts || 0;
+      var localTs  = _getLocalTs();
 
-      // _forceApply (apagamentos) ou Firebase mais recente → aplica
-      if(r._forceApply || remoteTs >= localTs){
+      var deveAplicar = forceApply || (deOutroDispositivo && remoteTs > localTs);
+      var deveEnviar  = isMasterDevice && deOutroDispositivo && remoteTs < localTs && !forceApply;
+
+      if(deveAplicar){
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
-        db._ts = remoteTs;
         _notifCarregar();
+        _setLocalTs(remoteTs || Date.now());
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
         var ae=document.querySelector('.screen.active');
@@ -645,8 +650,7 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-      } else {
-        // Local mais recente → envia para Firebase
+      } else if(deveEnviar){
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -675,9 +679,8 @@ function iniciarFirebase(url, showAlert, role){
 // Envia dados locais para o Firebase
 function _fbEnviar(ref, forceTs, forceApply){
   if(!ref||!fbActive) return;
-  var ts = forceTs || db._ts || Date.now();
-  db._ts = ts; // garante que db._ts está atualizado
-  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  var ts=forceTs||Date.now();
+  _setLocalTs(ts);
   var payload={
     equipamentos:db.equipamentos||[],
     operadores:db.operadores||[],
