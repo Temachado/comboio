@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784560000">
+<meta name="app-version" content="1784600000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -100,7 +100,7 @@ input,select,textarea,button{font-family:inherit}
 .hic.entry{background:var(--bll);color:var(--bl)}.hic.transfer{background:var(--al);color:var(--am)}.hic.fuel{background:var(--gl);color:var(--green)}
 .hb{flex:1;min-width:0}.hn{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hs{font-size:11px;color:var(--t3)}.hv{font-size:14px;font-weight:600;font-family:monospace;white-space:nowrap}
 .splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd);text-align:center}
-.login-wrap{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd)}
+.login-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:32px 24px;background:var(--gd)}
 .login-card{background:var(--cd);border-radius:var(--r);padding:24px;width:100%;max-width:360px}
 .login-err{background:var(--rl);color:var(--red);border-radius:var(--rs);padding:10px 14px;font-size:13px;margin-bottom:14px;display:none}
 .eli{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--br)}
@@ -150,7 +150,7 @@ input,select,textarea,button{font-family:inherit}
   <button onclick="mostrarLoginAdmin()" style="background:transparent;color:#9fe1cb;border:1.5px solid #3a8a72;border-radius:12px;padding:14px 24px;font-size:14px;font-weight:500;cursor:pointer;width:100%;max-width:320px;display:flex;align-items:center;justify-content:center;gap:8px">
     <i class="ti ti-shield-lock" style="font-size:18px"></i> Acesso administrativo
   </button>
-  <div style="margin-top:40px;font-size:11px;color:#3a8a72">v6</div>
+  <div style="position:absolute;bottom:16px;font-size:11px;color:#3a8a72">v6</div>
 </div>
 
 <!-- LOGIN CAMPO -->
@@ -182,7 +182,7 @@ input,select,textarea,button{font-family:inherit}
 </div>
 
 <!-- MAIN APP -->
-<div id="main-app" class="app" style="display:none;visibility:hidden">
+<div id="main-app" class="app" style="display:none">
 
   <!-- RESUMO -->
   <div id="screen-resumo" class="screen">
@@ -333,7 +333,7 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <button class="btn bp" onclick="ativarComoMestre()" style="font-size:12px"><i class="ti ti-device-desktop"></i> Mac (mestre)</button>
-          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> Outros Sistemas</button>
+          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> iPhone (receptor)</button>
         </div>
         <button class="btn bs" onclick="gerarLink()" style="font-size:12px"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
       </div>
@@ -485,12 +485,6 @@ var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
 // ─────────────────────────────────────────────
 //  DB
 // ─────────────────────────────────────────────
-function loadDB(){
-  try{
-    var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
-  }catch(e){}
-}
 function updateSaldo(){
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
@@ -609,34 +603,25 @@ function iniciarFirebase(url, showAlert, role){
     fbActive = true;
 
     // ── LISTENER ÚNICO ──
+    // Regra: quem tem _ts mais recente vence
     ref.on('value', function(snap){
       var r = snap.val();
-      var isMasterDevice=false;
-      try{isMasterDevice=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
+      if(!r){ _fbEnviar(ref); renderSyncStatus(); return; }
 
-      if(!r){
-        // Firebase vazio: só o Mac envia dados
-        if(isMasterDevice) _fbEnviar(ref);
-        renderSyncStatus(); return;
-      }
-
-      // Se veio de outro dispositivo com _forceApply, aplica SEMPRE sem verificar timestamp
-      var deOutroDispositivo = r._device && r._device !== myDeviceId;
-      var forceApply = r._forceApply && deOutroDispositivo;
+      // Ignora eco do próprio envio
+      if(r._device && r._device === myDeviceId){ renderSyncStatus(); return; }
 
       var remoteTs = r._ts || 0;
       var localTs  = _getLocalTs();
 
-      var deveAplicar = forceApply || (deOutroDispositivo && remoteTs > localTs);
-      var deveEnviar  = isMasterDevice && deOutroDispositivo && remoteTs < localTs && !forceApply;
-
-      if(deveAplicar){
+      if(r._forceApply || remoteTs > localTs){
+        // Dado remoto é mais novo — aplica localmente
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
         _notifCarregar();
-        _setLocalTs(remoteTs || Date.now());
+        _setLocalTs(remoteTs);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
         var ae=document.querySelector('.screen.active');
@@ -650,14 +635,12 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-        // Se havia _forceApply, reenviar SEM ele após aplicar
-        // Isso limpa o flag no Firebase e evita reaplicar o apagamento em futuras conexões
-        if(forceApply){
-          setTimeout(function(){
-            if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, null, false);
-          }, 1500);
+        // _forceApply aplicado: reenviar sem o flag para limpar no Firebase
+        if(r._forceApply){
+          setTimeout(function(){if(fbRefMaster&&fbActive)_fbEnviar(fbRefMaster);},1500);
         }
-      } else if(deveEnviar){
+      } else if(localTs > remoteTs){
+        // Dado local é mais novo — envia para Firebase
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -673,8 +656,8 @@ function iniciarFirebase(url, showAlert, role){
     fbRefCampo.child('abastecimentos').on('value', onCampoAbastUpdate);
 
     renderSyncStatus();
-    // Ao conectar: aguarda o Firebase primeiro (listener acima cuida do envio se necessário)
-    // Não enviar imediatamente para não sobrescrever _forceApply pendente
+    // Ao conectar: NÃO envia imediatamente
+    // O listener acima recebe o Firebase primeiro e decide se envia ou aplica
     if(showAlert) alert('Sincronização ativada!');
   }catch(e){
     fbActive=false;
@@ -683,10 +666,10 @@ function iniciarFirebase(url, showAlert, role){
   }
 }
 
-// Envia dados locais para o Firebase
-function _fbEnviar(ref, forceTs, forceApply){
+// Envia dados locais para o Firebase com timestamp atual
+function _fbEnviar(ref, forceApply){
   if(!ref||!fbActive) return;
-  var ts=forceTs||Date.now();
+  var ts=Date.now();
   _setLocalTs(ts);
   var payload={
     equipamentos:db.equipamentos||[],
@@ -716,7 +699,7 @@ function renderSyncStatus(){
   var url=getFbUrl();
   if(fbActive&&url){
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>Outros Sistemas</strong> — recebendo dados';
+    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
     // Disconnected — trigger silent reconnect and show minimal status
@@ -788,8 +771,7 @@ function doLoginCampo(){
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('login-campo').style.display='none';
-  var _app=document.getElementById('main-app');
-  _app.style.display=''; _app.style.visibility='';
+  document.getElementById('main-app').style.display='';
   navigate('field');
   // Always mark this device as receptor
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
@@ -804,8 +786,7 @@ function mostrarLoginAdmin(){
 function voltarSplash(){
   document.getElementById('login-admin').style.display='none';
   document.getElementById('login-campo').style.display='none';
-  var _app3=document.getElementById('main-app');
-  _app3.style.display='none'; _app3.style.visibility='hidden';
+  document.getElementById('main-app').style.display='none';
   document.getElementById('login-err').style.display='none';
   document.getElementById('login-campo-err').style.display='none';
   document.getElementById('login-user').value='';
@@ -821,8 +802,7 @@ function doLogin(){
     adminLogado=true;
     document.getElementById('login-err').style.display='none';
     document.getElementById('login-admin').style.display='none';
-    var _app2=document.getElementById('main-app');
-    _app2.style.display=''; _app2.style.visibility='';
+    document.getElementById('main-app').style.display='';
     navigate('resumo');
     // Auto-connect using saved role (set once via Mac/iPhone buttons)
     setTimeout(_fbAutoConectar, 500);
@@ -2342,12 +2322,11 @@ function confirmarApagar(){
   if(delCom)db.comboios=[];
   if(delAb)db.abastecimentos=[];
   if(delNot)db.notificacoes=[];
-  var ts=Date.now();
-  _setLocalTs(ts);
+  updateSaldo();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  // _forceApply=true: todos os dispositivos aplicam este apagamento sem verificar timestamp
-  _fbEnviar(fbRefMaster, ts, true);
+  // _forceApply garante que todos os dispositivos aplicam o apagamento
+  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, true);
   toggleModalApagar();
   renderAdmin();
   renderResumo();
@@ -2394,12 +2373,11 @@ function apagarSelecionados(){
     else if(tipo==='fuel') db.abastecimentos=db.abastecimentos.filter(function(a){return a.id!==id;});
   });
   _histSel={};
-  var ts=Date.now();
-  _setLocalTs(ts);
+  updateSaldo();
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  // _forceApply=true: todos os dispositivos aplicam sem verificar timestamp
-  _fbEnviar(fbRefMaster, ts, true);
+  // _forceApply garante que todos os dispositivos aplicam o apagamento
+  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, true);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
@@ -2639,17 +2617,11 @@ if('serviceWorker' in navigator){
           }
         });
       });
-      // Recarrega quando SW assume controle:
-      // - sempre se não há controlador anterior (primeira instalação)
-      // - só se usuário clicou quando há SW antigo sendo substituído
+      // Só recarrega se o usuário explicitamente clicou em Atualizar
       var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(refreshing) return;
-        refreshing=true;
-        // Se o usuário clicou OU se não havia SW antes (primeira carga)
-        if(userClicouAtualizar || !document.getElementById('update-banner')){
-          window.location.reload();
-        }
+        if(!userClicouAtualizar) return; // ignora qualquer troca de controle não solicitada
+        if(!refreshing){refreshing=true; window.location.reload();}
       });
       setInterval(function(){ reg.update(); }, 300000);
       setInterval(function(){
