@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784600000">
+<meta name="app-version" content="1784640000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -614,7 +614,7 @@ function iniciarFirebase(url, showAlert, role){
       var remoteTs = r._ts || 0;
       var localTs  = _getLocalTs();
 
-      if(r._forceApply || remoteTs > localTs){
+      if(remoteTs > localTs){
         // Dado remoto é mais novo — aplica localmente
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
@@ -635,10 +635,8 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-        // _forceApply aplicado: reenviar sem o flag para limpar no Firebase
-        if(r._forceApply){
-          setTimeout(function(){if(fbRefMaster&&fbActive)_fbEnviar(fbRefMaster);},1500);
-        }
+        // _forceApply aplicado e dados locais atualizados
+        // Não reenviar — o Firebase já tem o estado correto
       } else if(localTs > remoteTs){
         // Dado local é mais novo — envia para Firebase
         _fbEnviar(ref);
@@ -2323,10 +2321,12 @@ function confirmarApagar(){
   if(delAb)db.abastecimentos=[];
   if(delNot)db.notificacoes=[];
   updateSaldo();
+  // Timestamp 10 anos no futuro — garante que nenhum dispositivo vai "superar" este apagamento
+  var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
+  _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  // _forceApply garante que todos os dispositivos aplicam o apagamento
-  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, true);
+  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, false);
   toggleModalApagar();
   renderAdmin();
   renderResumo();
@@ -2374,10 +2374,11 @@ function apagarSelecionados(){
   });
   _histSel={};
   updateSaldo();
+  var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
+  _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  // _forceApply garante que todos os dispositivos aplicam o apagamento
-  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, true);
+  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, false);
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
