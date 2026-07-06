@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784680000">
+<meta name="app-version" content="1784720000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -896,10 +896,9 @@ var TOL = 0.02; // 2% tolerance
 function iniciarCiclo(volEntrada, entradaId){
   if(!db.ciclos) db.ciclos=[];
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado){
-    // Active cycle exists — add new entrada to it (cumulative)
-    db.cicloAtivo.volEntrada=(db.cicloAtivo.volEntrada||0)+Number(volEntrada);
+    // Ciclo já existe — atualizarCiclo vai recalcular volEntrada somando todas as entradas
   } else {
-    // No active cycle — create new one
+    // Cria novo ciclo
     db.cicloAtivo={
       id:uid(),
       inicio:today(),
@@ -1107,6 +1106,8 @@ function renderCicloPanel(){
 
 
 function renderResumo(){
+  // Sempre recalcula o ciclo antes de exibir — garante valores corretos
+  if(db.cicloAtivo&&!db.cicloAtivo.encerrado) atualizarCiclo();
   var sr=getSaldoRes(),sc=getSaldoCom();
   var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
   var ta=db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
