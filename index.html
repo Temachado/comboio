@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784720000">
+<meta name="app-version" content="1784760000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -333,7 +333,7 @@ input,select,textarea,button{font-family:inherit}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
           <button class="btn bp" onclick="ativarComoMestre()" style="font-size:12px"><i class="ti ti-device-desktop"></i> Mac (mestre)</button>
-          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> iPhone (receptor)</button>
+          <button class="btn bs" onclick="ativarComoReceptor()" style="font-size:12px"><i class="ti ti-device-mobile"></i> Outros Sistemas</button>
         </div>
         <button class="btn bs" onclick="gerarLink()" style="font-size:12px"><i class="ti ti-link"></i> Gerar link (sem internet)</button>
       </div>
@@ -560,7 +560,7 @@ function ativarComoReceptor(){
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
   _fbConnecting=false; _fbStarted=false;
   iniciarFirebase(url,false,'campo');
-  alert('iPhone configurado como RECEPTOR. A partir de agora conecta automaticamente.');
+  alert('Dispositivo configurado como receptor. A partir de agora conecta automaticamente.');
 }
 
 var _fbIgnoreNext = false;
@@ -612,10 +612,14 @@ function iniciarFirebase(url, showAlert, role){
       if(r._device && r._device === myDeviceId){ renderSyncStatus(); return; }
 
       var remoteTs = r._ts || 0;
-      var localTs  = _getLocalTs();
+      // Usa sempre Date.now() como localTs real — não o timestamp futuro de apagamento
+      // O timestamp futuro serve só para vencer na comparação remota, não para bloquear futuros saves
+      var localTs = _getLocalTs();
+      // Se localTs é maior que o tempo real em mais de 1 hora, foi um apagamento — reseta
+      if(localTs > Date.now() + 3600000) { _setLocalTs(Date.now()); localTs = Date.now(); }
 
-      if(remoteTs > localTs){
-        // Dado remoto é mais novo — aplica localmente
+      if(remoteTs >= localTs){
+        // Dado remoto é mais recente ou igual — aplica
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
@@ -635,10 +639,8 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-        // _forceApply aplicado e dados locais atualizados
-        // Não reenviar — o Firebase já tem o estado correto
       } else if(localTs > remoteTs){
-        // Dado local é mais novo — envia para Firebase
+        // Dado local é mais recente — envia para Firebase
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -697,7 +699,7 @@ function renderSyncStatus(){
   var url=getFbUrl();
   if(fbActive&&url){
     var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
-    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>iPhone (receptor)</strong> — recebendo dados';
+    var mode=_isM?'<strong>Mac (mestre)</strong> — enviando dados':'<strong>Outros Sistemas</strong> — recebendo dados';
     el.innerHTML='<div class="alert aok"><i class="ti ti-cloud-check"></i><span>Sincronização ativa — '+mode+'</span></div>';
   } else if(url){
     // Disconnected — trigger silent reconnect and show minimal status
@@ -2326,11 +2328,14 @@ function confirmarApagar(){
   }
   if(delNot)db.notificacoes=[];
   updateSaldo();
-  var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
+  var tsApagar = Date.now() + 300000; // +5 min — vence outros dispositivos sem bloquear novos saves
   _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, false);
+  if(fbRefMaster&&fbActive){
+    _fbEnviar(fbRefMaster, false);
+    setTimeout(function(){_setLocalTs(Date.now());}, 360000); // reseta após 6 min
+  }
   toggleModalApagar();
   renderAdmin();
   renderResumo();
@@ -2383,11 +2388,14 @@ function apagarSelecionados(){
   }
   _histSel={};
   updateSaldo();
-  var tsApagar = Date.now() + (10 * 365 * 24 * 60 * 60 * 1000);
+  var tsApagar = Date.now() + 300000;
   _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
-  if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster, false);
+  if(fbRefMaster&&fbActive){
+    _fbEnviar(fbRefMaster, false);
+    setTimeout(function(){_setLocalTs(Date.now());}, 360000);
+  }
   renderHistorico();
   renderResumo();
   updateDelSelBtn();
