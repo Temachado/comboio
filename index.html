@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784760000">
+<meta name="app-version" content="1784800000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1103,7 +1103,28 @@ function renderUltimoCiclo(){
 
 function renderCicloPanel(){
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) return renderCicloAtivo();
-  return renderUltimoCiclo();
+  var ultimo=renderUltimoCiclo();
+  if(ultimo) return ultimo;
+  // Sem ciclo ativo e sem histórico — mostra quadro zerado
+  function bar(){
+    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
+      '<div style="background:var(--br);width:0%;height:100%;border-radius:4px"></div></div>';
+  }
+  return '<div class="card" style="border:2px solid var(--br);margin-bottom:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
+    '<div style="font-size:13px;font-weight:600;color:var(--t3)">'+
+    '<i class="ti ti-refresh" style="margin-right:6px"></i>Controle zerado — aguardando nova entrada</div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
+    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
+    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
+    '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+bar()+'</div>'+
+    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
+    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
+    '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+bar()+'</div>'+
+    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
+    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
+    '<div style="font-size:10px;color:var(--t3)">0% da entrada</div>'+bar()+'</div>'+
+    '</div></div>';
 }
 
 
