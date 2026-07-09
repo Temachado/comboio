@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784800000">
+<meta name="app-version" content="1784840000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -1214,8 +1214,17 @@ function _fsValidarStep(step){
       var ultHod=Number(ult.hod);
       if(hodAtual<=ultHod){
         var ig=hodAtual===ultHod?'igual':'inferior';
+        var unid=fs.equip.unidade==='km'?'Odômetro':'Horímetro';
+        // Registra na aba Avisos
+        criarNotif('hod_inferior',
+          unid+' '+ig+' ao anterior',
+          fs.equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
+          ' | anterior: '+ultHod.toLocaleString('pt-BR')+
+          '. Corrija o valor.',
+          {equip:fs.equip.cod, hodLancado:hodAtual, hodAnterior:ultHod}
+        );
         return {
-          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\n'+
+          msg:unid+' '+ig+' ao anterior!\n\n'+
             'Lançado: '+hodAtual.toLocaleString('pt-BR')+
             ' | Último: '+ultHod.toLocaleString('pt-BR')+
             '\n\nCorrija o valor para continuar.',
@@ -1229,6 +1238,12 @@ function _fsValidarStep(step){
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
     if(cap>0&&l>cap){
+      // Registra na aba Avisos
+      criarNotif('volume_excede_tank',
+        'Volume supera capacidade do tanque',
+        fs.equip.cod+': tentativa de '+l.toFixed(0)+' L, capacidade máxima '+cap.toLocaleString('pt-BR')+' L. Corrija o volume.',
+        {equip:fs.equip.cod, volLancado:l, capacidade:cap}
+      );
       return {
         msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',
         tipo:'red', foco:'lit-inp'
