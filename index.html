@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784960000">
+<meta name="app-version" content="1785000000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -643,12 +643,16 @@ function iniciarFirebase(url, showAlert, role){
       _fbPrimeiraConexao = false;
 
       if(deveAplicar){
-        // Dado remoto é mais recente — aplica localmente
+        // Salva notificações locais antes de aplicar dados remotos
+        var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
+        // Restaura notificações locais — não sobrescreve com array vazio do Firebase
+        // Notificações são sempre locais (NOTIF_KEY), nunca sincronizadas
         _notifCarregar();
+        if(!db.notificacoes||!db.notificacoes.length) db.notificacoes=notifLocais;
         _setLocalTs(remoteTs);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
@@ -1235,6 +1239,11 @@ function _fsValidarStep(step){
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
     if(cap>0&&l>cap){
+      criarNotif('volume_excede_tank',
+        'Volume supera capacidade do tanque',
+        fs.equip.cod+': tentativa de '+l.toFixed(0)+' L, capacidade máxima '+cap.toLocaleString('pt-BR')+' L. Corrija o volume.',
+        {equip:fs.equip.cod, volLancado:l, capacidade:cap}
+      );
       return {
         msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',
         tipo:'red', foco:'lit-inp'
