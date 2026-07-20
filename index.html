@@ -604,22 +604,33 @@ function iniciarFirebase(url, showAlert, role){
 
     // ── LISTENER ÚNICO ──
     // Regra: quem tem _ts mais recente vence
+    var _fbPrimeiraConexao = true; // flag: primeira vez que o listener dispara nesta sessão
+
     ref.on('value', function(snap){
       var r = snap.val();
       if(!r){ _fbEnviar(ref); renderSyncStatus(); return; }
 
-      // Ignora eco do próprio envio
-      if(r._device && r._device === myDeviceId){ renderSyncStatus(); return; }
+      // Ignora eco do próprio envio (exceto na primeira conexão)
+      if(!_fbPrimeiraConexao && r._device && r._device === myDeviceId){
+        renderSyncStatus(); return;
+      }
 
       var remoteTs = r._ts || 0;
-      // Usa sempre Date.now() como localTs real — não o timestamp futuro de apagamento
-      // O timestamp futuro serve só para vencer na comparação remota, não para bloquear futuros saves
-      var localTs = _getLocalTs();
-      // Se localTs é maior que o tempo real em mais de 1 hora, foi um apagamento — reseta
-      if(localTs > Date.now() + 3600000) { _setLocalTs(Date.now()); localTs = Date.now(); }
+      var localTs  = _getLocalTs();
+      // Reset timestamp futuro anômalo
+      if(localTs > Date.now() + 3600000){ _setLocalTs(Date.now()); localTs=Date.now(); }
 
-      if(remoteTs >= localTs){
-        // Dado remoto é mais recente ou igual — aplica
+      // Na primeira conexão: Firebase prevalece se tiver dados (mesmo que localTs seja maior)
+      // Isso garante que equipamentos/dados cadastrados em outros dispositivos chegam
+      // Após a primeira conexão: quem tem _ts maior vence
+      var deveAplicar = _fbPrimeiraConexao
+        ? (remoteTs > 0 && r._device !== myDeviceId)
+        : (remoteTs > localTs);
+
+      _fbPrimeiraConexao = false;
+
+      if(deveAplicar){
+        // Dado remoto é mais recente — aplica localmente
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
@@ -639,8 +650,8 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-      } else if(localTs > remoteTs){
-        // Dado local é mais recente — envia para Firebase
+      } else if(remoteTs < localTs && r._device !== myDeviceId){
+        // Local é mais recente que o Firebase — envia
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -898,9 +909,10 @@ var TOL = 0.02; // 2% tolerance
 function iniciarCiclo(volEntrada, entradaId){
   if(!db.ciclos) db.ciclos=[];
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado){
-    // Ciclo já existe — atualizarCiclo vai recalcular volEntrada somando todas as entradas
+    // Active cycle exists — add new entrada to it (cumulative)
+    // ciclo já existe — atualizarCiclo recalcula volEntrada corretamente
   } else {
-    // Cria novo ciclo
+    // No active cycle — create new one
     db.cicloAtivo={
       id:uid(),
       inicio:today(),
@@ -1103,33 +1115,12 @@ function renderUltimoCiclo(){
 
 function renderCicloPanel(){
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) return renderCicloAtivo();
-  var ultimo=renderUltimoCiclo();
-  if(ultimo) return ultimo;
-  // Sem ciclo ativo e sem histórico — mostra quadro zerado
-  function bar(){
-    return '<div style="background:var(--br);border-radius:4px;height:10px;margin-top:5px;overflow:hidden">'+
-      '<div style="background:var(--br);width:0%;height:100%;border-radius:4px"></div></div>';
-  }
-  return '<div class="card" style="border:2px solid var(--br);margin-bottom:12px">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'+
-    '<div style="font-size:13px;font-weight:600;color:var(--t3)">'+
-    '<i class="ti ti-refresh" style="margin-right:6px"></i>Controle zerado — aguardando nova entrada</div></div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px">'+
-    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Tanque</div>'+
-    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
-    '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+bar()+'</div>'+
-    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Comboio</div>'+
-    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
-    '<div style="font-size:10px;color:var(--t3)">saldo disponível</div>'+bar()+'</div>'+
-    '<div><div style="font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;margin-bottom:4px">Equipamentos</div>'+
-    '<div style="font-size:20px;font-weight:600;font-family:monospace;color:var(--t3)">0</div>'+
-    '<div style="font-size:10px;color:var(--t3)">0% da entrada</div>'+bar()+'</div>'+
-    '</div></div>';
+  var u=renderUltimoCiclo(); if(u) return u;
+  return '<div class="card" style="border:2px solid var(--br);margin-bottom:12px"><div style="font-size:13px;color:var(--t3);padding:8px 0"><i class="ti ti-refresh"></i> Controle zerado — aguardando nova entrada</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px"><div><div style="font-size:10px;color:var(--t3);text-transform:uppercase">Tanque</div><div style="font-size:20px;font-weight:600;color:var(--t3);font-family:monospace">0</div></div><div><div style="font-size:10px;color:var(--t3);text-transform:uppercase">Comboio</div><div style="font-size:20px;font-weight:600;color:var(--t3);font-family:monospace">0</div></div><div><div style="font-size:10px;color:var(--t3);text-transform:uppercase">Equipamentos</div><div style="font-size:20px;font-weight:600;color:var(--t3);font-family:monospace">0</div></div></div></div>';
 }
 
 
 function renderResumo(){
-  // Sempre recalcula o ciclo antes de exibir — garante valores corretos
   if(db.cicloAtivo&&!db.cicloAtivo.encerrado) atualizarCiclo();
   var sr=getSaldoRes(),sc=getSaldoCom();
   var te=db.entradas.reduce(function(s,e){return s+Number(e.vol);},0);
@@ -1214,17 +1205,9 @@ function _fsValidarStep(step){
       var ultHod=Number(ult.hod);
       if(hodAtual<=ultHod){
         var ig=hodAtual===ultHod?'igual':'inferior';
-        var unid=fs.equip.unidade==='km'?'Odômetro':'Horímetro';
-        // Registra na aba Avisos
-        criarNotif('hod_inferior',
-          unid+' '+ig+' ao anterior',
-          fs.equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+
-          ' | anterior: '+ultHod.toLocaleString('pt-BR')+
-          '. Corrija o valor.',
-          {equip:fs.equip.cod, hodLancado:hodAtual, hodAnterior:ultHod}
-        );
+        criarNotif('hod_inferior',(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior',fs.equip.cod+': lançado '+hodAtual.toLocaleString('pt-BR')+' | anterior: '+ultHod.toLocaleString('pt-BR'),{equip:fs.equip.cod});
         return {
-          msg:unid+' '+ig+' ao anterior!\n\n'+
+          msg:(fs.equip.unidade==='km'?'Odômetro':'Horímetro')+' '+ig+' ao anterior!\n\n'+
             'Lançado: '+hodAtual.toLocaleString('pt-BR')+
             ' | Último: '+ultHod.toLocaleString('pt-BR')+
             '\n\nCorrija o valor para continuar.',
@@ -1238,12 +1221,6 @@ function _fsValidarStep(step){
     var l=Number(fs.litros);
     var cap=fs.equip.tank?Number(fs.equip.tank):0;
     if(cap>0&&l>cap){
-      // Registra na aba Avisos
-      criarNotif('volume_excede_tank',
-        'Volume supera capacidade do tanque',
-        fs.equip.cod+': tentativa de '+l.toFixed(0)+' L, capacidade máxima '+cap.toLocaleString('pt-BR')+' L. Corrija o volume.',
-        {equip:fs.equip.cod, volLancado:l, capacidade:cap}
-      );
       return {
         msg:'Volume ('+l.toFixed(0)+' L) maior que a capacidade do tanque ('+cap.toLocaleString('pt-BR')+' L).\n\nCorrija o volume para continuar.',
         tipo:'red', foco:'lit-inp'
@@ -2364,13 +2341,13 @@ function confirmarApagar(){
   }
   if(delNot)db.notificacoes=[];
   updateSaldo();
-  var tsApagar = Date.now() + 300000; // +5 min — vence outros dispositivos sem bloquear novos saves
+  var tsApagar = Date.now() + 300000; // +5 min
   _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
   if(fbRefMaster&&fbActive){
     _fbEnviar(fbRefMaster, false);
-    setTimeout(function(){_setLocalTs(Date.now());}, 360000); // reseta após 6 min
+    setTimeout(function(){_setLocalTs(Date.now());},360000);
   }
   toggleModalApagar();
   renderAdmin();
@@ -2424,13 +2401,13 @@ function apagarSelecionados(){
   }
   _histSel={};
   updateSaldo();
-  var tsApagar = Date.now() + 300000;
+  var tsApagar = Date.now() + 300000; // +5 min
   _setLocalTs(tsApagar);
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
   _notifSalvar();
   if(fbRefMaster&&fbActive){
     _fbEnviar(fbRefMaster, false);
-    setTimeout(function(){_setLocalTs(Date.now());}, 360000);
+    setTimeout(function(){_setLocalTs(Date.now());},360000);
   }
   renderHistorico();
   renderResumo();
