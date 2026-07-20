@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784880000">
+<meta name="app-version" content="1784920000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -527,15 +527,15 @@ function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 // Central auto-connect — used everywhere, safe to call multiple times
 var _fbConnecting=false;
 function _fbAutoConectar(){
-  if(_fbConnecting||fbActive) return; // already connecting or connected
+  if(_fbConnecting||fbActive) return;
   var url=getFbUrl(); if(!url) return;
   var _isM=false; try{_isM=localStorage.getItem('comboio_is_master')==='true';}catch(e){}
   _fbConnecting=true;
   _fbStarted=false;
   window._fbLastError=null;
   iniciarFirebase(url,false,_isM?'admin':'campo');
-  if(_isM) setTimeout(function(){if(fbActive)fbPush();},800);
-  setTimeout(function(){_fbConnecting=false;},5000); // reset flag after 5s
+  // NÃO envia dados ao conectar — o listener recebe primeiro e decide
+  setTimeout(function(){_fbConnecting=false;},5000);
 }
 function ativarFirebase(){
   ativarComoMestre(); // legacy — defaults to master
@@ -552,7 +552,7 @@ function ativarComoMestre(){
   try{localStorage.setItem('comboio_is_master','true');}catch(e){}
   _fbConnecting=false; _fbStarted=false;
   iniciarFirebase(url,false,'admin');
-  setTimeout(function(){if(fbActive)fbPush();},800);
+  // NÃO envia imediatamente — listener recebe Firebase primeiro e decide
   alert('Mac configurado como MESTRE. A partir de agora conecta automaticamente.');
 }
 function ativarComoReceptor(){
@@ -620,12 +620,25 @@ function iniciarFirebase(url, showAlert, role){
       // Reset timestamp futuro anômalo
       if(localTs > Date.now() + 3600000){ _setLocalTs(Date.now()); localTs=Date.now(); }
 
-      // Na primeira conexão: Firebase prevalece se tiver dados (mesmo que localTs seja maior)
-      // Isso garante que equipamentos/dados cadastrados em outros dispositivos chegam
-      // Após a primeira conexão: quem tem _ts maior vence
-      var deveAplicar = _fbPrimeiraConexao
-        ? (remoteTs > 0 && r._device !== myDeviceId)
-        : (remoteTs > localTs);
+      // Na primeira conexão da sessão: aplica dados do Firebase se veio de outro dispositivo
+      // Isso garante sincronização independente de timestamps
+      // Após primeira conexão: regra normal — maior _ts vence
+      var deveAplicar, deveEnviar;
+      if(_fbPrimeiraConexao){
+        if(r._device && r._device !== myDeviceId){
+          // Firebase tem dados de outro dispositivo — aplica sempre
+          deveAplicar = true;
+          deveEnviar = false;
+        } else if(!r._device || r._device === myDeviceId){
+          // Firebase tem meus próprios dados — compara timestamps
+          deveAplicar = false;
+          deveEnviar = (localTs > remoteTs);
+        }
+      } else {
+        // Após primeira conexão — quem tem _ts maior vence
+        deveAplicar = (remoteTs > localTs);
+        deveEnviar  = (!deveAplicar && localTs > remoteTs && r._device !== myDeviceId);
+      }
 
       _fbPrimeiraConexao = false;
 
@@ -650,8 +663,7 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='notif')     renderNotif();
           else if(sid==='historico') renderHistorico();
         }
-      } else if(remoteTs < localTs && r._device !== myDeviceId){
-        // Local é mais recente que o Firebase — envia
+      } else if(deveEnviar){
         _fbEnviar(ref);
       }
       renderSyncStatus();
