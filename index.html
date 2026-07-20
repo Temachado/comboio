@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1784840000">
+<meta name="app-version" content="1784880000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -2622,7 +2622,8 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').then(function(reg){
       reg.update();
       var swWaiting=null;
-      var userClicouAtualizar=false; // só true após clique explícito no botão
+      var userClicouAtualizar=false;
+
       function mostrarBanner(worker){
         swWaiting=worker;
         if(document.getElementById('update-banner')) return;
@@ -2639,22 +2640,37 @@ if('serviceWorker' in navigator){
           else { window.location.reload(true); }
         });
       }
-      if(reg.waiting) mostrarBanner(reg.waiting);
+
+      function checkUpdate(r){
+        if(r.waiting){ mostrarBanner(r.waiting); return; }
+        if(r.installing){
+          r.installing.addEventListener('statechange',function(){
+            if(this.state==='installed') mostrarBanner(this);
+          });
+        }
+      }
+
+      // Verifica imediatamente
+      checkUpdate(reg);
+
+      // Detecta nova versão durante a sessão
       reg.addEventListener('updatefound',function(){
-        var w=reg.installing;
-        w.addEventListener('statechange',function(){
-          if(w.state==='installed'&&navigator.serviceWorker.controller){
-            mostrarBanner(w);
-          }
-        });
+        checkUpdate(reg);
       });
-      // Só recarrega se o usuário explicitamente clicou em Atualizar
+
+      // Polling a cada 30s — garante detecção no Safari
+      setInterval(function(){
+        reg.update().then(function(){ checkUpdate(reg); }).catch(function(){});
+      }, 30000);
+
+      // Recarrega após SKIP_WAITING (só se usuário clicou)
       var refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',function(){
-        if(!userClicouAtualizar) return; // ignora qualquer troca de controle não solicitada
+        if(!userClicouAtualizar) return;
         if(!refreshing){refreshing=true; window.location.reload();}
       });
-      setInterval(function(){ reg.update(); }, 300000);
+
+      // Reconexão Firebase periódica
       setInterval(function(){
         var url=getFbUrl();
         if(url&&!fbActive){
