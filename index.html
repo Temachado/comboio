@@ -6,10 +6,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Comboio">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785040000">
+<meta name="app-version" content="1785080000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -22,7 +23,7 @@
 <style>
 :root{--green:#0f6e56;--gl:#e1f5ee;--gm:#1d9e75;--gd:#085041;--am:#854f0b;--al:#faeeda;--red:#a32d2d;--rl:#fcebeb;--bl:#185fa5;--bll:#e6f1fb;--tx:#1a1a1a;--t2:#666;--t3:#999;--bg:#f7f7f5;--cd:#fff;--br:#e5e5e0;--r:12px;--rs:8px;font-family:'IBM Plex Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden}
+body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;overscroll-behavior:none;}
 input,select,textarea,button{font-family:inherit}
 .app{max-width:480px;margin:0 auto;min-height:100vh}
 .screen{display:none;flex-direction:column;min-height:100vh}
@@ -36,7 +37,7 @@ input,select,textarea,button{font-family:inherit}
 .bnav{display:flex;background:var(--cd);border-top:1px solid var(--br);padding:0 0 env(safe-area-inset-bottom);flex-shrink:0}
 .nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;border:none;background:none;cursor:pointer;color:var(--t3);font-size:10px;font-weight:500}
 .nb.active{color:var(--green)}.nb i{font-size:22px}
-.sb{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px}
+.sb{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px;overscroll-behavior-y:contain;}
 .card{background:var(--cd);border:1px solid var(--br);border-radius:var(--r);padding:16px;margin-bottom:12px}
 .ct{font-size:13px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
@@ -2631,9 +2632,36 @@ loadDB();
   }catch(ex){}
 })();
 
-// Firebase starts only AFTER role is chosen (entrarCampo or doLogin)
-// This prevents iPhone data from overwriting Mac before login
-var _fbStarted = false;
+var SESS_KEY = 'comboio_sessao';
+
+function salvarSessao(tipo){
+  try{localStorage.setItem(SESS_KEY, tipo);}catch(e){}
+}
+function limparSessao(){
+  try{localStorage.removeItem(SESS_KEY);}catch(e){}
+}
+function restaurarSessao(){
+  try{
+    var s=localStorage.getItem(SESS_KEY);
+    if(s==='admin'){
+      adminLogado=true;
+      var app=document.getElementById('main-app');
+      app.style.display=''; app.style.visibility='';
+      navigate('resumo');
+      _setLocalTs(0);
+      setTimeout(_fbAutoConectar,300);
+      return true;
+    } else if(s==='campo'){
+      var app2=document.getElementById('main-app');
+      app2.style.display=''; app2.style.visibility='';
+      navigate('field');
+      _setLocalTs(0);
+      setTimeout(_fbAutoConectar,300);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
 function startFirebaseForRole(role){
   if(_fbStarted) return;
   var url=getFbUrl();
