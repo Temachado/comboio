@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785000000">
+<meta name="app-version" content="1785040000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -521,7 +521,16 @@ function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:d
 // ─────────────────────────────────────────────
 //  FIREBASE
 // ─────────────────────────────────────────────
-function getFbUrl(){try{return localStorage.getItem(FB_KEY)||'';}catch(e){return '';}}
+// URL padrão do projeto — todos os dispositivos conectam automaticamente
+var FB_URL_PADRAO = 'https://comboio-b02a7-default-rtdb.firebaseio.com';
+function getFbUrl(){
+  try{
+    var url=localStorage.getItem(FB_KEY)||'';
+    if(!url){ url=FB_URL_PADRAO; localStorage.setItem(FB_KEY,url); }
+    return url;
+  }catch(e){ return FB_URL_PADRAO; }
+}
+function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 function setFbUrl(u){try{localStorage.setItem(FB_KEY,u);}catch(e){}}
 
 // Central auto-connect — used everywhere, safe to call multiple times
