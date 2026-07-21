@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785080000">
+<meta name="app-version" content="1785120000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -808,12 +808,17 @@ function doLoginCampo(){
 function entrarCampo(){
   document.getElementById('splash').style.display='none';
   document.getElementById('login-campo').style.display='none';
-  document.getElementById('main-app').style.display='';
+  var app=document.getElementById('main-app');
+  app.style.display='';
+  app.style.visibility='';
   navigate('field');
   try{localStorage.setItem('comboio_is_master','false');}catch(e){}
-  // Reseta localTs para garantir que Firebase prevalece na primeira conexão
   _setLocalTs(0);
-  setTimeout(_fbAutoConectar, 300);
+  var url=getFbUrl();
+  if(url){
+    _fbConnecting=false; _fbStarted=false;
+    iniciarFirebase(url, false, 'campo');
+  }
 }
 function mostrarLoginAdmin(){
   document.getElementById('splash').style.display='none';
@@ -839,12 +844,18 @@ function doLogin(){
     adminLogado=true;
     document.getElementById('login-err').style.display='none';
     document.getElementById('login-admin').style.display='none';
-    document.getElementById('main-app').style.display='';
-    // Reseta localTs para garantir que Firebase prevalece na primeira conexão
-    // Isso faz o listener sempre buscar dados frescos ao logar
+    var app=document.getElementById('main-app');
+    app.style.display='';
+    app.style.visibility='';
+    // Reseta localTs — Firebase sempre prevalece na primeira conexão
     _setLocalTs(0);
     navigate('resumo');
-    setTimeout(_fbAutoConectar, 300);
+    // Conecta Firebase imediatamente
+    var url=getFbUrl();
+    if(url){
+      _fbConnecting=false; _fbStarted=false;
+      iniciarFirebase(url, false, 'admin');
+    }
   } else {
     document.getElementById('login-err').style.display='block';
   }
