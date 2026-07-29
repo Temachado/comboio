@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785200000">
+<meta name="app-version" content="1785280000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -657,16 +657,23 @@ function iniciarFirebase(url, showAlert, role){
       _fbPrimeiraConexao = false;
 
       if(deveAplicar){
-        // Salva notificações locais antes de aplicar dados remotos
-        var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
+        // Aplica dados remotos
         ['equipamentos','operadores','entradas','comboios',
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
-        // Restaura notificações locais — não sobrescreve com array vazio do Firebase
-        // Notificações são sempre locais (NOTIF_KEY), nunca sincronizadas
+        // Mescla notificações: combina remotas + locais, sem duplicar por id
         _notifCarregar();
-        if(!db.notificacoes||!db.notificacoes.length) db.notificacoes=notifLocais;
+        var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
+        var notifRemota = r.notificacoes||[];
+        var idsLocais = notifLocais.map(function(n){return n.id;});
+        notifRemota.forEach(function(n){
+          if(idsLocais.indexOf(n.id)===-1) notifLocais.push(n);
+        });
+        // Ordena por data/hora mais recente
+        notifLocais.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+        db.notificacoes = notifLocais;
+        _notifSalvar();
         _setLocalTs(remoteTs);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         updateSaldo(); updateNotifBadge();
@@ -712,6 +719,8 @@ function _fbEnviar(ref, forceApply){
   if(!ref||!fbActive) return;
   var ts=Date.now();
   _setLocalTs(ts);
+  // Garante que notificações estão atualizadas antes de enviar
+  _notifCarregar();
   var payload={
     equipamentos:db.equipamentos||[],
     operadores:db.operadores||[],
@@ -721,6 +730,7 @@ function _fbEnviar(ref, forceApply){
     ciclos:db.ciclos||[],
     cicloAtivo:db.cicloAtivo||null,
     saldo:db.saldo||{res:0,com:0},
+    notificacoes:db.notificacoes||[],
     _device:myDeviceId,
     _ts:ts
   };
@@ -880,15 +890,14 @@ function iconFor(t){return ICONS_EQ[t]||'ti-tractor';}
 
 function buildNav(active){
   var items=[
-    {id:'resumo',icon:'ti-dashboard',label:'Resumo'},
-    {id:'field',icon:'ti-gas-station',label:'Abastecer'},
-    {id:'entrada',icon:'ti-truck-delivery',label:'Entrada'},
-    
-    {id:'admin',icon:'ti-settings',label:'Config'}
+    {id:'resumo',   icon:'ti-dashboard',     label:'Resumo'},
+    {id:'entrada',  icon:'ti-truck-delivery', label:'Entrada'},
+    {id:'field',    icon:'ti-gas-station',    label:'Abastecer'},
   ];
-  if(adminLogado) items.push({id:'fotos',icon:'ti-camera',label:'Fotos'});
-  if(adminLogado) items.push({id:'notif',icon:'ti-bell',label:'Avisos'});
-  if(adminLogado) items.push({id:'historico',icon:'ti-history',label:'Histórico'});
+  if(adminLogado) items.push({id:'notif',    icon:'ti-bell',     label:'Avisos'});
+  if(adminLogado) items.push({id:'historico',icon:'ti-history',  label:'Histórico'});
+  if(adminLogado) items.push({id:'fotos',    icon:'ti-camera',   label:'Fotos'});
+  items.push(      {id:'admin',              icon:'ti-settings', label:'Config'});
   return items.map(function(it){
     return '<button class="nb'+(it.id===active?' active':'')+'" onclick="navigate(\''+it.id+'\')"><i class="ti '+it.icon+'"></i>'+it.label+'</button>';
   }).join('');
