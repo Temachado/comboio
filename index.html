@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785400000">
+<meta name="app-version" content="1785440000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -224,7 +224,6 @@ input,select,textarea,button{font-family:inherit}
           </div>
           <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
         </div>
-        <div class="card"><div class="ct">Últimos carregamentos</div><div id="hist-com"></div></div>
         <div style="height:3px;background:var(--br);border-radius:2px;margin:8px 0 16px"></div>
       </div>
       <!-- Wizard de abastecimento de equipamento -->
@@ -1904,6 +1903,7 @@ function renderHistCom(){
   }
   var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
   var el=document.getElementById('hist-com');
+  if(!el) return; // hist-com foi removido desta aba
   if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
   el.innerHTML=rows.map(function(r){
     var html='<div class="hi" id="com-'+r.id+'">';
