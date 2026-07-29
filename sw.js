@@ -1,4 +1,4 @@
-const CACHE = 'combustivel-1785320000';
+const CACHE = 'combustivel-1785360000';
 const FILES = ['./', './index.html', './manifest.json'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));

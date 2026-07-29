@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785320000">
+<meta name="app-version" content="1785360000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -207,8 +207,32 @@ input,select,textarea,button{font-family:inherit}
   <!-- ABASTECIMENTO -->
   <div id="screen-field" class="screen">
     <div class="topbar"><div class="tb"><div style="flex:1"><h1>Abastecimento</h1><div class="tb-sub" id="fld-sub"></div></div><span class="pill p-off" id="fld-pill">offline</span></div></div>
-    <div id="fld-steps" class="steps"></div>
-    <div class="sb" id="fld-body"></div>
+    <div class="sb" id="fld-body-wrap" style="padding:0">
+      <!-- Módulo: Abastecimento do Comboio (visível para todos) -->
+      <div id="comboio-section" style="padding:16px;margin-bottom:0">
+        <div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          <i class="ti ti-flame" style="font-size:16px;color:var(--am)"></i>Abastecimento do comboio
+        </div>
+        <div class="card">
+          <div class="r2">
+            <div class="field"><label>Data</label><input type="date" id="c-data"></div>
+            <div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000" inputmode="decimal"></div>
+          </div>
+          <div class="r2">
+            <div class="field"><label>Operador</label><select id="c-op"><option value="">— selecione —</option></select></div>
+            <div class="field"><label>Km / Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura" inputmode="decimal"></div>
+          </div>
+          <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
+        </div>
+        <div class="card"><div class="ct">Últimos carregamentos</div><div id="hist-com"></div></div>
+        <div style="height:3px;background:var(--br);border-radius:2px;margin:8px 0 16px"></div>
+      </div>
+      <!-- Wizard de abastecimento de equipamento -->
+      <div style="padding:0 16px">
+        <div id="fld-steps" class="steps"></div>
+      </div>
+      <div id="fld-body" style="padding:0 16px 24px"></div>
+    </div>
     <div id="fld-nav"></div>
   </div>
 
@@ -234,24 +258,6 @@ input,select,textarea,button{font-family:inherit}
         <button class="btn bp" onclick="salvarEntrada()"><i class="ti ti-plus"></i> Registrar entrada</button>
       </div>
       <div class="card" style="margin-bottom:8px"><div class="ct">Últimas entradas</div><div id="hist-ent"></div></div>
-
-      <div style="height:3px;background:var(--br);border-radius:2px;margin:16px 0"></div>
-
-      <div style="font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;display:flex;align-items:center;gap:8px">
-        <i class="ti ti-flame" style="font-size:16px;color:var(--am)"></i>Abastecimento do comboio
-      </div>
-      <div class="card">
-        <div class="r2">
-          <div class="field"><label>Data</label><input type="date" id="c-data"></div>
-          <div class="field"><label>Volume (L)</label><input type="number" id="c-vol" min="1" step="0.1" placeholder="Ex: 2000" inputmode="decimal"></div>
-        </div>
-        <div class="r2">
-          <div class="field"><label>Operador</label><select id="c-op"><option value="">— selecione —</option></select></div>
-          <div class="field"><label>Km / Hora</label><input type="number" id="c-hod" min="0" step="0.1" placeholder="Leitura" inputmode="decimal"></div>
-        </div>
-        <button class="btn bp" onclick="salvarComboio()"><i class="ti ti-plus"></i> Registrar</button>
-      </div>
-      <div class="card"><div class="ct">Últimos carregamentos</div><div id="hist-com"></div></div>
     </div>
     <nav class="bnav" id="nav-entrada"></nav>
   </div>
@@ -916,9 +922,9 @@ function navigate(id){
   document.getElementById('screen-'+id).classList.add('active');
   document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(id);});
   if(id==='resumo') renderResumo();
-  if(id==='field')  renderField();
-  if(id==='entrada'){
-    document.getElementById('e-data').value=today();
+  if(id==='field'){
+    renderField();
+    // Popula módulo comboio na aba Abastecer
     document.getElementById('c-data').value=today();
     var _sel=document.getElementById('c-op');
     if(_sel){
@@ -927,8 +933,11 @@ function navigate(id){
           return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';
         }).join('');
     }
-    renderHistEnt();
     renderHistCom();
+  }
+  if(id==='entrada'){
+    document.getElementById('e-data').value=today();
+    renderHistEnt();
   }
 
   if(id==='admin')  renderAdmin();
@@ -945,7 +954,11 @@ window.addEventListener('popstate',function(e){
     document.getElementById('screen-'+e.state.nav).classList.add('active');
     document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav(e.state.nav);});
     if(e.state.nav==='resumo') renderResumo();
-    if(e.state.nav==='field')  renderField();
+    if(e.state.nav==='field'){
+      renderField();
+      document.getElementById('c-data').value=today();
+      renderHistCom();
+    }
     if(e.state.nav==='admin')  renderAdmin();
     if(e.state.nav==='fotos')  renderFotos();
     if(e.state.nav==='notif')  renderNotif();
