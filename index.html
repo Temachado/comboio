@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785360000">
+<meta name="app-version" content="1785400000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -501,6 +501,7 @@ var fs = {step:1, equip:null, hod:null, litros:null, litrosBomba:null,
 //  DB
 // ─────────────────────────────────────────────
 function updateSaldo(){
+  // Sempre recalcula da fonte — nunca usa cache
   db.saldo={
     res: db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
        - db.comboios.reduce(function(s,c){return s+Number(c.vol);},0),
@@ -530,8 +531,16 @@ function loadDB(){
 function today(){return new Date().toISOString().slice(0,10);}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
-function getSaldoRes(){return(db.saldo&&db.saldo.res!==undefined)?db.saldo.res:db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)-db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);}
-function getSaldoCom(){return(db.saldo&&db.saldo.com!==undefined)?db.saldo.com:db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)-db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);}
+function getSaldoRes(){
+  // Sempre recalcula: Tanque = total entradas - total carregado no comboio
+  return db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
+       - db.comboios.reduce(function(s,c){return s+Number(c.vol);},0);
+}
+function getSaldoCom(){
+  // Sempre recalcula: Comboio = total carregado - total abastecido em equipamentos
+  return db.comboios.reduce(function(s,c){return s+Number(c.vol);},0)
+       - db.abastecimentos.reduce(function(s,a){return s+Number(a.vol);},0);
+}
 
 // ─────────────────────────────────────────────
 //  FIREBASE
