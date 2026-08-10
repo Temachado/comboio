@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785440000">
+<meta name="app-version" content="1785480000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -23,7 +23,18 @@
 <style>
 :root{--green:#0f6e56;--gl:#e1f5ee;--gm:#1d9e75;--gd:#085041;--am:#854f0b;--al:#faeeda;--red:#a32d2d;--rl:#fcebeb;--bl:#185fa5;--bll:#e6f1fb;--tx:#1a1a1a;--t2:#666;--t3:#999;--bg:#f7f7f5;--cd:#fff;--br:#e5e5e0;--r:12px;--rs:8px;font-family:'IBM Plex Sans',sans-serif}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;overscroll-behavior:none;}
+body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+@media(max-width:480px){
+  .app{max-width:100%;width:100%;}
+  .tb h1{font-size:16px;}
+  .btn{font-size:14px;padding:12px 16px;}
+  .card{padding:14px;}
+  .field label{font-size:13px;}
+  .field input,.field select{font-size:15px;padding:10px 12px;}
+  .nb{font-size:9px;padding:8px 2px 6px;}
+  .nb i{font-size:19px;}
+  .r2{grid-template-columns:1fr 1fr;gap:10px;}
+}
 html{overscroll-behavior:none;}
 input,select,textarea,button{font-family:inherit}
 .app{max-width:480px;margin:0 auto;min-height:100vh}
@@ -683,17 +694,21 @@ function iniciarFirebase(url, showAlert, role){
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
-        // Mescla notificações: combina remotas + locais, sem duplicar por id
+        // Mescla notificações com respeito ao apagamento remoto
         _notifCarregar();
         var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
         var notifRemota = r.notificacoes||[];
-        var idsLocais = notifLocais.map(function(n){return n.id;});
-        notifRemota.forEach(function(n){
-          if(idsLocais.indexOf(n.id)===-1) notifLocais.push(n);
-        });
-        // Ordena por data/hora mais recente
-        notifLocais.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
-        db.notificacoes = notifLocais;
+        if(notifRemota.length===0 && remoteTs >= _getLocalTs()){
+          // Apagamento remoto mais recente — respeita
+          db.notificacoes = [];
+        } else {
+          var idsLocais = notifLocais.map(function(n){return n.id;});
+          notifRemota.forEach(function(n){
+            if(idsLocais.indexOf(n.id)===-1) notifLocais.push(n);
+          });
+          notifLocais.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+          db.notificacoes = notifLocais;
+        }
         _notifSalvar();
         _setLocalTs(remoteTs);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
