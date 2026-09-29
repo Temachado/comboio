@@ -1,4 +1,4 @@
-const CACHE = 'combustivel-1785480000';
+const CACHE = 'combustivel-1785560000';
 const FILES = ['./', './index.html', './manifest.json'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
@@ -15,9 +15,13 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   if(e.request.method !== 'GET') return;
+  // Firebase Realtime DB nunca passa pelo cache (dados sempre ao vivo)
+  if(e.request.url.indexOf('firebaseio.com') !== -1) return;
   e.respondWith(
     fetch(e.request).then(res => {
-      if(res && res.status === 200){
+      // status 200 = mesmo domínio / CORS; 'opaque' = scripts de CDN (Firebase SDK,
+      // ícones, Tesseract, SheetJS) — antes não eram guardados e o app não abria offline
+      if(res && (res.status === 200 || res.type === 'opaque')){
         var clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
       }

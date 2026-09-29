@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Comboio">
@@ -10,14 +10,15 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785480000">
+<meta name="app-version" content="1785560000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
@@ -30,7 +31,7 @@ body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;ove
   .btn{font-size:14px;padding:12px 16px;}
   .card{padding:14px;}
   .field label{font-size:13px;}
-  .field input,.field select{font-size:15px;padding:10px 12px;}
+  .field input,.field select{font-size:16px;padding:10px 12px;}
   .nb{font-size:9px;padding:8px 2px 6px;}
   .nb i{font-size:19px;}
   .r2{grid-template-columns:1fr 1fr;gap:10px;}
@@ -38,7 +39,7 @@ body{background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;ove
 html{overscroll-behavior:none;}
 input,select,textarea,button{font-family:inherit}
 .app{max-width:480px;margin:0 auto;min-height:100vh}
-.screen{display:none;flex-direction:column;min-height:100vh}
+.screen{display:none;flex-direction:column;height:100vh;height:100dvh}
 .screen.active{display:flex}
 .topbar{background:var(--green);padding:env(safe-area-inset-top,0) 0 0;flex-shrink:0}
 .tb{display:flex;align-items:center;gap:10px;padding:14px 16px}
@@ -49,7 +50,7 @@ input,select,textarea,button{font-family:inherit}
 .bnav{display:flex;background:var(--cd);border-top:1px solid var(--br);padding:0 0 env(safe-area-inset-bottom);flex-shrink:0}
 .nb{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 4px 8px;border:none;background:none;cursor:pointer;color:var(--t3);font-size:10px;font-weight:500}
 .nb.active{color:var(--green)}.nb i{font-size:22px}
-.sb{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px;overscroll-behavior-y:contain;}
+.sb{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;padding-bottom:24px;overscroll-behavior-y:contain;}
 .card{background:var(--cd);border:1px solid var(--br);border-radius:var(--r);padding:16px;margin-bottom:12px}
 .ct{font-size:13px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
 .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
@@ -60,7 +61,7 @@ input,select,textarea,button{font-family:inherit}
 .met.ok .mv{color:var(--green)}.met.warn .mv{color:var(--am)}.met.danger .mv{color:var(--red)}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12px;font-weight:500;color:var(--t2);margin-bottom:5px}
-.field input,.field select,.field textarea{width:100%;border:1px solid var(--br);border-radius:var(--rs);padding:10px 12px;font-size:15px;color:var(--tx);background:var(--cd);outline:none;transition:border-color .15s}
+.field input,.field select,.field textarea{width:100%;border:1px solid var(--br);border-radius:var(--rs);padding:10px 12px;font-size:16px;color:var(--tx);background:var(--cd);outline:none;transition:border-color .15s}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--green)}
 .field textarea{height:60px;resize:none}
 .r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -538,7 +539,8 @@ function loadDB(){
   // Restaura notificações da chave dedicada — tem prioridade
   _notifCarregar();
 }
-function today(){return new Date().toISOString().slice(0,10);}
+function _ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function today(){return _ymd(new Date());}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
 function getSaldoRes(){
@@ -1239,8 +1241,8 @@ function renderResumo(){
   var now=new Date(), dow=now.getDay(), diff=dow===0?6:dow-1;
   var semIni=new Date(now); semIni.setDate(now.getDate()-diff); semIni.setHours(0,0,0,0);
   var semFim=new Date(semIni); semFim.setDate(semIni.getDate()+6);
-  var semIniStr=semIni.toISOString().slice(0,10);
-  var semFimStr=semFim.toISOString().slice(0,10);
+  var semIniStr=_ymd(semIni);
+  var semFimStr=_ymd(semFim);
   var todos=[];
   db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
   db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
@@ -1271,7 +1273,7 @@ function fsToast(msg, tipo, duracao){
   var bg=tipo==='red'?'#ffebee':'#fff3e0';
   var t=document.createElement('div');
   t.id='fs-toast';
-  t.style.cssText='position:fixed;top:16px;left:50%;'+
+  t.style.cssText='position:fixed;top:calc(16px + env(safe-area-inset-top,0px));left:50%;'+
     'transform:translateX(-50%);z-index:99999;background:'+bg+';border:2px solid '+cor+';'+
     'border-radius:12px;padding:14px 16px;max-width:340px;width:calc(100% - 32px);'+
     'box-shadow:0 8px 32px rgba(0,0,0,.25);display:flex;align-items:flex-start;gap:10px;'+
@@ -1364,7 +1366,7 @@ function renderField(){
   else if(fs.step===4) body.innerHTML=renderFS4();
   else body.innerHTML=renderFS5();
   var nw=document.getElementById('fld-nav');
-  nw.innerHTML=adminLogado?'<nav class="bnav">'+buildNav('field')+'</nav>':'';
+  nw.innerHTML='<nav class="bnav">'+buildNav('field')+'</nav>';
 }
 
 function renderSteps(){
@@ -2743,6 +2745,9 @@ document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav('res
 if(adminLogado) setTimeout(updateNotifBadge,200);
 document.getElementById('e-data').value=today();
 document.getElementById('c-data').value=today();
+
+// Armazenamento persistente — reduz risco de o navegador apagar o localStorage
+try{ if(navigator.storage&&navigator.storage.persist) navigator.storage.persist(); }catch(e){}
 
 // Service Worker
 if('serviceWorker' in navigator){
