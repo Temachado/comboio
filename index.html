@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785560000">
+<meta name="app-version" content="1785600000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -700,16 +700,14 @@ function iniciarFirebase(url, showAlert, role){
         _notifCarregar();
         var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
         var notifRemota = r.notificacoes||[];
+        var lixRemota = r.notifApagadas||[];
         if(notifRemota.length===0 && remoteTs >= _getLocalTs()){
-          // Apagamento remoto mais recente — respeita
+          // Apagamento remoto mais recente — respeita (e manda as locais para a lixeira)
+          _notifLixeira(notifLocais);
+          _notifMesclar([], [], lixRemota);
           db.notificacoes = [];
         } else {
-          var idsLocais = notifLocais.map(function(n){return n.id;});
-          notifRemota.forEach(function(n){
-            if(idsLocais.indexOf(n.id)===-1) notifLocais.push(n);
-          });
-          notifLocais.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
-          db.notificacoes = notifLocais;
+          db.notificacoes = _notifMesclar(notifLocais, notifRemota, lixRemota);
         }
         _notifSalvar();
         _setLocalTs(remoteTs);
@@ -769,6 +767,7 @@ function _fbEnviar(ref, forceApply){
     cicloAtivo:db.cicloAtivo||null,
     saldo:db.saldo||{res:0,com:0},
     notificacoes:db.notificacoes||[],
+    notifApagadas:db.notifApagadas||[],
     _device:myDeviceId,
     _ts:ts
   };
@@ -1959,19 +1958,83 @@ function excluirComboio(id){
 // ─────────────────────────────────────────────
 var NOTIF_KEY = 'comboio_notif_v1'; // chave dedicada — Firebase nunca toca aqui
 
+var NOTIF_DEL_KEY = 'comboio_notif_apagadas_v1'; // lixeira: ids/assinaturas apagados — sincronizada
+
 function _notifSalvar(){
   try{ localStorage.setItem(NOTIF_KEY, JSON.stringify(db.notificacoes||[])); }catch(e){}
+  try{ localStorage.setItem(NOTIF_DEL_KEY, JSON.stringify(db.notifApagadas||[])); }catch(e){}
 }
 function _notifCarregar(){
   try{
     var s=localStorage.getItem(NOTIF_KEY);
     if(s){ var arr=JSON.parse(s); if(Array.isArray(arr)) db.notificacoes=arr; }
+    var d=localStorage.getItem(NOTIF_DEL_KEY);
+    if(d){ var arr2=JSON.parse(d); if(Array.isArray(arr2)) db.notifApagadas=arr2; }
   }catch(e){}
+  if(!db.notifApagadas) db.notifApagadas=[];
+}
+// Assinatura = mesmo alerta com os mesmos valores (independe de id/data/hora)
+function _notifSig(n){
+  var d=n.dados||{};
+  return [n.tipo,n.descricao,d.abastId||'',d.cicloId||''].join('|');
+}
+function _notifEstaApagada(n){
+  var sig=_notifSig(n);
+  return (db.notifApagadas||[]).some(function(t){return t.id===n.id||t.sig===sig;});
+}
+// Envia para a lixeira (vale para todos os aparelhos após sincronizar)
+function _notifLixeira(lista){
+  if(!db.notifApagadas) db.notifApagadas=[];
+  (lista||[]).forEach(function(n){ db.notifApagadas.push({id:n.id,sig:_notifSig(n),em:Date.now()}); });
+  if(db.notifApagadas.length>1000) db.notifApagadas=db.notifApagadas.slice(-1000);
+}
+// Mescla local + remoto: une lixeiras, remove apagadas, "lida" vence, remove duplicadas
+function _notifMesclar(locais, remotas, lixeiraRemota){
+  var lix=(db.notifApagadas||[]).slice();
+  var ids={}; lix.forEach(function(t){ids[t.id+'#'+t.sig]=1;});
+  (lixeiraRemota||[]).forEach(function(t){ if(!ids[t.id+'#'+t.sig]){ids[t.id+'#'+t.sig]=1; lix.push(t);} });
+  if(lix.length>1000) lix=lix.slice(-1000);
+  db.notifApagadas=lix;
+  var porId={};
+  (locais||[]).concat(remotas||[]).forEach(function(n){
+    if(!n||!n.id) return;
+    var e=porId[n.id];
+    if(!e){ porId[n.id]=JSON.parse(JSON.stringify(n)); return; }
+    e.lida=!!(e.lida||n.lida);
+    if(e.aprovada==null&&n.aprovada!=null) e.aprovada=n.aprovada;
+  });
+  var porSig={};
+  Object.keys(porId).forEach(function(id){
+    var n=porId[id];
+    if(_notifEstaApagada(n)) return;
+    var sig=_notifSig(n), e=porSig[sig];
+    if(!e){ porSig[sig]=n; return; }
+    // duplicada: mantém a mais antiga, herdando "lida"
+    var velha=(e.data+e.hora)<=(n.data+n.hora)?e:n, nova=velha===e?n:e;
+    velha.lida=!!(velha.lida||nova.lida);
+    porSig[sig]=velha;
+  });
+  var out=Object.keys(porSig).map(function(k){return porSig[k];});
+  out.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+  return out;
+}
+// Grava e envia ao Firebase — sem isto, ler/apagar ficava só neste aparelho
+function _notifSync(){
+  _notifSalvar();
+  _setLocalTs(Date.now());
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+  fbPush();
 }
 
 function criarNotif(tipo, titulo, descricao, dados){
   var n = {id:uid(), tipo:tipo, titulo:titulo, descricao:descricao, dados:dados||{}, data:today(), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), lida:false, aprovada:null};
+  _notifCarregar();
   if(!db.notificacoes) db.notificacoes=[];
+  // Mesmo alerta, mesmos valores: já existe (lido ou não) ou foi apagado → não recria
+  var sig=_notifSig(n);
+  var ja=db.notificacoes.filter(function(x){return _notifSig(x)===sig;})[0];
+  if(ja) return ja.id;
+  if(_notifEstaApagada(n)) return null;
   db.notificacoes.unshift(n);
   // Salva IMEDIATAMENTE na chave dedicada — não depende do saveDB
   _notifSalvar();
@@ -2046,25 +2109,27 @@ function renderNotif(){
 function marcarLidaNotif(id){
   _notifCarregar();
   var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
-  n.lida=true; _notifSalvar(); updateNotifBadge(); renderNotif();
+  n.lida=true; _notifSync(); updateNotifBadge(); renderNotif();
 }
 function marcarTodasLidasNotif(){
   _notifCarregar();
   (db.notificacoes||[]).forEach(function(n){n.lida=true;});
-  _notifSalvar(); updateNotifBadge(); renderNotif();
+  _notifSync(); updateNotifBadge(); renderNotif();
 }
 function apagarNotif(id){
   _notifCarregar();
+  _notifLixeira((db.notificacoes||[]).filter(function(n){return n.id===id;}));
   db.notificacoes=(db.notificacoes||[]).filter(function(n){return n.id!==id;});
-  _notifSalvar(); updateNotifBadge(); renderNotif();
+  _notifSync(); updateNotifBadge(); renderNotif();
 }
 function apagarNotifLidas(){
   _notifCarregar();
   var lidas=(db.notificacoes||[]).filter(function(n){return n.lida;}).length;
   if(!lidas){alert('Nenhuma notificação lida.');return;}
   if(!confirm('Apagar '+lidas+' notificação'+(lidas>1?'s lidas':' lida')+'?'))return;
+  _notifLixeira((db.notificacoes||[]).filter(function(n){return n.lida;}));
   db.notificacoes=(db.notificacoes||[]).filter(function(n){return !n.lida;});
-  _notifSalvar(); updateNotifBadge(); renderNotif();
+  _notifSync(); updateNotifBadge(); renderNotif();
 }
 
 function aprovarNotif(id){
@@ -2075,7 +2140,7 @@ function aprovarNotif(id){
     var ab=db.abastecimentos.filter(function(a){return a.id===n.dados.abastId;})[0];
     if(ab){ab.aprovado=true; saveDB();}
   }
-  _notifSalvar(); updateNotifBadge(); renderNotif();
+  _notifSync(); updateNotifBadge(); renderNotif();
 }
 
 var _corrigirAbastId=null;
@@ -2083,7 +2148,7 @@ function rejeitarNotif(id){
   _notifCarregar();
   var n=(db.notificacoes||[]).filter(function(x){return x.id===id;})[0]; if(!n) return;
   n.lida=true; n.aprovada=false;
-  _notifSalvar(); updateNotifBadge();
+  _notifSync(); updateNotifBadge();
   if(n.dados&&n.dados.abastId){ setTimeout(function(){abrirModalCorrigir(n.dados.abastId,id);},100); return; }
   renderNotif();
 }
@@ -2442,7 +2507,7 @@ function confirmarApagar(){
     // Limpa também o path do campo no Firebase — evita que os dados voltem via onCampoAbastUpdate
     if(fbRefCampo&&fbActive){try{fbRefCampo.child('abastecimentos').set([]);}catch(e){}}
   }
-  if(delNot)db.notificacoes=[];
+  if(delNot){_notifCarregar(); _notifLixeira(db.notificacoes); db.notificacoes=[];}
   updateSaldo();
   var tsApagar = Date.now() + 300000; // +5 min
   _setLocalTs(tsApagar);
@@ -2667,6 +2732,7 @@ function exportBackup(){
 function limparDados(){
   if(!confirm('Apagar lan\u00e7amentos?\n\nSer\u00e3o removidos:\n\u2022 Entradas de diesel\n\u2022 Carregamentos do comboio\n\u2022 Abastecimentos\n\u2022 Notifica\u00e7\u00f5es\n\nEquipamentos e operadores s\u00e3o mantidos.'))return;
   if(!confirm('Confirma? Esta a\u00e7\u00e3o n\u00e3o tem volta.'))return;
+  _notifCarregar(); _notifLixeira(db.notificacoes);
   db.entradas=[];db.comboios=[];db.abastecimentos=[];db.notificacoes=[];
   saveDB(); renderAdmin(); alert('Lan\u00e7amentos apagados. Equipamentos e operadores mantidos.');
 }
@@ -2739,6 +2805,9 @@ function startFirebaseForRole(role){
   _fbStarted=true;
   try{iniciarFirebase(url, false, role);}catch(e){console.error('FB start:',e);}
 }
+
+// Remove duplicadas acumuladas (mesmo alerta repetido a cada acesso)
+try{ _notifCarregar(); db.notificacoes=_notifMesclar(db.notificacoes,[],[]); _notifSalvar(); }catch(e){}
 
 // Init nav
 document.querySelectorAll('.bnav').forEach(function(n){n.innerHTML=buildNav('resumo');});
