@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785640000">
+<meta name="app-version" content="1785760000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -378,7 +378,7 @@ input,select,textarea,button{font-family:inherit}
       <div class="card">
         <div class="ct">Dados e backup</div>
         <div id="adm-stats" style="margin-bottom:14px"></div>
-        <button class="btn bs" onclick="exportCSV()"><i class="ti ti-file-spreadsheet"></i> Exportar abastecimentos (Excel)</button>
+        <button class="btn bs" onclick="ComboioRel.abrir()"><i class="ti ti-file-spreadsheet"></i> Exportar abastecimentos (Excel)</button>
         <button class="btn bs" onclick="exportBackup()"><i class="ti ti-database-export"></i> Backup completo (JSON)</button>
         <label class="btn bs" style="cursor:pointer"><i class="ti ti-database-import"></i> Importar backup (JSON)<input type="file" accept=".json" style="display:none" onchange="importBackup(this)"></label>
         <button class="btn bd" onclick="toggleModalApagar()"><i class="ti ti-trash"></i> Apagar dados</button>
@@ -1717,7 +1717,8 @@ function fsConfirmar(){
     ultimoHod=Number(ultimo.hod);
   }
 
-  var abast={id:id,data:today(),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:'',fotoId:fs.imgId||null,aprovado:true,litrosBomba:fs.litrosBomba?Number(fs.litrosBomba):null};
+  var _quem=operadorLogado?(operadorLogado.nome||operadorLogado.login||''):(adminLogado?((db.admin&&db.admin.usuario)||'admin'):'');
+  var abast={id:id,data:today(),hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),equip:equip.cod,vol:Number(fs.litros),hod:hodAtual,operador:_quem,fotoId:fs.imgId||null,aprovado:true,litrosBomba:fs.litrosBomba?Number(fs.litrosBomba):null};
   db.abastecimentos.push(abast);
 
   if(fs.fotoHod||fs.fotoBomba){
@@ -2894,6 +2895,653 @@ if('serviceWorker' in navigator){
     }).catch(function(){});
   });
 }
+</script>
+<script>
+/* =====================================================================
+   COMBOIO — Relatório de Abastecimentos (XLSX colorido, pronto p/ imprimir)
+   Módulo v1 · integrado ao index.html (script próprio no fim da página)
+   Não altera Service Worker, sync nem db. Só LÊ os dados.
+   ===================================================================== */
+(function () {
+  'use strict';
+
+  /* ---------------- CONFIGURAÇÃO (ajuste aqui) ---------------- */
+  const CFG = {
+    empresa: 'NOME DA EMPRESA',                       // aparece no topo da planilha
+    titulo: 'Controle de Abastecimento — Comboio',
+    exceljsURL: 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+    lembrete: 'nenhum',                               // lembrete ao acessar desativado
+    lsKey: 'comboio_rel_v1',
+    // de onde vem o banco (a variável global db do app)
+    getDb: function () { try { return (typeof db !== 'undefined') ? db : window.db; } catch (e) { return window.db; } },
+    // quem está emitindo (ajuste para a variável de login do app, se houver)
+    getUsuario: function () { try { if (adminLogado) return (db.admin && db.admin.usuario) || 'admin'; if (operadorLogado) return operadorLogado.nome || operadorLogado.login; } catch (e) {} return 'admin'; },
+    // opcional: função async que força a sincronização com o Firebase antes de exportar
+    antesDeExportar: null,
+    // nomes das coleções dentro do db — o módulo testa na ordem até achar uma
+    colecoes: {
+      abast:   ['abastecimentos', 'abastecimentosCom', 'abast', 'saidas', 'lancamentos'],
+      entradas:['entradas', 'entradasRes', 'entradasTanque', 'tanque', 'compras'],
+      transf:  ['comboios', 'transferencias', 'cargas', 'cargasComboio', 'entradasCom', 'abastComboio']
+    },
+    // nomes possíveis de cada campo dentro de um lançamento
+    campos: {
+      data:      ['data', 'dt', 'date', 'dataHora', 'datahora', 'timestamp', 'ts', 'criadoEm', 'quando'],
+      hora:      ['hora', 'hr', 'time'],
+      litros:    ['vol', 'litros', 'lts', 'qtd', 'quantidade', 'volume'],
+      equip:     ['equipamento', 'equip', 'maquina', 'veiculo', 'prefixo', 'frota'],
+      medidor:   ['hod', 'horimetro', 'hodometro', 'km', 'hor', 'medidor', 'leitura'],
+      operador:  ['operador', 'op', 'motorista', 'usuario', 'user', 'responsavel', 'login'],
+      local:     ['obra', 'local', 'frente', 'centroCusto', 'cc'],
+      obs:       ['obs', 'observacao', 'observacoes', 'nota'],
+      fornecedor:['forn', 'fornecedor', 'posto', 'distribuidora'],
+      doc:       ['nf', 'notaFiscal', 'numeroNF', 'documento', 'doc']
+    }
+  };
+
+  /* ---------------- UTILIDADES ---------------- */
+  const DIAS = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
+  const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  const p2 = n => String(n).padStart(2, '0');
+  const fData = d => p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear();
+  const fHora = d => p2(d.getHours()) + ':' + p2(d.getMinutes());
+  const fISO = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  const fNum = (n, c) => (Number(n) || 0).toLocaleString('pt-BR', { minimumFractionDigits: c || 0, maximumFractionDigits: c || 0 });
+  const iniDia = d => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const fimDia = d => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const toArr = v => !v ? [] : Array.isArray(v) ? v.filter(Boolean) : (typeof v === 'object' ? Object.values(v).filter(x => x && typeof x === 'object') : []);
+
+  function pick(o, lista) {
+    if (!o) return undefined;
+    const low = {};
+    Object.keys(o).forEach(k => { low[k.toLowerCase()] = o[k]; });
+    for (const k of lista) {
+      const v = low[k.toLowerCase()];
+      if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return undefined;
+  }
+  function num(v) {
+    if (v === undefined || v === null || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    let s = String(v).trim().replace(/\s|L$/gi, '');
+    if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return isFinite(n) ? n : null;
+  }
+  function parseData(v, h) {
+    let d = null;
+    if (v instanceof Date) d = new Date(v.getTime());
+    else if (typeof v === 'number') d = new Date(v < 1e11 ? v * 1000 : v);
+    else if (typeof v === 'string') {
+      let m;
+      if ((m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/))) {
+        const y = m[3].length === 2 ? 2000 + (+m[3]) : +m[3];
+        d = new Date(y, +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0));
+      } else if ((m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/))) {
+        d = new Date(+m[1], +m[2] - 1, +m[3]);
+      } else if (/^\d{10,13}$/.test(v)) {
+        d = parseData(+v);
+      } else {
+        const t = Date.parse(v); if (!isNaN(t)) d = new Date(t);
+      }
+    }
+    if (!d || isNaN(d.getTime())) return null;
+    if (h && typeof h === 'string' && d.getHours() === 0 && d.getMinutes() === 0) {
+      const mh = h.match(/(\d{1,2}):(\d{2})/);
+      if (mh) d.setHours(+mh[1], +mh[2], 0, 0);
+    }
+    return d;
+  }
+  function acharColecao(db, nomes) {
+    if (!db) return null;
+    for (const n of nomes) if (db[n]) return toArr(db[n]);
+    return null;
+  }
+
+  /* ---------------- NORMALIZAÇÃO DOS DADOS ---------------- */
+  function normalizar(db) {
+    const C = CFG.campos;
+    const base = o => {
+      const d = parseData(pick(o, C.data), pick(o, C.hora));
+      return d ? { data: d, litros: num(pick(o, C.litros)) || 0, usuario: String(pick(o, C.operador) || ''), obs: String(pick(o, C.obs) || '') } : null;
+    };
+    const abastRaw = acharColecao(db, CFG.colecoes.abast);
+    const entRaw = acharColecao(db, CFG.colecoes.entradas);
+    const trRaw = acharColecao(db, CFG.colecoes.transf);
+    const abast = (abastRaw || []).map(o => {
+      const b = base(o); if (!b) return null;
+      return Object.assign(b, {
+        equip: String(pick(o, C.equip) || '(sem equipamento)').trim(),
+        medidor: num(pick(o, C.medidor)),
+        local: String(pick(o, C.local) || '')
+      });
+    }).filter(Boolean);
+    const entradas = (entRaw || []).map(o => {
+      const b = base(o); if (!b) return null;
+      return Object.assign(b, { fornecedor: String(pick(o, C.fornecedor) || ''), doc: String(pick(o, C.doc) || '') });
+    }).filter(Boolean);
+    const transf = (trRaw || []).map(base).filter(Boolean);
+    const ord = (a, b) => a.data - b.data;
+    abast.sort(ord); entradas.sort(ord); transf.sort(ord);
+    return { abast, entradas, transf, temTransf: !!trRaw, achou: { abast: !!abastRaw, entradas: !!entRaw, transf: !!trRaw } };
+  }
+
+  function preparar(db, P) {
+    const N = normalizar(db);
+    const noP = x => x.data >= P.ini && x.data <= P.fim;
+    const antes = x => x.data < P.ini;
+    const soma = a => a.reduce((s, x) => s + x.litros, 0);
+    const D = {
+      abast: N.abast.filter(noP), entradas: N.entradas.filter(noP), transf: N.transf.filter(noP),
+      temTransf: N.temTransf, achou: N.achou
+    };
+    const eAnt = soma(N.entradas.filter(antes)), tAnt = soma(N.transf.filter(antes)), aAnt = soma(N.abast.filter(antes));
+    D.saldoIni = N.temTransf ? { res: eAnt - tAnt, com: tAnt - aAnt } : { res: eAnt - aAnt };
+    // por equipamento
+    const eq = {};
+    D.abast.forEach(a => {
+      const g = eq[a.equip] || (eq[a.equip] = { nome: a.equip, n: 0, litros: 0, itens: [] });
+      g.n++; g.litros += a.litros; g.itens.push(a);
+    });
+    D.porEquip = Object.values(eq).map(g => {
+      const comMed = g.itens.filter(i => i.medidor !== null);
+      let delta = null, media = null;
+      if (comMed.length >= 2) {
+        delta = comMed[comMed.length - 1].medidor - comMed[0].medidor;
+        const consumo = g.litros - comMed[0].litros; // desconsidera o 1º abastecimento (enche o tanque)
+        if (delta > 0) media = consumo / delta;
+      }
+      return { nome: g.nome, n: g.n, litros: g.litros, delta, media };
+    }).sort((a, b) => b.litros - a.litros);
+    const op = {};
+    D.abast.forEach(a => {
+      const k = a.usuario || '(não informado)';
+      const g = op[k] || (op[k] = { nome: k, n: 0, litros: 0 });
+      g.n++; g.litros += a.litros;
+    });
+    D.porOper = Object.values(op).sort((a, b) => b.litros - a.litros);
+    D.totAbast = soma(D.abast); D.totEnt = soma(D.entradas); D.totTransf = soma(D.transf);
+    return D;
+  }
+
+  /* ---------------- PERÍODOS ---------------- */
+  function periodo(tipo, ref, ini, fim) {
+    const r = ref ? new Date(ref) : new Date();
+    let a, b, rot, chave;
+    if (tipo === 'hoje' || tipo === 'ontem' || tipo === 'dia') {
+      if (tipo === 'ontem') r.setDate(r.getDate() - 1);
+      a = iniDia(r); b = fimDia(r); rot = 'Diário'; chave = 'D' + fISO(a);
+    } else if (tipo === 'semana' || tipo === 'semana_ant') {
+      const dow = (r.getDay() + 6) % 7; // segunda = 0
+      a = iniDia(new Date(r.getFullYear(), r.getMonth(), r.getDate() - dow - (tipo === 'semana_ant' ? 7 : 0)));
+      b = fimDia(new Date(a.getFullYear(), a.getMonth(), a.getDate() + 6));
+      rot = 'Semanal'; chave = 'S' + fISO(a);
+    } else if (tipo === 'mes' || tipo === 'mes_ant') {
+      const m = r.getMonth() - (tipo === 'mes_ant' ? 1 : 0);
+      a = new Date(r.getFullYear(), m, 1); b = fimDia(new Date(r.getFullYear(), m + 1, 0));
+      rot = 'Mensal'; chave = 'M' + a.getFullYear() + '-' + p2(a.getMonth() + 1);
+    } else {
+      a = iniDia(ini); b = fimDia(fim); rot = 'Personalizado'; chave = 'P' + fISO(a) + '_' + fISO(b);
+    }
+    const desc = rot === 'Mensal' ? (MESES[a.getMonth()] + '/' + a.getFullYear())
+      : rot === 'Diário' ? fData(a) : fData(a) + ' a ' + fData(b);
+    return { ini: a, fim: b, tipo: rot, chave, desc };
+  }
+
+  /* ---------------- ESTILO DA PLANILHA ---------------- */
+  const COR = {
+    navy: 'FF1F3A5F', navy2: 'FF2E5C8A', laranja: 'FFE8742A', laranjaL: 'FFFDEBDD',
+    azulL: 'FFDCE8F5', zebra: 'FFF4F7FB', cinza: 'FF5F6B7A', cinzaL: 'FFEEF1F5',
+    verde: 'FF2E8B57', verdeL: 'FFE3F3EA', teal: 'FF1B8A8F', tealL: 'FFDFF1F2',
+    azul: 'FF2E6DB4', azulL2: 'FFE1ECF8', branco: 'FFFFFFFF', borda: 'FFC9D3DF', texto: 'FF1D2733'
+  };
+  const FONTE = 'Arial';
+  const fill = c => ({ type: 'pattern', pattern: 'solid', fgColor: { argb: c } });
+  const fonte = (o) => Object.assign({ name: FONTE, size: 10, color: { argb: COR.texto } }, o || {});
+  const bordaFina = { top: { style: 'thin', color: { argb: COR.borda } }, left: { style: 'thin', color: { argb: COR.borda } }, bottom: { style: 'thin', color: { argb: COR.borda } }, right: { style: 'thin', color: { argb: COR.borda } } };
+  const FMT_L = '#,##0.0;-#,##0.0;"–"';
+  const FMT_N = '#,##0;-#,##0;"–"';
+  const FMT_P = '0.0%;-0.0%;"–"';
+
+  function estilo(cel, o) {
+    if (o.fill) cel.fill = fill(o.fill);
+    cel.font = fonte(o.font);
+    cel.alignment = Object.assign({ vertical: 'middle', wrapText: true }, o.align || {});
+    const h = cel.alignment.horizontal;
+    if ((h === 'left' || h === 'right' || !h) && cel.alignment.indent === undefined) cel.alignment.indent = 1;
+    if (o.borda !== false) cel.border = bordaFina;
+    if (o.fmt) cel.numFmt = o.fmt;
+  }
+  function faixa(ws, linha, cols, texto, o) {
+    const ref = 'A' + linha + ':' + cols + linha;
+    ws.mergeCells(ref);
+    const c = ws.getCell('A' + linha);
+    c.value = texto;
+    estilo(c, Object.assign({ borda: false }, o));
+    ws.getRow(linha).height = o.altura || 20;
+  }
+  function cabecalho(ws, ultCol, P, meta) {
+    // Sem linha de nome da empresa: título na linha 1, período na 2, barra laranja na 3
+    faixa(ws, 1, ultCol, CFG.titulo + '  ·  ' + meta.aba, { fill: COR.navy, font: { size: 13, bold: true, color: { argb: COR.branco } }, align: { horizontal: 'left', indent: 1 }, altura: 26 });
+    faixa(ws, 2, ultCol, 'Período: ' + fData(P.ini) + ' a ' + fData(P.fim) + '   ·   Relatório ' + P.tipo + '   ·   Emitido em ' + fData(meta.agora) + ' às ' + fHora(meta.agora) + ' por ' + meta.usuario,
+      { fill: COR.cinzaL, font: { size: 9, color: { argb: COR.cinza } }, align: { horizontal: 'left', indent: 1 }, altura: 18 });
+    ws.getRow(3).height = 5;
+    for (let c = 1; c <= ws.columnCount; c++) ws.getRow(3).getCell(c).fill = fill(COR.laranja);
+    ws.getRow(4).height = 6;
+  }
+  function impressao(ws, orientacao, tituloRow, meta) {
+    ws.pageSetup = {
+      paperSize: 9, orientation: orientacao, fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      horizontalCentered: true,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.6, header: 0.2, footer: 0.25 }
+    };
+    if (tituloRow) ws.pageSetup.printTitlesRow = tituloRow + ':' + tituloRow;
+    ws.headerFooter = {
+      oddFooter: '&L&"Arial"&8Comboio · ' + meta.aba + '&C&"Arial"&8Página &P de &N&R&"Arial"&8Emitido ' + fData(meta.agora) + ' ' + fHora(meta.agora)
+    };
+    ws.views = [{ showGridLines: false }];
+  }
+  function linhaTitulos(ws, linha, titulos, cor) {
+    const r = ws.getRow(linha);
+    titulos.forEach((t, i) => {
+      const c = r.getCell(i + 1);
+      c.value = t;
+      estilo(c, { fill: cor || COR.navy, font: { bold: true, size: 9, color: { argb: COR.branco } }, align: { horizontal: 'center' } });
+    });
+    r.height = 22;
+  }
+  function assinaturas(ws, linha, colsA, colsB) {
+    ws.getRow(linha).height = 34;
+    [[colsA, 'Responsável pelo comboio'], [colsB, 'Conferido por (administração)']].forEach(([rg, txt]) => {
+      ws.mergeCells(rg[0] + linha + ':' + rg[1] + linha);
+      const c = ws.getCell(rg[0] + linha);
+      c.border = { bottom: { style: 'thin', color: { argb: COR.texto } } };
+      ws.mergeCells(rg[0] + (linha + 1) + ':' + rg[1] + (linha + 1));
+      const l = ws.getCell(rg[0] + (linha + 1));
+      l.value = txt; l.font = fonte({ size: 8, color: { argb: COR.cinza } }); l.alignment = { horizontal: 'center' };
+    });
+  }
+
+  /* ---------------- MONTAGEM DO XLSX ---------------- */
+  function montarWorkbook(ExcelJS, D, P, meta0) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Comboio'; wb.created = meta0.agora;
+    const resumo = wb.addWorksheet('Resumo', { properties: { tabColor: { argb: COR.laranja } } });
+    const det = wb.addWorksheet('Abastecimentos', { properties: { tabColor: { argb: COR.navy } } });
+    const ent = wb.addWorksheet('Entradas', { properties: { tabColor: { argb: COR.teal } } });
+
+    /* ===== ABA ABASTECIMENTOS (detalhe) ===== */
+    const metaDet = Object.assign({}, meta0, { aba: 'Abastecimentos' });
+    det.columns = [{ width: 6 }, { width: 11 }, { width: 7 }, { width: 34 }, { width: 12 }, { width: 11 }, { width: 30 }];
+    cabecalho(det, 'G', P, metaDet);
+    impressao(det, 'landscape', 5, metaDet);
+    linhaTitulos(det, 5, ['Nº', 'Data', 'Hora', 'Equipamento', 'Horím./Km', 'Litros', 'Observação']);
+    det.views = [{ state: 'frozen', ySplit: 5, showGridLines: false }];
+    let L = 6;
+    const DET_INI = 6;
+    let totRow;
+    if (!D.abast.length) {
+      faixa(det, L, 'G', 'Nenhum abastecimento registrado no período.', { fill: COR.cinzaL, font: { italic: true, color: { argb: COR.cinza } }, align: { horizontal: 'center' } });
+      L++;
+    } else {
+      const porDia = [];
+      D.abast.forEach(a => {
+        const k = fISO(a.data);
+        if (!porDia.length || porDia[porDia.length - 1].k !== k) porDia.push({ k, d: a.data, itens: [] });
+        porDia[porDia.length - 1].itens.push(a);
+      });
+      let n = 0;
+      const variosDias = porDia.length > 1;
+      porDia.forEach(dia => {
+        if (variosDias) {
+          faixa(det, L, 'G', DIAS[dia.d.getDay()] + ', ' + fData(dia.d), { fill: COR.azulL, font: { bold: true, size: 9, color: { argb: COR.navy } }, align: { horizontal: 'left', indent: 1 }, altura: 18 });
+          L++;
+        }
+        const i0 = L;
+        dia.itens.forEach((a, idx) => {
+          n++;
+          const r = det.getRow(L);
+          const z = idx % 2 ? COR.zebra : COR.branco;
+          const vals = [n, fData(a.data), fHora(a.data), a.equip, a.medidor, a.litros, a.obs];
+          vals.forEach((v, ci) => {
+            const c = r.getCell(ci + 1);
+            c.value = (v === null || v === '') ? null : v;
+            estilo(c, {
+              fill: z,
+              font: ci === 5 ? { bold: true } : ci === 3 ? { bold: true, color: { argb: COR.navy } } : {},
+              align: { horizontal: [0, 1, 2].includes(ci) ? 'center' : (ci === 4 || ci === 5) ? 'right' : 'left' },
+              fmt: ci === 5 ? FMT_L : ci === 4 ? '#,##0.0' : undefined
+            });
+          });
+          r.height = 17;
+          L++;
+        });
+        if (variosDias) {
+          const sub = dia.itens.reduce((s, x) => s + x.litros, 0);
+          det.mergeCells('A' + L + ':E' + L);
+          const c = det.getCell('A' + L);
+          c.value = 'Subtotal ' + fData(dia.d);
+          estilo(c, { fill: COR.laranjaL, font: { bold: true, size: 9, color: { argb: 'FF9A4A12' } }, align: { horizontal: 'right' } });
+          const f = det.getCell('F' + L);
+          f.value = { formula: 'SUBTOTAL(9,F' + i0 + ':F' + (L - 1) + ')', result: sub };
+          estilo(f, { fill: COR.laranjaL, font: { bold: true, color: { argb: 'FF9A4A12' } }, align: { horizontal: 'right' }, fmt: FMT_L });
+          estilo(det.getCell('G' + L), { fill: COR.laranjaL });
+          det.getRow(L).height = 17;
+          L++;
+        }
+      });
+    }
+    const DET_FIM = Math.max(DET_INI, L - 1);
+    totRow = L;
+    det.mergeCells('A' + L + ':E' + L);
+    const ct = det.getCell('A' + L);
+    ct.value = 'TOTAL DO PERÍODO  (' + D.abast.length + ' abastecimentos)';
+    estilo(ct, { fill: COR.navy, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'right' } });
+    const ft = det.getCell('F' + L);
+    ft.value = { formula: 'SUBTOTAL(9,F' + DET_INI + ':F' + DET_FIM + ')', result: D.totAbast };
+    estilo(ft, { fill: COR.navy, font: { bold: true, size: 11, color: { argb: COR.branco } }, align: { horizontal: 'right' }, fmt: FMT_L });
+    estilo(det.getCell('G' + L), { fill: COR.navy });
+    det.getRow(L).height = 22;
+    const REF_TOT_ABAST = 'Abastecimentos!F' + totRow;
+
+    /* ===== ABA ENTRADAS ===== */
+    const metaEnt = Object.assign({}, meta0, { aba: 'Entradas e transferências' });
+    ent.columns = [{ width: 6 }, { width: 11 }, { width: 7 }, { width: 24 }, { width: 14 }, { width: 11 }, { width: 30 }];
+    cabecalho(ent, 'G', P, metaEnt);
+    impressao(ent, 'portrait', null, metaEnt);
+    let E = 6;
+    function tabelaMov(titulo, cor, lista, tipo) {
+      faixa(ent, E, 'G', titulo, { fill: cor, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'left', indent: 1 }, altura: 20 });
+      E++;
+      linhaTitulos(ent, E, tipo === 'ent' ? ['Nº', 'Data', 'Hora', 'Fornecedor', 'Documento / NF', 'Litros', 'Observação'] : ['Nº', 'Data', 'Hora', 'Movimento', '', 'Litros', 'Observação'], cor);
+      if (tipo !== 'ent') ent.mergeCells('D' + E + ':E' + E);
+      E++;
+      const i0 = E;
+      if (!lista.length) {
+        faixa(ent, E, 'G', 'Nenhum lançamento no período.', { fill: COR.cinzaL, font: { italic: true, color: { argb: COR.cinza } }, align: { horizontal: 'center' } });
+        E++;
+      }
+      lista.forEach((x, idx) => {
+        const r = ent.getRow(E);
+        const z = idx % 2 ? COR.zebra : COR.branco;
+        const vals = tipo === 'ent'
+          ? [idx + 1, fData(x.data), fHora(x.data), x.fornecedor, x.doc, x.litros, x.obs]
+          : [idx + 1, fData(x.data), fHora(x.data), 'Tanque → Comboio', '', x.litros, x.obs];
+        vals.forEach((v, ci) => {
+          const c = r.getCell(ci + 1);
+          c.value = v === '' ? null : v;
+          estilo(c, { fill: z, font: ci === 5 ? { bold: true } : {}, align: { horizontal: ci < 3 ? 'center' : ci === 5 ? 'right' : 'left' }, fmt: ci === 5 ? FMT_L : undefined });
+        });
+        if (tipo !== 'ent') ent.mergeCells('D' + E + ':E' + E);
+        r.height = 17;
+        E++;
+      });
+      const fim = Math.max(i0, E - 1);
+      ent.mergeCells('A' + E + ':E' + E);
+      const c = ent.getCell('A' + E);
+      c.value = 'TOTAL  (' + lista.length + ' lançamentos)';
+      estilo(c, { fill: cor, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'right' } });
+      const f = ent.getCell('F' + E);
+      f.value = { formula: 'SUM(F' + i0 + ':F' + fim + ')', result: lista.reduce((s, x) => s + x.litros, 0) };
+      estilo(f, { fill: cor, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'right' }, fmt: FMT_L });
+      estilo(ent.getCell('G' + E), { fill: cor });
+      ent.getRow(E).height = 20;
+      const ref = 'Entradas!F' + E;
+      E += 2;
+      return ref;
+    }
+    const REF_TOT_ENT = tabelaMov('ENTRADAS NO TANQUE (RESERVATÓRIO)', COR.teal, D.entradas, 'ent');
+    const REF_TOT_TR = D.temTransf ? tabelaMov('TRANSFERÊNCIAS TANQUE → COMBOIO', COR.azul, D.transf, 'tr') : null;
+
+    /* ===== ABA RESUMO ===== */
+    const metaRes = Object.assign({}, meta0, { aba: 'Resumo' });
+    resumo.columns = Array.from({ length: 8 }, () => ({ width: 12.5 }));
+    cabecalho(resumo, 'H', P, metaRes);
+    impressao(resumo, 'portrait', null, metaRes);
+
+    // Cartões (KPIs)
+    const cards = [
+      ['A', 'B', 'TOTAL ABASTECIDO (L)', COR.laranja, COR.laranjaL, { formula: REF_TOT_ABAST, result: D.totAbast }, FMT_L],
+      ['C', 'D', 'ABASTECIMENTOS', COR.navy2, COR.azulL2, { formula: 'COUNTA(Abastecimentos!D' + DET_INI + ':D' + DET_FIM + ')', result: D.abast.length }, FMT_N],
+      ['E', 'F', 'EQUIPAMENTOS ATENDIDOS', COR.verde, COR.verdeL, null, FMT_N],
+      ['G', 'H', 'ENTRADAS NO TANQUE (L)', COR.teal, COR.tealL, { formula: REF_TOT_ENT, result: D.totEnt }, FMT_L]
+    ];
+    resumo.getRow(6).height = 20; resumo.getRow(7).height = 34; resumo.getRow(5).height = 8;
+    const cardCells = {};
+    cards.forEach(([a, b, lab, cor, corL, val, fmt]) => {
+      resumo.mergeCells(a + '6:' + b + '6');
+      const l = resumo.getCell(a + '6');
+      l.value = lab;
+      estilo(l, { fill: cor, font: { bold: true, size: 8, color: { argb: COR.branco } }, align: { horizontal: 'center' }, borda: false });
+      resumo.mergeCells(a + '7:' + b + '7');
+      const v = resumo.getCell(a + '7');
+      v.value = val;
+      estilo(v, { fill: corL, font: { bold: true, size: 18, color: { argb: cor } }, align: { horizontal: 'center' }, fmt, borda: false });
+      cardCells[lab] = v;
+    });
+
+    // Saldos
+    let R = 9;
+    faixa(resumo, R, 'H', 'SALDOS DO PERÍODO (litros)', { fill: COR.navy, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'left', indent: 1 } });
+    R++;
+    const hdr = resumo.getRow(R);
+    [['A', 'C', 'Local'], ['D', 'D', 'Saldo inicial'], ['E', 'E', 'Entradas'], ['F', 'F', 'Saídas'], ['G', 'H', 'Saldo final']].forEach(([a, b, t]) => {
+      if (a !== b) resumo.mergeCells(a + R + ':' + b + R);
+      const c = resumo.getCell(a + R); c.value = t;
+      estilo(c, { fill: COR.navy2, font: { bold: true, size: 9, color: { argb: COR.branco } }, align: { horizontal: 'center' } });
+    });
+    hdr.height = 20; R++;
+    const linhasSaldo = D.temTransf
+      ? [['Reservatório (tanque)', D.saldoIni.res, REF_TOT_ENT, D.totEnt, REF_TOT_TR, D.totTransf],
+         ['Comboio (caminhão)', D.saldoIni.com, REF_TOT_TR, D.totTransf, REF_TOT_ABAST, D.totAbast]]
+      : [['Reservatório / Comboio', D.saldoIni.res, REF_TOT_ENT, D.totEnt, REF_TOT_ABAST, D.totAbast]];
+    linhasSaldo.forEach(([nome, ini, fe, ve, fs, vs], i) => {
+      const z = i % 2 ? COR.zebra : COR.branco;
+      resumo.mergeCells('A' + R + ':C' + R);
+      const c = resumo.getCell('A' + R); c.value = nome;
+      estilo(c, { fill: z, font: { bold: true, color: { argb: COR.navy } }, align: { indent: 1 } });
+      const ci = resumo.getCell('D' + R); ci.value = ini; estilo(ci, { fill: z, align: { horizontal: 'right' }, fmt: FMT_L });
+      ci.note = 'Calculado pelo app: soma de todos os lançamentos anteriores a ' + fData(P.ini) + '.';
+      const ce = resumo.getCell('E' + R); ce.value = { formula: fe, result: ve }; estilo(ce, { fill: z, font: { color: { argb: COR.verde } }, align: { horizontal: 'right' }, fmt: FMT_L });
+      const cs = resumo.getCell('F' + R); cs.value = { formula: fs, result: vs }; estilo(cs, { fill: z, font: { color: { argb: 'FFB03A2E' } }, align: { horizontal: 'right' }, fmt: FMT_L });
+      resumo.mergeCells('G' + R + ':H' + R);
+      const cf = resumo.getCell('G' + R); cf.value = { formula: 'D' + R + '+E' + R + '-F' + R, result: ini + ve - vs };
+      estilo(cf, { fill: COR.laranjaL, font: { bold: true, size: 11, color: { argb: 'FF9A4A12' } }, align: { horizontal: 'right' }, fmt: FMT_L });
+      resumo.getRow(R).height = 20; R++;
+    });
+    R++;
+
+    // Por equipamento
+    faixa(resumo, R, 'H', 'CONSUMO POR EQUIPAMENTO', { fill: COR.verde, font: { bold: true, color: { argb: COR.branco } }, align: { horizontal: 'left', indent: 1 } });
+    R++;
+    [['A', 'C', 'Equipamento'], ['D', 'D', 'Abastec.'], ['E', 'E', 'Litros'], ['F', 'F', '% do total'], ['G', 'G', 'Δ Horím./Km'], ['H', 'H', 'Média L/h*']].forEach(([a, b, t]) => {
+      if (a !== b) resumo.mergeCells(a + R + ':' + b + R);
+      const c = resumo.getCell(a + R); c.value = t;
+      estilo(c, { fill: 'FF3E9E6A', font: { bold: true, size: 9, color: { argb: COR.branco } }, align: { horizontal: 'center' } });
+    });
+    resumo.getRow(R).height = 20; R++;
+    const EQ_INI = R;
+    const rangeEq = 'Abastecimentos!$D$' + DET_INI + ':$D$' + DET_FIM;
+    const rangeL = 'Abastecimentos!$F$' + DET_INI + ':$F$' + DET_FIM;
+    const rangeOp = 'Abastecimentos!$G$' + DET_INI + ':$G$' + DET_FIM;
+    let totCel = null;
+    const linhaGrupo = (g, i, rangeChave, comMedidor) => {
+      const z = i % 2 ? COR.zebra : COR.branco;
+      resumo.mergeCells('A' + R + ':C' + R);
+      const c = resumo.getCell('A' + R); c.value = g.nome;
+      estilo(c, { fill: z, font: { bold: true, color: { argb: COR.navy } }, align: { indent: 1 } });
+      const cn = resumo.getCell('D' + R); cn.value = { formula: 'COUNTIF(' + rangeChave + ',A' + R + ')', result: g.n };
+      estilo(cn, { fill: z, align: { horizontal: 'center' }, fmt: FMT_N });
+      const cl = resumo.getCell('E' + R); cl.value = { formula: 'SUMIF(' + rangeChave + ',A' + R + ',' + rangeL + ')', result: g.litros };
+      estilo(cl, { fill: z, font: { bold: true }, align: { horizontal: 'right' }, fmt: FMT_L });
+      const cp = resumo.getCell('F' + R); cp.value = { formula: 'IF(' + REF_TOT_ABAST + '=0,0,E' + R + '/' + REF_TOT_ABAST + ')', result: D.totAbast ? g.litros / D.totAbast : 0 };
+      estilo(cp, { fill: z, align: { horizontal: 'center' }, fmt: FMT_P });
+      if (comMedidor) {
+        const cd = resumo.getCell('G' + R); cd.value = g.delta; estilo(cd, { fill: z, align: { horizontal: 'right' }, fmt: '#,##0.0;-#,##0.0;"–"' });
+        const cm = resumo.getCell('H' + R); cm.value = g.media === null ? '–' : g.media;
+        estilo(cm, { fill: z, font: { bold: true, color: { argb: COR.verde } }, align: { horizontal: g.media === null ? 'center' : 'right' }, fmt: '#,##0.00' });
+      } else {
+        resumo.mergeCells('G' + R + ':H' + R); estilo(resumo.getCell('G' + R), { fill: z });
+      }
+      resumo.getRow(R).height = 18; R++;
+    };
+    if (!D.porEquip.length) { faixa(resumo, R, 'H', 'Sem abastecimentos no período.', { fill: COR.cinzaL, font: { italic: true, color: { argb: COR.cinza } }, align: { horizontal: 'center' } }); R++; }
+    D.porEquip.forEach((g, i) => linhaGrupo(g, i, rangeEq, true));
+    const EQ_FIM = R - 1;
+    cardCells['EQUIPAMENTOS ATENDIDOS'].value = D.porEquip.length
+      ? { formula: 'COUNTA(A' + EQ_INI + ':A' + EQ_FIM + ')', result: D.porEquip.length } : 0;
+    resumo.mergeCells('A' + R + ':H' + R);
+    const nota = resumo.getCell('A' + R);
+    nota.value = '* Média = litros consumidos ÷ variação do horímetro (L/h) ou hodômetro (L/km). Desconsidera o 1º abastecimento do período; exige ao menos 2 leituras.';
+    nota.font = fonte({ size: 7, italic: true, color: { argb: COR.cinza } }); nota.alignment = { wrapText: true, vertical: 'top' };
+    resumo.getRow(R).height = 22; R += 2;
+
+    resumo.pageSetup.printArea = 'A1:H' + Math.max(1, R - 2);
+
+    return wb;
+  }
+
+  /* ---------------- CARREGAR BIBLIOTECA (só quando exportar) ---------------- */
+  let _libPromise = null;
+  function carregarExcelJS() {
+    if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+    if (_libPromise) return _libPromise;
+    _libPromise = new Promise((ok, erro) => {
+      const s = document.createElement('script');
+      s.src = CFG.exceljsURL; s.async = true;
+      s.onload = () => window.ExcelJS ? ok(window.ExcelJS) : erro(new Error('ExcelJS não carregou'));
+      s.onerror = () => { _libPromise = null; erro(new Error('Sem internet para carregar o gerador de planilha. Conecte-se e tente de novo.')); };
+      document.head.appendChild(s);
+    });
+    return _libPromise;
+  }
+
+  /* ---------------- HISTÓRICO DE EMISSÃO (lembrete) ---------------- */
+  function lerLS() { try { return JSON.parse(localStorage.getItem(CFG.lsKey)) || {}; } catch (e) { return {}; } }
+  function gravarLS(o) { try { localStorage.setItem(CFG.lsKey, JSON.stringify(o)); } catch (e) {} }
+
+  /* ---------------- GERAR E BAIXAR ---------------- */
+  async function gerar(P) {
+    if (typeof CFG.antesDeExportar === 'function') { try { await CFG.antesDeExportar(); } catch (e) { console.warn('[Relatório] sync falhou', e); } }
+    const ExcelJS = await carregarExcelJS();
+    const D = preparar(CFG.getDb(), P);
+    const agora = new Date();
+    const wb = montarWorkbook(ExcelJS, D, P, { agora, usuario: CFG.getUsuario() });
+    const buf = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const nome = 'Comboio_' + P.tipo.normalize('NFD').replace(/[\u0300-\u036f]/g, '') + '_' +
+      (P.tipo === 'Mensal' ? P.ini.getFullYear() + '-' + p2(P.ini.getMonth() + 1) : P.tipo === 'Diário' ? fISO(P.ini) : fISO(P.ini) + '_a_' + fISO(P.fim)) + '.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 4000);
+    const h = lerLS(); h[P.chave] = agora.getTime(); h.ultima = agora.getTime(); delete h.adiado; gravarLS(h);
+    return { nome, D };
+  }
+
+  /* ---------------- INTERFACE: MODAL DE PERÍODO ---------------- */
+  const CSS = `
+  .crel-fundo{position:fixed;inset:0;background:rgba(15,25,40,.55);z-index:99990;display:flex;align-items:center;justify-content:center;padding:16px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  .crel-box{background:#fff;color:#1d2733;border-radius:14px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.3);overflow:hidden;max-height:92vh;display:flex;flex-direction:column}
+  .crel-top{background:#1f3a5f;color:#fff;padding:14px 16px;border-bottom:4px solid #e8742a}
+  .crel-top b{font-size:16px;display:block}.crel-top span{font-size:12px;opacity:.8}
+  .crel-corpo{padding:14px 16px;overflow:auto}
+  .crel-lbl{font-size:11px;font-weight:700;color:#5f6b7a;text-transform:uppercase;letter-spacing:.04em;margin:4px 0 6px}
+  .crel-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+  .crel-grid button{border:1.5px solid #c9d3df;background:#f4f7fb;color:#1f3a5f;border-radius:9px;padding:10px 6px;font-size:13px;font-weight:600;cursor:pointer}
+  .crel-grid button.on{background:#1f3a5f;color:#fff;border-color:#1f3a5f}
+  .crel-datas{display:none;gap:8px;margin-bottom:12px}.crel-datas.on{display:flex}
+  .crel-datas label{flex:1;font-size:11px;color:#5f6b7a}.crel-datas input{width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #c9d3df;border-radius:8px;font-size:16px;margin-top:3px}
+  .crel-prev{background:#fdebdd;border-left:4px solid #e8742a;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.5}
+  .crel-prev b{color:#9a4a12}.crel-aviso{color:#b03a2e;font-size:12px;margin-top:8px}
+  .crel-pe{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #eef1f5}
+  .crel-pe button{flex:1;border:0;border-radius:9px;padding:12px;font-size:14px;font-weight:700;cursor:pointer}
+  .crel-cancel{background:#eef1f5;color:#5f6b7a}.crel-ok{background:#e8742a;color:#fff}.crel-ok:disabled{opacity:.5}
+  .crel-toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:99980;background:#1f3a5f;color:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 8px 28px rgba(0,0,0,.3);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:13px;max-width:92vw;width:380px;border-left:5px solid #e8742a}
+  .crel-toast div{margin-top:10px;display:flex;gap:8px}.crel-toast button{flex:1;border:0;border-radius:8px;padding:9px;font-weight:700;font-size:13px;cursor:pointer}
+  .crel-toast .g{background:#e8742a;color:#fff}.crel-toast .d{background:rgba(255,255,255,.15);color:#fff}`;
+  function injetarCSS() {
+    if (document.getElementById('crel-css')) return;
+    const st = document.createElement('style'); st.id = 'crel-css'; st.textContent = CSS; document.head.appendChild(st);
+  }
+
+  function abrir(presetInicial) {
+    injetarCSS();
+    const fundo = document.createElement('div');
+    fundo.className = 'crel-fundo';
+    const hoje = fISO(new Date());
+    fundo.innerHTML = `
+      <div class="crel-box" role="dialog" aria-label="Relatório de abastecimentos">
+        <div class="crel-top"><b>📊 Relatório de abastecimentos</b><span>Planilha Excel colorida, pronta para imprimir</span></div>
+        <div class="crel-corpo">
+          <div class="crel-lbl">Período</div>
+          <div class="crel-grid">
+            <button data-p="hoje">Hoje</button><button data-p="ontem">Ontem</button>
+            <button data-p="semana">Esta semana</button><button data-p="semana_ant">Semana passada</button>
+            <button data-p="mes">Este mês</button><button data-p="mes_ant">Mês passado</button>
+            <button data-p="custom" style="grid-column:1/3">📅 Escolher datas…</button>
+          </div>
+          <div class="crel-datas"><label>De<input type="date" id="crel-ini" value="${hoje}"></label><label>Até<input type="date" id="crel-fim" value="${hoje}"></label></div>
+          <div class="crel-prev" id="crel-prev">Selecione um período.</div>
+        </div>
+        <div class="crel-pe"><button class="crel-cancel">Cancelar</button><button class="crel-ok" disabled>Gerar planilha</button></div>
+      </div>`;
+    document.body.appendChild(fundo);
+    const $ = s => fundo.querySelector(s);
+    let P = null;
+    const prev = $('#crel-prev'), ok = $('.crel-ok');
+    function atualizar(tipo) {
+      fundo.querySelectorAll('.crel-grid button').forEach(b => b.classList.toggle('on', b.dataset.p === tipo));
+      $('.crel-datas').classList.toggle('on', tipo === 'custom');
+      if (tipo === 'custom') {
+        const i = parseData($('#crel-ini').value), f = parseData($('#crel-fim').value);
+        if (!i || !f || f < i) { prev.innerHTML = '<span class="crel-aviso">Data final deve ser igual ou depois da inicial.</span>'; ok.disabled = true; return; }
+        P = periodo('custom', null, i, f);
+      } else P = periodo(tipo);
+      const D = preparar(CFG.getDb(), P);
+      const h = lerLS();
+      prev.innerHTML = `<b>${P.tipo} · ${P.desc}</b><br>${D.abast.length} abastecimentos · <b>${fNum(D.totAbast, 1)} L</b><br>${D.porEquip.length} equipamentos · ${D.entradas.length} entradas no tanque (${fNum(D.totEnt, 1)} L)` +
+        (h[P.chave] ? `<br><span style="color:#5f6b7a;font-size:12px">✔ Já emitido em ${fData(new Date(h[P.chave]))} às ${fHora(new Date(h[P.chave]))}</span>` : '') +
+        (!D.achou.abast ? '<div class="crel-aviso">⚠ Não encontrei a lista de abastecimentos no banco. Ajuste CFG.colecoes.abast.</div>' : '');
+      ok.disabled = false;
+    }
+    fundo.querySelectorAll('.crel-grid button').forEach(b => b.onclick = () => atualizar(b.dataset.p));
+    $('#crel-ini').onchange = $('#crel-fim').onchange = () => atualizar('custom');
+    const fechar = () => fundo.remove();
+    $('.crel-cancel').onclick = fechar;
+    fundo.addEventListener('click', e => { if (e.target === fundo) fechar(); });
+    ok.onclick = async () => {
+      ok.disabled = true; ok.textContent = 'Gerando…';
+      try { await gerar(P); fechar(); }
+      catch (e) { console.error(e); prev.innerHTML += '<div class="crel-aviso">Erro: ' + e.message + '</div>'; ok.textContent = 'Gerar planilha'; ok.disabled = false; }
+    };
+    atualizar(presetInicial || 'mes');
+  }
+
+  /* ---------------- LEMBRETE AO LOGAR COMO ADMIN ---------------- */
+  function verificarPendente() {
+    if (CFG.lembrete === 'nenhum') return;
+    const h = lerLS();
+    if (h.adiado && Date.now() < h.adiado) return;
+    const preset = CFG.lembrete === 'semanal' ? 'semana_ant' : 'mes_ant';
+    const P = periodo(preset);
+    if (h[P.chave]) return;
+    const D = preparar(CFG.getDb(), P);
+    if (!D.abast.length && !D.entradas.length) return;
+    injetarCSS();
+    if (document.querySelector('.crel-toast')) return;
+    const t = document.createElement('div');
+    t.className = 'crel-toast';
+    t.innerHTML = `📋 <b>Relatório ${P.tipo.toLowerCase()} pendente</b><br>${P.desc} · ${D.abast.length} abastecimentos (${fNum(D.totAbast, 1)} L) ainda não foram emitidos.
+      <div><button class="d">Lembrar amanhã</button><button class="g">Gerar agora</button></div>`;
+    document.body.appendChild(t);
+    t.querySelector('.d').onclick = () => { const x = lerLS(); x.adiado = fimDia(new Date()).getTime(); gravarLS(x); t.remove(); };
+    t.querySelector('.g').onclick = () => { t.remove(); abrir(preset); };
+  }
+
+  window.ComboioRel = { abrir, verificarPendente, gerar, periodo, CFG, _preparar: preparar, _montar: montarWorkbook };
+})();
 </script>
 </body>
 </html>
