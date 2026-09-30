@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785760000">
+<meta name="app-version" content="1785800000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -552,6 +552,20 @@ function _ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0
 function today(){return _ymd(new Date());}
 function fmtDate(d){if(!d)return'—';var p=d.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6);}
+// Momento em que o registro foi criado (o id gerado por uid() começa com o timestamp)
+function _tsId(id){
+  if(!id||typeof id!=='string'||id.length<9) return 0;
+  var t=parseInt(id.slice(0,-4),36);
+  return (t>1.4e12&&t<4e12)?t:0;
+}
+// Ordem cronológica decrescente: última registrada no topo
+function _maisRecente(a,b){
+  var d=(b.data||'').localeCompare(a.data||''); if(d) return d;
+  var ta=_tsId(a.id), tb=_tsId(b.id);
+  if(ta&&tb&&ta!==tb) return tb-ta;
+  var h=(b.hora||'').localeCompare(a.hora||''); if(h) return h;
+  return tb-ta;
+}
 function getSaldoRes(){
   // Sempre recalcula: Tanque = total entradas - total carregado no comboio
   return db.entradas.reduce(function(s,e){return s+Number(e.vol);},0)
@@ -1253,10 +1267,10 @@ function renderResumo(){
   var semIniStr=_ymd(semIni);
   var semFimStr=_ymd(semFim);
   var todos=[];
-  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L'});});
-  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L'});});
-  db.abastecimentos.forEach(function(a){if(a.data>=semIniStr&&a.data<=semFimStr)todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L'});});
-  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  db.entradas.forEach(function(e){if(e.data>=semIniStr&&e.data<=semFimStr)todos.push({data:e.data,tipo:'entry',nome:'NF '+(e.nf||'—'),sub:e.forn||'Distribuidora',vol:'+'+Number(e.vol).toFixed(0)+' L',id:e.id,hora:e.hora});});
+  db.comboios.forEach(function(c){if(c.data>=semIniStr&&c.data<=semFimStr)todos.push({data:c.data,tipo:'transfer',nome:'Comboio',sub:'Carregamento',vol:Number(c.vol).toFixed(0)+' L',id:c.id,hora:c.hora});});
+  db.abastecimentos.forEach(function(a){if(a.data>=semIniStr&&a.data<=semFimStr)todos.push({data:a.data,tipo:'fuel',nome:a.equip||'—',sub:a.operador||'Campo',vol:Number(a.vol).toFixed(0)+' L',id:a.id,hora:a.hora});});
+  todos.sort(_maisRecente);
   var el=document.getElementById('res-hist');
   var semLabel=fmtDate(semIniStr)+' a '+fmtDate(semFimStr);
   if(!todos.length){
@@ -1881,7 +1895,7 @@ function salvarEntrada(){
   alert('Entrada registrada!');
 }
 function renderHistEnt(){
-  var rows=db.entradas.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var rows=db.entradas.slice().sort(_maisRecente);
   var el=document.getElementById('hist-ent');
   if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhuma entrada ainda</div>';return;}
   el.innerHTML=rows.map(function(r){
@@ -1928,7 +1942,7 @@ function renderHistCom(){
     _cop.innerHTML='<option value="">— selecione —</option>'+
       db.operadores.map(function(o){return'<option value="'+o.nome+'">'+o.nome+(o.mat?' ('+o.mat+')':'')+'</option>';}).join('');
   }
-  var rows=db.comboios.slice().sort(function(a,b){return b.data.localeCompare(a.data);});
+  var rows=db.comboios.slice().sort(_maisRecente);
   var el=document.getElementById('hist-com');
   if(!el) return; // hist-com foi removido desta aba
   if(!rows.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum carregamento ainda</div>';return;}
@@ -2026,7 +2040,7 @@ function _notifMesclar(locais, remotas, lixeiraRemota){
     porSig[sig]=velha;
   });
   var out=Object.keys(porSig).map(function(k){return porSig[k];});
-  out.sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+  out.sort(_maisRecente);
   return out;
 }
 // Grava e envia ao Firebase — sem isto, ler/apagar ficava só neste aparelho
@@ -2076,7 +2090,7 @@ function updateNotifBadge(){
 function renderNotif(){
   _notifCarregar(); // sempre lê da chave dedicada antes de exibir
   var el=document.getElementById('notif-body'); if(!el) return;
-  var lista=(db.notificacoes||[]).slice().sort(function(a,b){return (b.data+b.hora).localeCompare(a.data+a.hora);});
+  var lista=(db.notificacoes||[]).slice().sort(_maisRecente);
   if(!lista.length){
     el.innerHTML='<div class="empty"><i class="ti ti-bell-off"></i>Nenhuma notificação</div>';
     updateNotifBadge(); return;
@@ -2622,7 +2636,7 @@ function renderHistorico(){
     });
   if(filtDe) todos=todos.filter(function(r){return r.data>=filtDe;});
   if(filtAte) todos=todos.filter(function(r){return r.data<=filtAte;});
-  todos.sort(function(a,b){return b.data.localeCompare(a.data);});
+  todos.sort(function(a,b){return _maisRecente(a.raw||a,b.raw||b);});
   var el=document.getElementById('hist-lista');
   if(!todos.length){el.innerHTML='<div class="empty"><i class="ti ti-file-off"></i>Nenhum lançamento no período</div>';return;}
   el.innerHTML='<div style="font-size:11px;color:var(--t3);margin-bottom:8px">'+todos.length+' lançamento'+(todos.length>1?'s':'')+'</div>'+
