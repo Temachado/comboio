@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785600000">
+<meta name="app-version" content="1785640000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -524,6 +524,7 @@ function _getLocalTs(){try{return Number(localStorage.getItem('comboio_ts'))||0;
 function _setLocalTs(ts){try{localStorage.setItem('comboio_ts',String(ts));}catch(e){}}
 
 function saveDB(){
+  _ordenarEquip();
   updateSaldo();
   _setLocalTs(Date.now());
   try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){alert('Erro ao salvar dados.');}
@@ -538,6 +539,14 @@ function loadDB(){
   }catch(e){}
   // Restaura notificações da chave dedicada — tem prioridade
   _notifCarregar();
+  _ordenarEquip();
+}
+// Equipamentos sempre em ordem alfanumérica pelo código (natural: EQ-2 antes de EQ-10)
+function _ordenarEquip(){
+  if(!Array.isArray(db.equipamentos)) return;
+  db.equipamentos.sort(function(a,b){
+    return String(a.cod||'').localeCompare(String(b.cod||''),'pt-BR',{numeric:true,sensitivity:'base'});
+  });
 }
 function _ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function today(){return _ymd(new Date());}
@@ -696,6 +705,7 @@ function iniciarFirebase(url, showAlert, role){
          'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
           if(r[k]!==undefined) db[k]=r[k];
         });
+        _ordenarEquip();
         // Mescla notificações com respeito ao apagamento remoto
         _notifCarregar();
         var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
