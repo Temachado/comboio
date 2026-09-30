@@ -10,7 +10,7 @@
 <meta name="theme-color" content="#0f6e56">
 <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="pragma" content="no-cache">
-<meta name="app-version" content="1785800000">
+<meta name="app-version" content="1785840000">
 <title>Controle de Combustível</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
@@ -523,7 +523,72 @@ function updateSaldo(){
 function _getLocalTs(){try{return Number(localStorage.getItem('comboio_ts'))||0;}catch(e){return 0;}}
 function _setLocalTs(ts){try{localStorage.setItem('comboio_ts',String(ts));}catch(e){}}
 
+// ─────────────────────────────────────────────
+//  SINCRONIZAÇÃO POR REGISTRO (v2)
+//  Cada lançamento é mesclado pelo id; apagados vão para uma lixeira
+//  sincronizada (db.apagados), para nenhum aparelho "ressuscitar" dados.
+// ─────────────────────────────────────────────
+var SYNC_COLS=['equipamentos','operadores','entradas','comboios','abastecimentos'];
+function _chaveReg(x){ return (x&&x.id!=null)?'id:'+x.id:'cod:'+(x?x.cod:''); }
+function _criadoEm(x){ return _tsId(x&&x.id)||Number(x&&x._criado)||0; }
+function _lixMapa(){
+  var m={}; (db.apagados||[]).forEach(function(t){ if(!m[t.k]||m[t.k]<t.em) m[t.k]=t.em; }); return m;
+}
+function _estaApagado(col,x,mapa){
+  var em=(mapa||_lixMapa())[col+'|'+_chaveReg(x)];
+  return !!em && em>=_criadoEm(x);
+}
+// Compara com a última cópia gravada: o que sumiu localmente vai para a lixeira
+function _registrarApagados(){
+  var ant=null; try{ ant=JSON.parse(localStorage.getItem(DB_KEY)||'null'); }catch(e){}
+  if(!ant) return;
+  if(!db.apagados) db.apagados=[];
+  var agora=Date.now();
+  SYNC_COLS.forEach(function(col){
+    var atuais={}; (db[col]||[]).forEach(function(x){ atuais[_chaveReg(x)]=1; });
+    (ant[col]||[]).forEach(function(x){
+      var k=_chaveReg(x);
+      if(!atuais[k]) db.apagados.push({k:col+'|'+k, em:agora});
+    });
+  });
+  if(db.apagados.length>5000) db.apagados=db.apagados.slice(-5000);
+}
+// Mescla o remoto no local. preferRemoto: versão remota vence em registros iguais
+// e nos campos gerais (ciclo, saldo). Retorna true se o remoto está desatualizado.
+function _sincMesclar(r, preferRemoto){
+  var lix={}, faltaNoRemoto=false;
+  (db.apagados||[]).concat(r.apagados||[]).forEach(function(t){ if(!lix[t.k]||lix[t.k]<t.em) lix[t.k]=t.em; });
+  var remLix={}; (r.apagados||[]).forEach(function(t){ remLix[t.k]=1; });
+  db.apagados=Object.keys(lix).map(function(k){ return {k:k, em:lix[k]}; });
+  if(db.apagados.length>5000){ db.apagados.sort(function(a,b){return a.em-b.em;}); db.apagados=db.apagados.slice(-5000); }
+  db.apagados.forEach(function(t){ if(!remLix[t.k]) faltaNoRemoto=true; });
+  SYNC_COLS.forEach(function(col){
+    var loc=db[col]||[], rem=r[col]||[];
+    var pri=preferRemoto?rem:loc, sec=preferRemoto?loc:rem;
+    var vistos={}, out=[];
+    pri.concat(sec).forEach(function(x){
+      if(!x) return;
+      var k=_chaveReg(x);
+      if(vistos[k]) return; vistos[k]=1;
+      if(_estaApagado(col,x,lix)) return;
+      out.push(x);
+    });
+    var remKeys={}; rem.forEach(function(x){ if(x) remKeys[_chaveReg(x)]=1; });
+    out.forEach(function(x){ if(!remKeys[_chaveReg(x)]) faltaNoRemoto=true; });
+    db[col]=out;
+  });
+  if(preferRemoto){
+    // Firebase não guarda null nem lista vazia: ausência = zerado no outro aparelho
+    db.ciclos=(r.ciclos!==undefined)?r.ciclos:[];
+    db.cicloAtivo=(r.cicloAtivo!==undefined)?r.cicloAtivo:null;
+    if(r.saldo!==undefined) db.saldo=r.saldo;
+  }
+  _ordenarEquip();
+  return faltaNoRemoto;
+}
+
 function saveDB(){
+  _registrarApagados();
   _ordenarEquip();
   updateSaldo();
   _setLocalTs(Date.now());
@@ -535,7 +600,7 @@ function saveDB(){
 function loadDB(){
   try{
     var s=localStorage.getItem(DB_KEY);
-    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
+    if(s){var p=JSON.parse(s);['equipamentos','operadores','entradas','comboios','abastecimentos','notificacoes','ciclos','cicloAtivo','saldo','apagados'].forEach(function(k){if(p[k])db[k]=p[k];});if(p.admin&&p.admin.usuario)db.admin=p.admin;}
   }catch(e){}
   // Restaura notificações da chave dedicada — tem prioridade
   _notifCarregar();
@@ -641,7 +706,8 @@ function onCampoAbastUpdate(snap){
   var arr=snap.val();
   if(!arr||!Array.isArray(arr)) return;
   var lids=db.abastecimentos.map(function(a){return a.id;});
-  var novos=arr.filter(function(a){return lids.indexOf(a.id)===-1;});
+  var _mp=_lixMapa();
+  var novos=arr.filter(function(a){return a&&lids.indexOf(a.id)===-1&&!_estaApagado('abastecimentos',a,_mp);});
   if(novos.length){
     db.abastecimentos=db.abastecimentos.concat(novos);
     try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
@@ -715,11 +781,7 @@ function iniciarFirebase(url, showAlert, role){
 
       if(deveAplicar){
         // Aplica dados remotos
-        ['equipamentos','operadores','entradas','comboios',
-         'abastecimentos','ciclos','cicloAtivo','saldo'].forEach(function(k){
-          if(r[k]!==undefined) db[k]=r[k];
-        });
-        _ordenarEquip();
+        var _reenviar=_sincMesclar(r, true);
         // Mescla notificações com respeito ao apagamento remoto
         _notifCarregar();
         var notifLocais = db.notificacoes ? db.notificacoes.slice() : [];
@@ -736,6 +798,7 @@ function iniciarFirebase(url, showAlert, role){
         _notifSalvar();
         _setLocalTs(remoteTs);
         try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
+        if(_reenviar) setTimeout(function(){ if(fbRefMaster&&fbActive) _fbEnviar(fbRefMaster); }, 1500);
         updateSaldo(); updateNotifBadge();
         var ae=document.querySelector('.screen.active');
         if(ae){
@@ -749,6 +812,9 @@ function iniciarFirebase(url, showAlert, role){
           else if(sid==='historico') renderHistorico();
         }
       } else if(deveEnviar){
+        // Antes de enviar, traz o que o remoto tem de novo (sem perder nada de ninguém)
+        _sincMesclar(r, false);
+        try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
         _fbEnviar(ref);
       }
       renderSyncStatus();
@@ -792,6 +858,7 @@ function _fbEnviar(ref, forceApply){
     saldo:db.saldo||{res:0,com:0},
     notificacoes:db.notificacoes||[],
     notifApagadas:db.notifApagadas||[],
+    apagados:db.apagados||[],
     _device:myDeviceId,
     _ts:ts
   };
@@ -1076,7 +1143,8 @@ function atualizarCiclo(){
 
   // Cycle is ONGOING — never auto-close on volume match
   // Admin manually resets via "Reiniciar controle"
-  saveDB();
+  // Recálculo apenas: grava local sem novo carimbo de tempo nem envio ao Firebase
+  try{localStorage.setItem(DB_KEY,JSON.stringify(db));}catch(e){}
 }
 
 function _notifCiclo(tipo, titulo, desc){
@@ -2314,7 +2382,8 @@ function salvarEq(){
     unidade:document.getElementById('eq-unid').value,
     consumoMin:parseFloat(document.getElementById('eq-cons-min').value)||0,
     consumoMax:parseFloat(document.getElementById('eq-cons-max').value)||0,
-    consumo:parseFloat(document.getElementById('eq-cons-max').value)||0}; // compat
+    consumo:parseFloat(document.getElementById('eq-cons-max').value)||0, // compat
+    _criado:Date.now()};
   if(editando){
     db.equipamentos=db.equipamentos.map(function(e){return e.cod===editando?novoEq:e;});
     codEl.dataset.editando='';
@@ -2533,6 +2602,7 @@ function confirmarApagar(){
     if(fbRefCampo&&fbActive){try{fbRefCampo.child('abastecimentos').set([]);}catch(e){}}
   }
   if(delNot){_notifCarregar(); _notifLixeira(db.notificacoes); db.notificacoes=[];}
+  _registrarApagados();
   updateSaldo();
   var tsApagar = Date.now() + 300000; // +5 min
   _setLocalTs(tsApagar);
@@ -2593,6 +2663,7 @@ function apagarSelecionados(){
     try{fbRefCampo.child('abastecimentos').set(db.abastecimentos);}catch(e){}
   }
   _histSel={};
+  _registrarApagados();
   updateSaldo();
   var tsApagar = Date.now() + 300000; // +5 min
   _setLocalTs(tsApagar);
